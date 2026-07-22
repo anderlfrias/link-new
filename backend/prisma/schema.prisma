@@ -59,6 +59,14 @@ enum ChatAuditAction {
   CHANGE_IMAGE
 }
 
+/// Proveedor de almacenamiento físico donde vive un `StoredFile`.
+/// Preparado para incorporar más adelante MINIO, S3, R2, etc. sin cambiar
+/// el modelo `StoredFile`: solo se agregarían nuevos valores a este enum.
+enum FileProvider {
+  /// Disco local del servidor (ver `src/storage`).
+  LOCAL
+}
+
 // ─────────────────────────────────────────────
 // Modelos
 // ─────────────────────────────────────────────
@@ -84,7 +92,9 @@ model User {
   /// Debe ser único sin importar el proveedor de autenticación.
   email String @unique
 
-  avatarPath String?
+  /// Archivo (`StoredFile`) usado como avatar. Nunca se guarda una ruta directamente aquí.
+  avatarFileId String?
+  avatarFile   StoredFile? @relation("UserAvatarFile", fields: [avatarFileId], references: [id])
 
   status UserStatus @default(ACTIVE)
 
@@ -96,16 +106,21 @@ model User {
   sentMessages            Message[]            @relation("MessageSender")
   deletedMessages         Message[]            @relation("MessageDeletedBy")
   auditLogs               ChatAuditLog[]
+  /// Archivos que este usuario subió (`StoredFile.createdBy`).
+  uploadedFiles           StoredFile[]         @relation("StoredFileCreatedBy")
 }
 
 /// Representa una conversación privada o grupal.
 model Conversation {
-  id    String           @id @default(uuid())
+  id   String           @id @default(uuid())
   /// Nombre de la conversación. Solo aplica a conversaciones grupales.
-  name  String?
-  type  ConversationType
-  /// Imagen de la conversación. Solo aplica a conversaciones grupales.
-  image String?
+  name String?
+  type ConversationType
+
+  /// Archivo (`StoredFile`) usado como imagen. Solo aplica a conversaciones grupales.
+  /// Nunca se guarda una ruta directamente aquí.
+  imageFileId String?
+  imageFile   StoredFile? @relation("ConversationImageFile", fields: [imageFileId], references: [id])
 
   createdById String
   createdBy   User   @relation(fields: [createdById], references: [id])
@@ -173,31 +188,68 @@ model Message {
 
   createdAt DateTime @default(now())
 
-  attachments Attachment[]
-  auditLogs   ChatAuditLog[]
+  /// Archivos adjuntos, a través de la tabla intermedia `MessageFile`.
+  files     MessageFile[]
+  auditLogs ChatAuditLog[]
 
   @@index([conversationId])
   @@index([senderId])
 }
 
-/// Representa un archivo adjunto a un mensaje.
-model Attachment {
+/// Representa un archivo físico almacenado por el sistema, sin importar quién lo use
+/// ni para qué (avatar de usuario, imagen de conversación, adjunto de mensaje, etc.).
+/// Toda la información técnica y física del archivo vive únicamente aquí; el resto
+/// de los modelos solo lo referencian por relación, nunca duplican sus datos.
+model StoredFile {
   id String @id @default(uuid())
 
-  messageId String
-  message   Message @relation(fields: [messageId], references: [id])
-
-  /// Ruta física o clave de almacenamiento del archivo (ver `src/storage`).
-  path         String
   originalName String
+  /// Nombre físico con el que se guarda el archivo (evita colisiones y no expone el nombre original).
+  storedName   String
+  /// Ruta relativa dentro del proveedor de almacenamiento (ej. "chat/550e8400.pdf").
+  /// Nunca una URL completa ni una ruta absoluta: el proveedor genera la URL pública cuando haga falta.
+  path         String
   mimeType     String
   extension    String
   /// Tamaño del archivo en bytes.
   size         Int
 
+  /// Proveedor de almacenamiento donde vive físicamente el archivo.
+  provider FileProvider
+  /// Hash del contenido del archivo, para verificar integridad o detectar duplicados.
+  checksum String?
+
+  /// Usuario que subió el archivo. Nullable porque algunos archivos podrán
+  /// generarse sin un usuario asociado (ej. procesos del sistema).
+  createdById String?
+  createdBy   User?   @relation("StoredFileCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime  @default(now())
+  /// Borrado lógico del archivo.
+  deletedAt DateTime?
+
+  avatarOfUsers        User[]         @relation("UserAvatarFile")
+  imageOfConversations Conversation[] @relation("ConversationImageFile")
+  messageFiles         MessageFile[]
+
+  @@index([createdById])
+}
+
+/// Relación entre un mensaje y un archivo que usa (`StoredFile`).
+/// No contiene información propia del archivo: eso vive siempre en `StoredFile`.
+model MessageFile {
+  id String @id @default(uuid())
+
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+
+  fileId String
+  file   StoredFile @relation(fields: [fileId], references: [id])
+
   createdAt DateTime @default(now())
 
   @@index([messageId])
+  @@index([fileId])
 }
 
 /// Historial de acciones importantes del chat, únicamente para auditoría.

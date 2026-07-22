@@ -152,20 +152,22 @@ El modelo de datos del chat está definido en [`prisma/schema.prisma`](./prisma/
 
 ### Propósito de cada modelo
 
-* **User** — el perfil del usuario dentro del chat: nombre, email, avatar y estado. Existe siempre, sea cual sea el proveedor de autenticación.
-* **Conversation** — una conversación privada (2 personas) o grupal (`type: PRIVATE | GROUP`). Guarda su nombre e imagen (solo relevantes para grupos) y quién la creó (`createdBy` → `User`).
+* **User** — el perfil del usuario dentro del chat: nombre, email, avatar (`avatarFile` → `StoredFile`) y estado. Existe siempre, sea cual sea el proveedor de autenticación.
+* **Conversation** — una conversación privada (2 personas) o grupal (`type: PRIVATE | GROUP`). Guarda su nombre e imagen (`imageFile` → `StoredFile`, solo relevante para grupos) y quién la creó (`createdBy` → `User`).
 * **ConversationMember** — la pertenencia de un usuario a una conversación. Es la tabla intermedia entre `User` y `Conversation`: un usuario tiene muchas membresías, una conversación tiene muchos miembros. La combinación `(conversationId, userId)` es única: un usuario no puede pertenecer dos veces a la misma conversación.
-* **Message** — un mensaje dentro de una conversación, enviado por un usuario (`sender` → `User`). Puede tener adjuntos y puede aparecer referenciado en el historial de auditoría.
-* **Attachment** — un archivo adjunto a un mensaje (ruta física/clave de almacenamiento, nombre original, tipo MIME, extensión y tamaño). Un mensaje puede tener varios adjuntos.
+* **Message** — un mensaje dentro de una conversación, enviado por un usuario (`sender` → `User`). Puede tener archivos adjuntos (a través de `MessageFile`) y puede aparecer referenciado en el historial de auditoría.
+* **StoredFile** — un archivo físico almacenado por el sistema, sin importar quién lo use ni para qué (ver [Gestión de Archivos](#gestión-de-archivos)).
+* **MessageFile** — la relación entre un mensaje y un archivo (`StoredFile`) que usa. No duplica información del archivo.
 * **ChatAuditLog** — el historial de acciones relevantes del chat (crear conversación, agregar/quitar miembro, enviar/editar/borrar mensaje, cambiar nombre o imagen), con quién la ejecutó (`user` → `User`) y, opcionalmente, sobre qué conversación o mensaje.
 
 ### Relaciones principales
 
-* `User` 1—N `Conversation` (como creador), 1—N `ConversationMember`, 1—N `Message` (como remitente y, opcionalmente, como quien borró un mensaje ajeno) y 1—N `ChatAuditLog`.
-* `Conversation` 1—N `ConversationMember` y 1—N `Message`.
+* `User` 1—N `Conversation` (como creador), 1—N `ConversationMember`, 1—N `Message` (como remitente y, opcionalmente, como quien borró un mensaje ajeno), 1—N `ChatAuditLog` y 1—N `StoredFile` (como quien lo subió); y N—1 `StoredFile` a través de `avatarFile`.
+* `Conversation` 1—N `ConversationMember` y 1—N `Message`; y N—1 `StoredFile` a través de `imageFile`.
 * `ConversationMember` N—1 `Conversation` y N—1 `User`.
-* `Message` N—1 `Conversation`, N—1 `User` (remitente), 1—N `Attachment`, y puede tener 0—N `ChatAuditLog` asociados.
-* `Attachment` N—1 `Message`.
+* `Message` N—1 `Conversation`, N—1 `User` (remitente), 1—N `MessageFile`, y puede tener 0—N `ChatAuditLog` asociados.
+* `StoredFile` 1—N `MessageFile`, y puede ser referenciado por 0—N `User.avatarFile` y 0—N `Conversation.imageFile`.
+* `MessageFile` N—1 `Message` y N—1 `StoredFile`.
 * `ChatAuditLog` referencia opcionalmente a `Conversation` y a `Message`, y siempre a un `User`.
 
 ### ¿Por qué existen `lastReadMessageId` (en `ConversationMember`) y `lastMessageAt` (en `Conversation`)?
@@ -220,6 +222,68 @@ La aplicación soportará dos modos de autenticación, definidos por el enum `Au
 La selección del proveedor se realiza **una única vez, durante la instalación** del sistema, y permanece fija durante toda la vida de esa instalación.
 
 En este punto del proyecto, `AuthProvider` solo está declarado en el esquema de Prisma: todavía no se lee desde variables de entorno, no hay lógica que dependa de su valor, ni servicios, middlewares o endpoints de autenticación. Esta sección documenta la intención de la arquitectura para pasos posteriores.
+
+---
+
+## Gestión de Archivos
+
+Todos los archivos del sistema se representan mediante un único modelo centralizado, `StoredFile` (`prisma/schema.prisma`). Cualquier funcionalidad que necesite guardar un archivo lo reutiliza en lugar de definir su propia tabla de archivos.
+
+### ¿Por qué existe `StoredFile`?
+
+Antes de este cambio, cada funcionalidad que necesitaba archivos (adjuntos de mensajes, por ejemplo) tenía su propia tabla con su propia copia de los datos técnicos del archivo (ruta, nombre, tipo MIME, tamaño, etc.). Eso duplica información y obliga a repetir la misma lógica de almacenamiento en cada módulo. `StoredFile` centraliza esa información **una sola vez**: representa cualquier archivo físico guardado por el sistema, sin importar qué funcionalidad lo use (avatar de usuario, imagen de conversación, adjunto de mensaje, o cualquier archivo futuro).
+
+### Diferencia entre `StoredFile` y `MessageFile`
+
+* **`StoredFile`** es el archivo en sí: su información técnica y física (nombre original, nombre físico, ruta, tipo MIME, tamaño, proveedor, checksum). No sabe ni le importa quién lo usa.
+* **`MessageFile`** no es un archivo: es la relación que dice "este mensaje usa este archivo". Solo contiene `messageId`, `fileId` y `createdAt`. Cualquier dato sobre el archivo en sí se consulta siempre a través de `StoredFile`, nunca se copia en `MessageFile`.
+
+Este mismo patrón —una tabla de relación delgada apuntando a `StoredFile`— es el que se usaría para cualquier futura funcionalidad que necesite varios archivos asociados a un mismo registro (por ejemplo, varias imágenes en una entidad futura), en vez de repetir campos de archivo en cada modelo.
+
+### ¿Por qué `User` y `Conversation` referencian archivos mediante relaciones?
+
+`User.avatarFileId` y `Conversation.imageFileId` son relaciones hacia `StoredFile`, no campos con la ruta del archivo. Así, `User` y `Conversation` no necesitan saber nada sobre cómo está almacenado un archivo (proveedor, ruta, nombre físico): solo saben *qué* archivo usan. Toda esa información técnica sigue viviendo en un único lugar (`StoredFile`), y si cambia (por ejemplo, se migra de almacenamiento local a S3), no hay que tocar ni `User` ni `Conversation`.
+
+### ¿Por qué no se guarda la ruta directamente en `User` o `Conversation`?
+
+Porque eso duplicaría en cada modelo la misma información que ya vive en `StoredFile` (ruta, proveedor, tamaño, checksum, etc.), y perdería la ventaja de tener un único lugar para razonar sobre "todos los archivos del sistema" (para borrarlos, migrarlos de proveedor, auditar su uso, etc.). Guardar solo el `id` del `StoredFile` mantiene esa información en un único punto de verdad.
+
+### ¿Por qué las URLs no se guardan en la base de datos?
+
+Una URL pública depende del proveedor de almacenamiento activo (rutas de un servidor local, un bucket de S3, un endpoint de MinIO, un dominio de CDN, etc.) y puede cambiar sin que el archivo en sí cambie. Guardar la URL en la base de datos acoplaría el modelo de datos a un proveedor específico y obligaría a reescribir todas las URLs existentes si el proveedor cambia. En cambio, la base de datos guarda únicamente la ruta relativa, y es el proveedor de almacenamiento (`src/storage`, en un paso posterior) quien construye la URL pública cuando hace falta.
+
+### ¿Por qué se almacena únicamente la ruta relativa?
+
+Por ejemplo `chat/550e8400.pdf`, nunca `https://miapp.com/uploads/chat/550e8400.pdf` ni `C:\uploads\chat\550e8400.pdf`. Una ruta relativa es portable: sirve igual sin importar el dominio, el servidor o el sistema operativo donde corra la aplicación, y es lo único que un proveedor de almacenamiento necesita para ubicar el archivo dentro de su propio espacio (disco local, bucket, etc.).
+
+### Propósito del campo `provider`
+
+Indica en qué proveedor de almacenamiento vive físicamente ese archivo (`FileProvider`, hoy solo `LOCAL`). Como cada `StoredFile` declara su propio proveedor, el sistema podría convivir con archivos guardados en distintos proveedores a la vez (por ejemplo, durante una migración gradual de `LOCAL` a `S3`) sin ambigüedad sobre dónde buscar cada uno.
+
+### Propósito del `checksum`
+
+Es un hash del contenido del archivo. Sirve para verificar que el archivo no se corrompió entre que se guardó y se leyó, y, más adelante, para detectar archivos duplicados sin tener que comparar su contenido byte a byte. Es nullable porque no todos los flujos de guardado lo calculan necesariamente desde el día uno.
+
+### Ventajas de reutilizar `StoredFile` para cualquier recurso del sistema
+
+* Una sola definición de "qué es un archivo" para toda la aplicación, sin duplicar columnas técnicas en cada módulo.
+* Cambiar de proveedor de almacenamiento (local → MinIO, S3, R2) es un cambio en la capa de `src/storage` y en el valor de `provider`, no en los modelos de negocio (`User`, `Conversation`, `Message`, ni los que vengan después).
+* Cualquier funcionalidad futura que necesite archivos (documentos, íconos, exportaciones, etc.) reutiliza `StoredFile` en vez de crear su propia tabla de archivos.
+
+### Diagrama de relaciones
+
+```text
+                 StoredFile
+                     ▲
+      ┌──────────────┼──────────────┐
+      │              │              │
+User.avatarFile   Conversation   MessageFile
+                  .imageFile         │
+                                     ▼
+                                  Message
+```
+
+`StoredFile` es el centro: `User` y `Conversation` lo referencian directamente (avatar e imagen), y `Message` lo referencia indirectamente a través de `MessageFile` (porque puede tener varios archivos adjuntos). En los tres casos, el archivo en sí y su información técnica viven solo en `StoredFile`; el resto de los modelos únicamente guardan una relación hacia él.
 
 ---
 
