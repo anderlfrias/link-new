@@ -2,9 +2,9 @@
   "name": "backend",
   "version": "1.0.0",
   "private": true,
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node src/index.ts",
+    "dev": "ts-node src/server.ts",
     "build": "tsc"
   },
   "dependencies": {

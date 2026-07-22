@@ -20,3 +20,6 @@ yarn-error.log*
 # OS / editor
 .DS_Store
 Thumbs.db
+
+backend/uploads/*
+!backend/uploads/.gitkeep
