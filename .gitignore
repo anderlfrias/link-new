@@ -12,6 +12,9 @@ frontend/out/
 .env
 .env.local
 
+# Prisma generated client
+backend/generated/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

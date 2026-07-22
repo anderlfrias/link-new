@@ -1,0 +1,225 @@
+// Prisma schema — Modelo de datos del chat.
+// Únicamente modelos, enums y relaciones. Sin lógica de negocio.
+// La URL de conexión se resuelve en `prisma.config.ts`, no en este archivo (Prisma 7).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+/// Proveedor de autenticación de la instalación.
+/// Se define una única vez al instalar la aplicación y no cambia después.
+/// Reservado para uso futuro: todavía no se lee desde variables de entorno
+/// ni se usa en ningún modelo o lógica de configuración.
+enum AuthProvider {
+  /// La propia aplicación administra sus usuarios.
+  LOCAL
+  /// Un sistema externo (ERP, SSO, etc.) administra y autentica a los usuarios.
+  EXTERNAL
+}
+
+/// Estado del perfil de usuario dentro del chat.
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// Tipo de conversación.
+enum ConversationType {
+  /// Conversación entre dos usuarios.
+  PRIVATE
+  /// Conversación con más de dos participantes.
+  GROUP
+}
+
+/// Tipo de mensaje.
+enum MessageType {
+  /// Mensaje escrito por un usuario.
+  TEXT
+  /// Mensaje generado por el sistema (ej. "Juan agregó a Pedro").
+  SYSTEM
+}
+
+/// Acciones auditables dentro del chat.
+enum ChatAuditAction {
+  CREATE_CONVERSATION
+  ADD_MEMBER
+  REMOVE_MEMBER
+  SEND_MESSAGE
+  EDIT_MESSAGE
+  DELETE_MESSAGE
+  CHANGE_NAME
+  CHANGE_IMAGE
+}
+
+// ─────────────────────────────────────────────
+// Modelos
+// ─────────────────────────────────────────────
+
+/// Perfil de usuario dentro del chat.
+///
+/// Existe siempre, sin importar el `AuthProvider` configurado: la autenticación
+/// puede resolverla la propia aplicación (LOCAL) o un sistema externo (EXTERNAL),
+/// pero el chat mantiene su propio registro para guardar información que no
+/// pertenece al sistema de autenticación (perfil, estado, avatar, etc.).
+///
+/// Todas las relaciones del chat usan siempre `id` (interno). `externalId`
+/// nunca se usa como llave foránea.
+model User {
+  id String @id @default(uuid())
+
+  /// Identificador del usuario en el sistema externo de autenticación.
+  /// Null cuando `AuthProvider` es LOCAL. Con `AuthProvider` EXTERNAL, almacena
+  /// el id con el que ese sistema identifica al usuario.
+  externalId String? @unique
+
+  name  String
+  /// Debe ser único sin importar el proveedor de autenticación.
+  email String @unique
+
+  avatarPath String?
+
+  status UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdConversations    Conversation[]
+  conversationMemberships ConversationMember[]
+  sentMessages            Message[]            @relation("MessageSender")
+  deletedMessages         Message[]            @relation("MessageDeletedBy")
+  auditLogs               ChatAuditLog[]
+}
+
+/// Representa una conversación privada o grupal.
+model Conversation {
+  id    String           @id @default(uuid())
+  /// Nombre de la conversación. Solo aplica a conversaciones grupales.
+  name  String?
+  type  ConversationType
+  /// Imagen de la conversación. Solo aplica a conversaciones grupales.
+  image String?
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  /// Puntero denormalizado al último mensaje, para listar conversaciones sin agregaciones costosas.
+  /// No es una relación de Prisma para evitar una dependencia circular obligatoria con Message.
+  lastMessageId String?
+  /// Fecha del último mensaje, usada para ordenar la lista de conversaciones.
+  lastMessageAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Borrado lógico de la conversación.
+  deletedAt DateTime?
+
+  members   ConversationMember[]
+  messages  Message[]
+  auditLogs ChatAuditLog[]
+
+  @@index([createdById])
+}
+
+/// Relación entre un usuario y una conversación a la que pertenece.
+model ConversationMember {
+  id String @id @default(uuid())
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  joinedAt DateTime @default(now())
+
+  /// Puntero denormalizado al último mensaje leído por este miembro, para calcular no leídos sin recorrer todos los mensajes.
+  /// No es una relación de Prisma por la misma razón que `Conversation.lastMessageId`.
+  lastReadMessageId String?
+  lastReadAt        DateTime?
+
+  /// Un usuario solo puede tener una membresía por conversación.
+  @@unique([conversationId, userId])
+}
+
+/// Representa un mensaje enviado dentro de una conversación.
+model Message {
+  id String @id @default(uuid())
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  senderId String
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id])
+
+  type    MessageType
+  /// Contenido del mensaje. Para mensajes SYSTEM, es el texto descriptivo del evento.
+  content String
+
+  /// Fecha de la última edición del mensaje, si fue editado.
+  editedAt    DateTime?
+  /// Borrado lógico del mensaje.
+  deletedAt   DateTime?
+  /// Usuario que eliminó el mensaje, si el borrado no lo hizo el propio autor.
+  deletedById String?
+  deletedBy   User?     @relation("MessageDeletedBy", fields: [deletedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  attachments Attachment[]
+  auditLogs   ChatAuditLog[]
+
+  @@index([conversationId])
+  @@index([senderId])
+}
+
+/// Representa un archivo adjunto a un mensaje.
+model Attachment {
+  id String @id @default(uuid())
+
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+
+  /// Ruta física o clave de almacenamiento del archivo (ver `src/storage`).
+  path         String
+  originalName String
+  mimeType     String
+  extension    String
+  /// Tamaño del archivo en bytes.
+  size         Int
+
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
+/// Historial de acciones importantes del chat, únicamente para auditoría.
+model ChatAuditLog {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+
+  messageId String?
+  message   Message? @relation(fields: [messageId], references: [id])
+
+  action   ChatAuditAction
+  /// Datos adicionales de la acción (ej. nombre anterior/nuevo en CHANGE_NAME).
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([conversationId])
+  @@index([messageId])
+}
