@@ -5,7 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node src/server.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "prisma:sync": "npx prisma db push && npx prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^7.9.0",

@@ -20,43 +20,53 @@ datasource db {
 /// ni se usa en ningún modelo o lógica de configuración.
 enum AuthProvider {
   /// La propia aplicación administra sus usuarios.
-  LOCAL
+  LOCAL    @map("local")
   /// Un sistema externo (ERP, SSO, etc.) administra y autentica a los usuarios.
-  EXTERNAL
+  EXTERNAL @map("external")
+
+  @@map("auth_provider")
 }
 
 /// Estado del perfil de usuario dentro del chat.
 enum UserStatus {
-  ACTIVE
-  INACTIVE
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+
+  @@map("user_status")
 }
 
 /// Tipo de conversación.
 enum ConversationType {
   /// Conversación entre dos usuarios.
-  PRIVATE
+  PRIVATE @map("private")
   /// Conversación con más de dos participantes.
-  GROUP
+  GROUP   @map("group")
+
+  @@map("conversation_type")
 }
 
 /// Tipo de mensaje.
 enum MessageType {
   /// Mensaje escrito por un usuario.
-  TEXT
+  TEXT   @map("text")
   /// Mensaje generado por el sistema (ej. "Juan agregó a Pedro").
-  SYSTEM
+  SYSTEM @map("system")
+
+  @@map("message_type")
 }
 
 /// Acciones auditables dentro del chat.
 enum ChatAuditAction {
-  CREATE_CONVERSATION
-  ADD_MEMBER
-  REMOVE_MEMBER
-  SEND_MESSAGE
-  EDIT_MESSAGE
-  DELETE_MESSAGE
-  CHANGE_NAME
-  CHANGE_IMAGE
+  CREATE_CONVERSATION @map("create_conversation")
+  ADD_MEMBER          @map("add_member")
+  REMOVE_MEMBER       @map("remove_member")
+  SEND_MESSAGE        @map("send_message")
+  EDIT_MESSAGE        @map("edit_message")
+  DELETE_MESSAGE      @map("delete_message")
+  CHANGE_NAME         @map("change_name")
+  CHANGE_IMAGE        @map("change_image")
+
+  @@map("chat_audit_action")
 }
 
 /// Proveedor de almacenamiento físico donde vive un `StoredFile`.
@@ -64,7 +74,9 @@ enum ChatAuditAction {
 /// el modelo `StoredFile`: solo se agregarían nuevos valores a este enum.
 enum FileProvider {
   /// Disco local del servidor (ver `src/storage`).
-  LOCAL
+  LOCAL @map("local")
+
+  @@map("file_provider")
 }
 
 // ─────────────────────────────────────────────
@@ -86,20 +98,20 @@ model User {
   /// Identificador del usuario en el sistema externo de autenticación.
   /// Null cuando `AuthProvider` es LOCAL. Con `AuthProvider` EXTERNAL, almacena
   /// el id con el que ese sistema identifica al usuario.
-  externalId String? @unique
+  externalId String? @unique @map("external_id")
 
   name  String
   /// Debe ser único sin importar el proveedor de autenticación.
   email String @unique
 
   /// Archivo (`StoredFile`) usado como avatar. Nunca se guarda una ruta directamente aquí.
-  avatarFileId String?
+  avatarFileId String?     @map("avatar_file_id")
   avatarFile   StoredFile? @relation("UserAvatarFile", fields: [avatarFileId], references: [id])
 
   status UserStatus @default(ACTIVE)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   createdConversations    Conversation[]
   conversationMemberships ConversationMember[]
@@ -108,6 +120,8 @@ model User {
   auditLogs               ChatAuditLog[]
   /// Archivos que este usuario subió (`StoredFile.createdBy`).
   uploadedFiles           StoredFile[]         @relation("StoredFileCreatedBy")
+
+  @@map("users")
 }
 
 /// Representa una conversación privada o grupal.
@@ -119,59 +133,61 @@ model Conversation {
 
   /// Archivo (`StoredFile`) usado como imagen. Solo aplica a conversaciones grupales.
   /// Nunca se guarda una ruta directamente aquí.
-  imageFileId String?
+  imageFileId String?     @map("image_file_id")
   imageFile   StoredFile? @relation("ConversationImageFile", fields: [imageFileId], references: [id])
 
-  createdById String
+  createdById String @map("created_by_id")
   createdBy   User   @relation(fields: [createdById], references: [id])
 
   /// Puntero denormalizado al último mensaje, para listar conversaciones sin agregaciones costosas.
   /// No es una relación de Prisma para evitar una dependencia circular obligatoria con Message.
-  lastMessageId String?
+  lastMessageId String?   @map("last_message_id")
   /// Fecha del último mensaje, usada para ordenar la lista de conversaciones.
-  lastMessageAt DateTime?
+  lastMessageAt DateTime? @map("last_message_at")
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   /// Borrado lógico de la conversación.
-  deletedAt DateTime?
+  deletedAt DateTime? @map("deleted_at")
 
   members   ConversationMember[]
   messages  Message[]
   auditLogs ChatAuditLog[]
 
   @@index([createdById])
+  @@map("conversations")
 }
 
 /// Relación entre un usuario y una conversación a la que pertenece.
 model ConversationMember {
   id String @id @default(uuid())
 
-  conversationId String
+  conversationId String       @map("conversation_id")
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
-  userId String
+  userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id])
 
-  joinedAt DateTime @default(now())
+  joinedAt DateTime @default(now()) @map("joined_at")
 
   /// Puntero denormalizado al último mensaje leído por este miembro, para calcular no leídos sin recorrer todos los mensajes.
   /// No es una relación de Prisma por la misma razón que `Conversation.lastMessageId`.
-  lastReadMessageId String?
-  lastReadAt        DateTime?
+  lastReadMessageId String?   @map("last_read_message_id")
+  lastReadAt        DateTime? @map("last_read_at")
 
   /// Un usuario solo puede tener una membresía por conversación.
   @@unique([conversationId, userId])
+  @@map("conversation_members")
 }
 
 /// Representa un mensaje enviado dentro de una conversación.
 model Message {
   id String @id @default(uuid())
 
-  conversationId String
+  conversationId String       @map("conversation_id")
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
-  senderId String
+  senderId String @map("sender_id")
   sender   User   @relation("MessageSender", fields: [senderId], references: [id])
 
   type    MessageType
@@ -179,14 +195,14 @@ model Message {
   content String
 
   /// Fecha de la última edición del mensaje, si fue editado.
-  editedAt    DateTime?
+  editedAt    DateTime? @map("edited_at")
   /// Borrado lógico del mensaje.
-  deletedAt   DateTime?
+  deletedAt   DateTime? @map("deleted_at")
   /// Usuario que eliminó el mensaje, si el borrado no lo hizo el propio autor.
-  deletedById String?
+  deletedById String?   @map("deleted_by_id")
   deletedBy   User?     @relation("MessageDeletedBy", fields: [deletedById], references: [id])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   /// Archivos adjuntos, a través de la tabla intermedia `MessageFile`.
   files     MessageFile[]
@@ -194,6 +210,7 @@ model Message {
 
   @@index([conversationId])
   @@index([senderId])
+  @@map("messages")
 }
 
 /// Representa un archivo físico almacenado por el sistema, sin importar quién lo use
@@ -203,13 +220,13 @@ model Message {
 model StoredFile {
   id String @id @default(uuid())
 
-  originalName String
+  originalName String @map("original_name")
   /// Nombre físico con el que se guarda el archivo (evita colisiones y no expone el nombre original).
-  storedName   String
+  storedName   String @map("stored_name")
   /// Ruta relativa dentro del proveedor de almacenamiento (ej. "chat/550e8400.pdf").
   /// Nunca una URL completa ni una ruta absoluta: el proveedor genera la URL pública cuando haga falta.
   path         String
-  mimeType     String
+  mimeType     String @map("mime_type")
   extension    String
   /// Tamaño del archivo en bytes.
   size         Int
@@ -221,18 +238,19 @@ model StoredFile {
 
   /// Usuario que subió el archivo. Nullable porque algunos archivos podrán
   /// generarse sin un usuario asociado (ej. procesos del sistema).
-  createdById String?
+  createdById String? @map("created_by_id")
   createdBy   User?   @relation("StoredFileCreatedBy", fields: [createdById], references: [id])
 
-  createdAt DateTime  @default(now())
+  createdAt DateTime  @default(now()) @map("created_at")
   /// Borrado lógico del archivo.
-  deletedAt DateTime?
+  deletedAt DateTime? @map("deleted_at")
 
   avatarOfUsers        User[]         @relation("UserAvatarFile")
   imageOfConversations Conversation[] @relation("ConversationImageFile")
   messageFiles         MessageFile[]
 
   @@index([createdById])
+  @@map("stored_files")
 }
 
 /// Relación entre un mensaje y un archivo que usa (`StoredFile`).
@@ -240,38 +258,40 @@ model StoredFile {
 model MessageFile {
   id String @id @default(uuid())
 
-  messageId String
+  messageId String  @map("message_id")
   message   Message @relation(fields: [messageId], references: [id])
 
-  fileId String
+  fileId String     @map("file_id")
   file   StoredFile @relation(fields: [fileId], references: [id])
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([messageId])
   @@index([fileId])
+  @@map("message_files")
 }
 
 /// Historial de acciones importantes del chat, únicamente para auditoría.
 model ChatAuditLog {
   id String @id @default(uuid())
 
-  userId String
+  userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id])
 
-  conversationId String?
+  conversationId String?       @map("conversation_id")
   conversation   Conversation? @relation(fields: [conversationId], references: [id])
 
-  messageId String?
+  messageId String?  @map("message_id")
   message   Message? @relation(fields: [messageId], references: [id])
 
   action   ChatAuditAction
   /// Datos adicionales de la acción (ej. nombre anterior/nuevo en CHANGE_NAME).
   metadata Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId])
   @@index([conversationId])
   @@index([messageId])
+  @@map("chat_audit_logs")
 }
