@@ -42,4 +42,9 @@ export interface MappedUser {
   permissions: string[];
   app: string;
   exp: number;
+  /// `id` interno (UUID) del perfil en la tabla `User` local. No viene en el
+  /// JWT de EXTERNAL_AUTH — lo agrega `attachInternalUser` (ver
+  /// `middlewares/current-user.middleware.ts`) para los módulos que necesiten
+  /// relacionar datos con `User` (conversaciones, mensajes, etc.).
+  internalUserId?: string;
 }

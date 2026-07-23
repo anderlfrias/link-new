@@ -1,12 +1,47 @@
-import { AppServer, AppSocket } from "../../socket/types";
+import { isConversationMember } from "./conversation.repository";
+import { joinConversation, leaveConversation } from "../../socket/rooms";
+import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/types";
 
-// Nombres de los eventos propios de este módulo viven aquí, no en socket/events.ts.
-// Ejemplo a futuro: export const CONVERSATION_EVENTS = { JOIN: "conversation:join", ... } as const;
+/// Eventos propios de este módulo. `JOIN`/`LEAVE` los emite el cliente;
+/// `CREATED`/`UPDATED`/`MEMBER_ADDED`/`MEMBER_REMOVED`/`DELETED` los emite el
+/// servidor (ver conversation.service.ts) hacia la room de la conversación o
+/// la room personal de cada usuario afectado.
+export const CONVERSATION_EVENTS = {
+  JOIN: "conversation:join",
+  LEAVE: "conversation:leave",
+  CREATED: "conversation:created",
+  UPDATED: "conversation:updated",
+  MEMBER_ADDED: "conversation:member_added",
+  MEMBER_REMOVED: "conversation:member_removed",
+  DELETED: "conversation:deleted",
+} as const;
+
+type JoinAck = (response: { ok: true } | { ok: false; error: string }) => void;
 
 /// Conecta los listeners de este módulo a un socket recién conectado.
 /// Registrada explícitamente en socket/registry.ts (ver ese archivo).
-export function registerConversationSocket(_socket: AppSocket, _io: AppServer): void {
-  // Los listeners de este módulo (unirse/salir de una conversación, etc.) se
-  // agregan aquí en un paso posterior, usando joinConversation/leaveConversation
-  // de socket/rooms.ts. Todavía no hay eventos reales.
+export function registerConversationSocket(socket: AppSocket, _io: AppServer): void {
+  socket.on(CONVERSATION_EVENTS.JOIN, (conversationId: string, ack?: JoinAck) => {
+    void handleJoin(socket, conversationId, ack);
+  });
+
+  socket.on(CONVERSATION_EVENTS.LEAVE, (conversationId: string, ack?: JoinAck) => {
+    leaveConversation(socket, conversationId);
+    ack?.({ ok: true });
+  });
+}
+
+async function handleJoin(socket: AppSocket, conversationId: string, ack?: JoinAck): Promise<void> {
+  const user = socket.data.user as AuthenticatedSocketUser | undefined;
+  if (!user) {
+    return ack?.({ ok: false, error: "Unauthenticated" });
+  }
+
+  const isMember = await isConversationMember(conversationId, user.internalUserId);
+  if (!isMember) {
+    return ack?.({ ok: false, error: "Not a member of this conversation" });
+  }
+
+  joinConversation(socket, conversationId);
+  ack?.({ ok: true });
 }
