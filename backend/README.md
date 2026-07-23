@@ -100,7 +100,7 @@ Los middlewares específicos de un módulo deben vivir dentro de ese módulo, no
 
 ## src/socket
 
-Contendrá únicamente la configuración global de Socket.IO (inicialización del servidor de sockets, adjuntarlo al servidor HTTP, configuración de CORS de sockets, etc.).
+Contiene únicamente la configuración global de Socket.IO (creación del servidor de sockets, adjuntarlo al servidor HTTP, middlewares globales, registro de módulos, manejo de rooms). No contiene eventos de negocio de ningún módulo — ver [`src/socket/README.md`](./src/socket/README.md) para el detalle completo.
 
 Cada módulo es responsable de registrar sus propios eventos de socket (por ejemplo `message.socket.ts` dentro del módulo `messages`).
 
@@ -284,6 +284,14 @@ User.avatarFile   Conversation   MessageFile
 ```
 
 `StoredFile` es el centro: `User` y `Conversation` lo referencian directamente (avatar e imagen), y `Message` lo referencia indirectamente a través de `MessageFile` (porque puede tener varios archivos adjuntos). En los tres casos, el archivo en sí y su información técnica viven solo en `StoredFile`; el resto de los modelos únicamente guardan una relación hacia él.
+
+---
+
+## Arquitectura Socket.IO
+
+Infraestructura base de comunicación en tiempo real. Este paso **no implementa ninguna funcionalidad de chat** (mensajes, conversaciones, presencia, typing, notificaciones, llamadas): únicamente deja preparado el mecanismo para que esas funcionalidades se construyan encima sin tocar el núcleo.
+
+El detalle completo (propósito de cada archivo, cómo registrar un módulo o evento nuevo, rooms, middleware, principios) vive en [`src/socket/README.md`](./src/socket/README.md), junto al código que documenta.
 
 ---
 
