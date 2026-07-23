@@ -11,6 +11,7 @@ frontend/out/
 # Environment variables
 .env
 .env.local
+backend/.env
 
 # Prisma generated client
 backend/generated/

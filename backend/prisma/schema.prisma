@@ -100,6 +100,15 @@ model User {
   /// el id con el que ese sistema identifica al usuario.
   externalId String? @unique @map("external_id")
 
+  /// Sistema externo que sincronizó este perfil por última vez (ej. "external-auth").
+  /// Null cuando el usuario nunca se sincronizó desde un proveedor externo.
+  /// Ver `constants/identity-provider.constant.ts`.
+  identityProvider String? @map("identity_provider")
+
+  /// Nombre de usuario en el sistema externo de autenticación. Null cuando
+  /// el usuario no proviene de un proveedor externo que lo defina.
+  username String? @unique
+
   name  String
   /// Debe ser único sin importar el proveedor de autenticación.
   email String @unique

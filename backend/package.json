@@ -9,13 +9,25 @@
     "prisma:sync": "npx prisma db push && npx prisma generate"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
-    "express": "^4.19.2"
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.11.0",
+    "pg": "^8.22.0",
+    "yup": "^1.7.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/morgan": "^1.9.10",
     "@types/node": "^20.14.9",
-    "dotenv": "^17.4.2",
+    "@types/pg": "^8.20.0",
     "prisma": "^7.9.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
