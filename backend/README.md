@@ -110,7 +110,7 @@ Cada módulo es responsable de registrar sus propios eventos de socket (por ejem
 
 Esta carpeta **no almacena archivos**.
 
-Aquí viven únicamente los proveedores de almacenamiento (por ejemplo `LocalDiskStorage`, `MinIOStorage`, `S3Storage`) que exponen una interfaz común para guardar y leer archivos, sin importar el backend físico utilizado.
+Aquí viven únicamente los proveedores de almacenamiento (`StorageProvider`) que exponen una interfaz común para guardar y leer archivos, sin importar el backend físico utilizado. Hoy solo existe `LocalDiskStorage` (`FileProvider.LOCAL`); `MinIOStorage`/`S3Storage` se agregarían acá el día que hagan falta, sin que el módulo `files` (que sí sabe qué es un archivo válido: tipo, tamaño, quién lo subió) necesite cambiar. Detalle completo en [`src/modules/files/README.md`](./src/modules/files/README.md).
 
 ---
 
@@ -250,7 +250,7 @@ Porque eso duplicaría en cada modelo la misma información que ya vive en `Stor
 
 ### ¿Por qué las URLs no se guardan en la base de datos?
 
-Una URL pública depende del proveedor de almacenamiento activo (rutas de un servidor local, un bucket de S3, un endpoint de MinIO, un dominio de CDN, etc.) y puede cambiar sin que el archivo en sí cambie. Guardar la URL en la base de datos acoplaría el modelo de datos a un proveedor específico y obligaría a reescribir todas las URLs existentes si el proveedor cambia. En cambio, la base de datos guarda únicamente la ruta relativa, y es el proveedor de almacenamiento (`src/storage`, en un paso posterior) quien construye la URL pública cuando hace falta.
+Una URL pública depende del proveedor de almacenamiento activo (rutas de un servidor local, un bucket de S3, un endpoint de MinIO, un dominio de CDN, etc.) y puede cambiar sin que el archivo en sí cambie. Guardar la URL en la base de datos acoplaría el modelo de datos a un proveedor específico y obligaría a reescribir todas las URLs existentes si el proveedor cambia. En cambio, la base de datos guarda únicamente la ruta relativa, y es el proveedor de almacenamiento (`src/storage`) quien construye la URL pública cuando hace falta — ver `getPublicUrl()` y [`src/modules/files/README.md`](./src/modules/files/README.md).
 
 ### ¿Por qué se almacena únicamente la ruta relativa?
 

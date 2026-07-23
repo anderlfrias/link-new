@@ -1,0 +1,18 @@
+/// Interfaz común que debe implementar cualquier proveedor de almacenamiento
+/// físico (disco local, S3, MinIO, ...), para que el resto del sistema guarde
+/// y lea archivos sin importar dónde viven realmente (ver backend/README.md,
+/// "Gestión de Archivos").
+export interface SavedFile {
+  /// Ruta relativa dentro del proveedor (ej. "chat/550e8400.pdf"), lo único
+  /// que se guarda en `StoredFile.path` — nunca una ruta absoluta ni una URL.
+  path: string;
+  size: number;
+}
+
+export interface StorageProvider {
+  save(buffer: Buffer, relativePath: string): Promise<SavedFile>;
+  delete(relativePath: string): Promise<void>;
+  /// Construye la URL pública a partir de la ruta relativa. Solo este método
+  /// sabe cómo se sirve un archivo (estático en disco, bucket firmado, CDN, ...).
+  getPublicUrl(relativePath: string): string;
+}
