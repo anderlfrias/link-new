@@ -6,7 +6,10 @@ import * as ConversationRepository from "./conversation.repository";
 import { CONVERSATION_EVENTS } from "./conversation.socket";
 import { ConversationWithMembers, CreateConversationInput, UpdateConversationInput } from "./conversation.types";
 
-async function assertMembership(conversationId: string, userId: string): Promise<ConversationWithMembers> {
+/// Exportada para que otros módulos con recursos anidados dentro de una
+/// conversación (ej. `messages`) reutilicen la misma regla de autorización en
+/// vez de duplicarla: conversación activa + el usuario es miembro.
+export async function assertMembership(conversationId: string, userId: string): Promise<ConversationWithMembers> {
   const conversation = await ConversationRepository.findActiveById(conversationId);
   if (!conversation) {
     throw new NotFoundError("Conversation not found");
