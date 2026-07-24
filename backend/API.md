@@ -1,0 +1,484 @@
+# API del backend — guía para construir el frontend
+
+Referencia completa de cómo consumir este backend: login, conversaciones, mensajes, adjuntos, tiempo real (sockets), confirmaciones de entrega/lectura e indicador de "escribiendo". Pensada para quien va a construir la interfaz gráfica — no repite el porqué de cada decisión (eso está en el README de cada módulo, linkeado donde corresponde), se enfoca en **qué llamar y qué esperar de vuelta**.
+
+- Base URL HTTP: `http://localhost:4000/api` (el puerto es `PORT` en `.env`, default `4000`)
+- Base URL de sockets: `http://localhost:4000` (Socket.IO, mismo host, sin el prefijo `/api`)
+- Todo el cuerpo de request/response es JSON, salvo la subida de archivos (`multipart/form-data`)
+
+---
+
+## 0. Flujo mínimo para arrancar
+
+1. `POST /api/v1/auth/login` → guardar `token` y `user.internalUserId`.
+2. Conectar el socket con `auth: { token }`.
+3. `GET /api/v1/conversations` → pintar la lista.
+4. Al abrir una conversación: emitir `conversation:join`, después `GET /api/v1/conversations/:id/messages` para el historial.
+5. Enviar mensajes con `POST /api/v1/conversations/:id/messages`; los mensajes de otros llegan por el evento de socket `message:created` (no hace falta refrescar).
+6. Al cerrar una conversación: emitir `conversation:leave`.
+
+Todo lo demás (adjuntos, recibos, "escribiendo...", editar/borrar, grupos) se apoya en este mismo esqueleto.
+
+---
+
+## 1. Convenciones generales
+
+### Autenticación HTTP
+
+Todas las rutas salvo `POST /api/v1/auth/login` requieren:
+
+```
+Authorization: Bearer <token>
+```
+
+El `token` es exactamente el que devuelve el login (emitido por EXTERNAL_AUTH, el backend nunca emite el suyo propio). Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo.
+
+### Ids: interno vs externo
+
+Cualquier `userId` que aparezca en request o response de este API (`memberIds`, `senderId`, `createdById`, `userId` en un evento de socket, etc.) es el **id interno** (UUID de la tabla `User` local) — `user.internalUserId` en la respuesta del login. **Nunca** es el id externo de EXTERNAL_AUTH (`user.id`). Guardar `internalUserId` como "mi id" en el estado del frontend desde el login.
+
+### Formato de error
+
+Cualquier error (HTTP) responde:
+
+```json
+{ "error": "mensaje legible" }
+```
+
+con el status code correspondiente:
+
+| Status | Cuándo |
+|---|---|
+| `400` | Body/query inválido, o una regla de negocio no se cumple (ej. crear un grupo sin `name`) |
+| `401` | Falta el token, es inválido, o expiró |
+| `403` | Token válido, pero no autorizado para esa acción (ej. no sos miembro, o no sos el creador) |
+| `404` | El recurso no existe o está borrado lógicamente |
+| `503` | EXTERNAL_AUTH (el servicio de autenticación externo) no respondió, solo en `/auth/login` |
+
+### Fechas
+
+Todas las fechas (`createdAt`, `lastReadAt`, `at` en eventos, etc.) son strings ISO 8601 UTC, tal como Prisma/JSON las serializa.
+
+### Paginación
+
+Solo `GET .../messages` pagina, por cursor (ver sección 4.2) — el resto de los listados (conversaciones, miembros) no pagina porque en la práctica son chicos.
+
+---
+
+## 2. Autenticación
+
+### `POST /api/v1/auth/login`
+
+Reenvía las credenciales al microservicio EXTERNAL_AUTH; no hay usuarios ni contraseñas propias de este backend.
+
+Request (JSON o `application/x-www-form-urlencoded`):
+```json
+{ "user": "jdoe", "password": "secreto" }
+```
+
+Response `200`:
+```json
+{
+  "token": "<jwt emitido por EXTERNAL_AUTH, reenviado tal cual>",
+  "user": {
+    "id": "<id externo en EXTERNAL_AUTH — NO USAR para relacionar nada>",
+    "email": "jdoe@empresa.com",
+    "username": "jdoe",
+    "fullName": "Juan Doe Pérez",
+    "roles": ["admin"],
+    "permissions": ["chat.read", "chat.write"],
+    "app": "chat-interno",
+    "exp": 1735000000,
+    "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>"
+  }
+}
+```
+
+Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores), `403` (el usuario existe en EXTERNAL_AUTH pero no tiene acceso a esta app), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 10 intentos en 15 minutos desde la misma IP.
+
+Después del login, todo el resto del API (HTTP y socket) usa el mismo `token` — no hay un endpoint de logout ni de refresh; "cerrar sesión" en el frontend es simplemente descartar el token guardado y desconectar el socket.
+
+---
+
+## 3. Tiempo real — conectar el socket
+
+```js
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:4000", {
+  auth: { token }, // el mismo token del login
+});
+
+socket.on("connect_error", (err) => {
+  // err.message: "Missing token" | "Invalid token" | "Token expired"
+});
+```
+
+- La conexión se autentica **una sola vez, en el handshake** (no hay un evento de "login" por socket). Si el token es inválido o expiró, la conexión falla directamente con `connect_error` — no llega a `connect`.
+- Reconectar (ej. tras perder la red) vuelve a mandar el mismo `auth.token` automáticamente (comportamiento default de socket.io-client) — si el token ya expiró para ese momento, hay que refrescarlo (re-loguear) antes de reconectar.
+- Conectarse **no** te suscribe a nada todavía. Para recibir eventos de una conversación hay que unirse explícitamente a su room (ver 3.1) — esto es intencional, para que un socket no reciba tráfico de conversaciones que el usuario no tiene abiertas.
+
+### 3.1 Unirse/salir de una conversación
+
+| Evento (cliente → servidor) | Payload | Ack |
+|---|---|---|
+| `conversation:join` | `conversationId` (string) | `{ ok: true }` o `{ ok: false, error }` |
+| `conversation:leave` | `conversationId` (string) | `{ ok: true }` |
+
+```js
+socket.emit("conversation:join", conversationId, (res) => {
+  if (!res.ok) {
+    // "Unauthenticated" | "Not a member of this conversation"
+  }
+});
+```
+
+`conversation:join` verifica en cada llamada que el usuario autenticado del socket sea efectivamente miembro de esa conversación (falla con `ok: false` si no). Patrón sugerido: emitir `join` al abrir una conversación en la UI, `leave` al cerrarla/navegar a otra. Los eventos de **mensajes** (`message:*`, incluido "escribiendo") viajan sobre esta misma room — no hace falta unirse a nada aparte para ellos.
+
+### ⚠️ Limitación conocida: notificación en vivo de conversaciones nuevas
+
+`conversation:created` (ver tabla en 5) se emite a la room personal del usuario (`user:<internalUserId>`), pero **hoy ningún socket se une a esa room automáticamente** (es responsabilidad del módulo `presence`, que todavía no está implementado — solo existe como stub). En la práctica esto significa:
+
+- Cuando **vos** creás una conversación o agregás miembros, la respuesta HTTP ya te da los datos completos — no dependas del evento para tu propia acción.
+- Cuando **otro usuario** te crea una conversación privada, o te agrega a un grupo, **no vas a recibir ninguna notificación en vivo** todavía. El frontend debe volver a pedir `GET /api/v1/conversations` periódicamente (o al menos al reabrir/enfocar la app) hasta que esto se resuelva del lado del backend.
+
+El resto de los eventos (los que viajan sobre la room de una conversación ya unida — `updated`, `member_added`, `member_removed`, `deleted`, `receipt_updated`, y todo `message:*`) **sí** funcionan en vivo hoy, siempre que el socket haya hecho `conversation:join`.
+
+---
+
+## 4. Conversaciones
+
+Base HTTP: `/api/v1/conversations`. Todas requieren `Authorization`.
+
+Forma de una conversación (la misma en todos los endpoints, salvo lo que se aclare):
+
+```json
+{
+  "id": "conv-uuid",
+  "name": "Proyecto X",
+  "type": "GROUP",
+  "imageFileId": "file-uuid-o-null",
+  "createdById": "user-uuid",
+  "lastMessageId": "msg-uuid-o-null",
+  "lastMessageAt": "2026-07-24T10:00:00.000Z",
+  "lastMessageSenderId": "user-uuid-o-null",
+  "createdAt": "...",
+  "updatedAt": "...",
+  "deletedAt": null,
+  "members": [
+    {
+      "id": "membership-uuid",
+      "conversationId": "conv-uuid",
+      "userId": "user-uuid",
+      "joinedAt": "...",
+      "lastReadMessageId": "msg-uuid-o-null",
+      "lastReadAt": "...-o-null",
+      "lastDeliveredMessageId": "msg-uuid-o-null",
+      "lastDeliveredAt": "...-o-null",
+      "user": { "id": "user-uuid", "name": "Juan", "email": "juan@x.com", "avatarFileId": null, "status": "ACTIVE" }
+    }
+  ]
+}
+```
+
+`type` es `"PRIVATE"` (exactamente 2 miembros fijos) o `"GROUP"` (3 o más). `name`/`imageFileId` solo aplican a `GROUP`.
+
+### 4.1 `POST /` — Crear conversación
+
+```json
+{ "type": "PRIVATE", "memberIds": ["<userId-del-otro>"] }
+```
+```json
+{ "type": "GROUP", "memberIds": ["<userId1>", "<userId2>"], "name": "Proyecto X", "imageFileId": "file-uuid" }
+```
+
+- `memberIds`: ids **internos** de los demás participantes (no incluyas tu propio id, se agrega solo).
+- `PRIVATE`: exactamente 1 id en `memberIds`. Si ya existe una conversación privada activa entre ambos, la devuelve tal cual en vez de crear otra (podés llamarlo sin chequear antes "¿ya existe un chat con este usuario?").
+- `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total). `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6).
+
+→ `201` con la conversación completa. Emite `conversation:created` (ver la limitación de 3.1).
+
+### 4.2 `GET /` — Listar mis conversaciones
+
+Sin body ni query params. Devuelve un array, cada conversación con dos campos extra:
+
+```json
+{
+  "...": "...(todos los campos de arriba)",
+  "unreadCount": 3,
+  "lastMessageStatus": "delivered"
+}
+```
+
+- Ordenadas por `lastMessageAt` descendente (las más recientes primero) — ideal para pintar directo como lista de chats.
+- `unreadCount`: mensajes de otros posteriores a tu `lastReadAt` en esa conversación.
+- `lastMessageStatus`: `"sent"` | `"delivered"` | `"read"` | `null`. **Solo tiene un valor si el último mensaje lo enviaste vos** (para pintar el check ✓/✓✓/✓✓azul junto a tu propio último mensaje en la lista); es `null` si el último mensaje es de otra persona, o si la conversación no tiene mensajes todavía. Ver sección 7 para el detalle de qué significa cada estado.
+
+### 4.3 `GET /:id` — Detalle de una conversación
+
+Igual forma que arriba (sin `unreadCount`/`lastMessageStatus`, esos son solo del listado). `403` si no sos miembro, `404` si no existe o está borrada.
+
+### 4.4 `PATCH /:id` — Renombrar / cambiar imagen
+
+```json
+{ "name": "Nuevo nombre" }
+```
+```json
+{ "imageFileId": null }
+```
+
+Al menos uno de los dos campos. Solo `GROUP` (`400` en `PRIVATE`). `imageFileId: null` limpia la imagen. Cualquier miembro puede hacerlo (no hay roles por miembro, ver 4.8). Emite `conversation:updated` (conversación completa) a la room.
+
+### 4.5 `POST /:id/members` — Agregar miembros
+
+```json
+{ "userIds": ["<userId1>", "<userId2>"] }
+```
+
+Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningún id nuevo, `400`. Emite `conversation:member_added` `{ conversationId, userIds }` a la room, y `conversation:created` (conversación completa) a la room personal de cada miembro nuevo (sujeto a la misma limitación de 3.1).
+
+### 4.6 `DELETE /:id/members/:userId` — Quitar miembro / salir
+
+- `:userId` = tu propio id → salir de la conversación, cualquier miembro puede.
+- `:userId` = otro usuario → solo el creador de la conversación puede (`403` si no).
+- No aplica a `PRIVATE` (`400` siempre).
+
+→ `200` `{ "conversationId": "...", "userId": "..." }`. Emite `conversation:member_removed` a la room.
+
+### 4.7 `DELETE /:id` — Borrar conversación
+
+Borrado lógico, solo el creador (`403` para cualquier otro miembro), sin importar el tipo. → `200` `{ "conversationId": "..." }`. Emite `conversation:deleted` `{ conversationId }`.
+
+### 4.8 Quién puede hacer qué
+
+No hay roles por miembro en el modelo de datos — la única distinción es `createdById`:
+
+| Acción | Cualquier miembro | Solo el creador |
+|---|:---:|:---:|
+| Ver, renombrar, cambiar imagen, agregar miembros, marcar leído | ✅ | |
+| Salir (quitarse a sí mismo) | ✅ | |
+| Quitar a **otro** miembro | | ✅ |
+| Borrar la conversación | | ✅ |
+
+---
+
+## 5. Recibos y eventos de socket de conversación
+
+| Evento | Dirección | Payload | Cuándo |
+|---|---|---|---|
+| `conversation:join` | cliente → servidor | `conversationId`, con ack | Unirse a la room (ver 3.1) |
+| `conversation:leave` | cliente → servidor | `conversationId`, con ack | Salir de la room |
+| `conversation:created` | servidor → cliente | conversación completa | A la room personal de cada miembro, al crearse o al ser agregado — **ver limitación de 3.1** |
+| `conversation:updated` | servidor → cliente | conversación completa | Al renombrarse o cambiar imagen |
+| `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | Al agregar miembros |
+| `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | Al quitar/salir un miembro |
+| `conversation:deleted` | servidor → cliente | `{ conversationId }` | Al borrarse |
+| `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | Cuando `userId` leyó o recibió mensajes — ver sección 7 |
+
+Todos (salvo `created`) llegan por la room de la conversación — necesitás haber hecho `conversation:join` primero.
+
+---
+
+## 6. Mensajes
+
+Base HTTP: `/api/v1/conversations/:conversationId/messages`. Requiere ser miembro activo de `:conversationId` (mismas reglas que en la sección 4).
+
+Forma de un mensaje:
+
+```json
+{
+  "id": "msg-uuid",
+  "conversationId": "conv-uuid",
+  "senderId": "user-uuid",
+  "type": "TEXT",
+  "content": "Hola!",
+  "editedAt": null,
+  "deletedAt": null,
+  "deletedById": null,
+  "createdAt": "2026-07-24T10:00:00.000Z",
+  "sender": { "id": "user-uuid", "name": "Juan", "email": "juan@x.com", "avatarFileId": null },
+  "files": [
+    { "id": "messagefile-uuid", "messageId": "msg-uuid", "fileId": "file-uuid", "createdAt": "...",
+      "file": { "id": "file-uuid", "originalName": "foto.jpg", "mimeType": "image/jpeg", "path": "chat/....jpg", "extension": "jpg", "size": 245678, "provider": "LOCAL", "checksum": "...", "createdById": "user-uuid", "createdAt": "...", "deletedAt": null } }
+  ],
+  "receipts": [
+    { "userId": "otro-user-uuid", "status": "delivered" }
+  ]
+}
+```
+
+`type` es `"TEXT"` (lo único que este API genera hoy) o `"SYSTEM"` (reservado para narrar eventos de la conversación — todavía no se genera automáticamente). `receipts` trae un estado por cada miembro que **no** sea el autor — ver sección 7.
+
+Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están en la base (a diferencia de la respuesta de `POST /api/v1/files`, que devuelve `url` ya armada) — para armar la URL de descarga desde acá, prefijá `path` con `/uploads/`, ej. `http://localhost:4000/uploads/chat/....jpg`.
+
+### 6.1 `POST /` — Enviar mensaje
+
+```json
+{ "content": "Hola!", "fileIds": ["<storedFileId>"] }
+```
+
+`content`: 1-4000 caracteres. `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 8).
+
+→ `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room.
+
+### 6.2 `GET /` — Listar mensajes
+
+Query params: `?before=<messageId>&limit=<1-100, default 50>`.
+
+- Sin `before`: los `limit` mensajes más recientes.
+- Con `before`: los `limit` mensajes inmediatamente anteriores a ese id (para "cargar más arriba" al scrollear).
+- La respuesta viene **en orden cronológico ascendente** (el más viejo primero) — lista para pintar directo en un hilo de chat, sin necesidad de invertir el arreglo en el frontend.
+
+Pedir el historial también marca como **entregados** (no leídos) para vos todos los mensajes hasta el más nuevo de la página que recibiste — aunque hayas estado desconectado cuando se enviaron.
+
+### 6.3 `PATCH /:id` — Editar
+
+```json
+{ "content": "Texto corregido" }
+```
+
+Solo tu propio mensaje (`403` para cualquier otro, incluido el creador de la conversación), y solo `type: "TEXT"` (`400` para `SYSTEM`). Actualiza `editedAt`. Emite `message:updated`.
+
+### 6.4 `DELETE /:id` — Borrar
+
+Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado).
+
+### 6.5 Eventos de socket de mensajes
+
+| Evento | Dirección | Payload | Cuándo |
+|---|---|---|---|
+| `message:created` | servidor → cliente | mensaje completo (con `receipts`) | Al enviarse |
+| `message:updated` | servidor → cliente | mensaje completo (con `receipts`) | Al editarse |
+| `message:deleted` | servidor → cliente | `{ conversationId, messageId }` | Al borrarse |
+
+Llegan por la room de la conversación (`conversation:join` primero).
+
+---
+
+## 7. Confirmación de entrega y lectura
+
+Cada mensaje trae `receipts: [{ userId, status }]` — un estado por cada miembro que no sea el autor:
+
+- **`"sent"`** — todavía no le llegó a ese miembro.
+- **`"delivered"`** — le llegó (en vivo por socket, o porque pidió el historial).
+- **`"read"`** — lo marcó explícitamente como leído.
+
+Es una aproximación por corte de tiempo (¿el mensaje es anterior a mi último "leído"/"recibido"?), no un registro exacto por mensaje — no distingue "leyó justo este" de "leyó todo hasta un punto posterior a este".
+
+### Cómo avanza cada uno
+
+| Quién lo dispara | Qué endpoint/evento | Efecto |
+|---|---|---|
+| El propio usuario, explícitamente | `POST /api/v1/conversations/:id/read` | Marca **leído** — ver 4 más arriba |
+| El backend, automáticamente | Estar conectado y unido a la room al momento de un `message:created` | Marca **entregado** en el acto para quien ya estaba ahí |
+| El backend, automáticamente | `GET .../messages` (pedir el historial) | Marca **entregado** hasta el mensaje más nuevo de la página |
+
+"Leído" siempre implica "entregado", nunca al revés. **Nadie marca "leído" automáticamente** — es siempre una llamada explícita a `POST /:id/read` (típicamente al abrir/enfocar una conversación, o al scrollear hasta el final).
+
+### Flujo sugerido para el frontend
+
+1. Al abrir una conversación: `conversation:join`, cargar mensajes (`GET .../messages`), y llamar `POST /:id/read` (sin `lastReadMessageId` para simplemente marcar "leído hasta ahora", o con el id del último mensaje visible).
+2. Escuchar `conversation:receipt_updated` mientras la conversación está abierta, para actualizar en vivo los checks de tus propios mensajes enviados (`kind: "read"` o `"delivered"`, con `userId` de quién cambió y `messageId` hasta dónde).
+3. En la lista de conversaciones (`GET /api/v1/conversations`), usar `lastMessageStatus` para el check junto al último mensaje, sin necesitar los `receipts` detallados de cada mensaje.
+
+En una conversación grupal, `receipts` trae un estado por cada miembro — el frontend decide cómo agregarlo (ej. "✓✓ azul" un mensaje solo cuando **todos** lo leyeron, que es exactamente el criterio que ya usa `lastMessageStatus` en el listado).
+
+---
+
+## 8. Indicador de "escribiendo"
+
+Estado 100% efímero — nunca se persiste ni queda en ningún historial. Solo por socket, solo mientras la conversación está unida (`conversation:join`).
+
+| Evento | Dirección | Payload |
+|---|---|---|
+| `message:typing_start` | cliente → servidor | `conversationId` |
+| `message:typing_stop` | cliente → servidor | `conversationId` |
+| `message:typing_start` | servidor → cliente | `{ conversationId, userId }` |
+| `message:typing_stop` | servidor → cliente | `{ conversationId, userId }` |
+
+```js
+// Al empezar a tipear (ej. debounced en el input):
+socket.emit("message:typing_start", conversationId);
+// Al parar de tipear (o tras enviar el mensaje, o tras N segundos sin input):
+socket.emit("message:typing_stop", conversationId);
+
+socket.on("message:typing_start", ({ conversationId, userId }) => { /* mostrar "Juan está escribiendo..." */ });
+socket.on("message:typing_stop", ({ conversationId, userId }) => { /* ocultarlo */ });
+```
+
+Notas:
+- El servidor **nunca te reenvía tu propio evento** (no hace falta filtrarlo en el frontend).
+- El servidor verifica que seas miembro de la conversación antes de retransmitir; si no, el evento simplemente no se propaga (no da error al cliente).
+- Si tu socket se desconecta abruptamente (cerrar pestaña, perder red) mientras estabas "escribiendo", el servidor manda `typing_stop` por vos — no hace falta un timeout del lado del cliente para ese caso, aunque igual es buena práctica tener uno corto (ej. 5s sin nuevo `typing_start`) para el caso normal de "dejó de tipear pero no cerró nada".
+
+---
+
+## 9. Adjuntos (archivos, fotos, etc.)
+
+Un mismo modelo (`StoredFile`) sirve para adjuntos de mensaje, imagen de conversación grupal, y (a futuro) avatar de usuario. Se sube **antes** de usarse — subís el archivo, te dan un `id`, y ese `id` es lo que mandás en `imageFileId` (conversaciones) o `fileIds` (mensajes).
+
+Base HTTP: `/api/v1/files`.
+
+### 9.1 `POST /` — Subir
+
+`multipart/form-data`, un único campo `file`:
+
+```js
+const form = new FormData();
+form.append("file", fileBlob);
+await fetch("http://localhost:4000/api/v1/files", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` }, // NO seteés Content-Type manualmente, el browser arma el boundary
+  body: form,
+});
+```
+
+Validado por tipo MIME (imágenes jpeg/png/gif/webp, PDF, texto plano, Word/Excel, zip — lista completa en `src/constants/allowed-file-types.constant.ts`) y tamaño (`MAX_UPLOAD_SIZE_MB`, default **25 MB**). `400` si el tipo no está permitido o si excede el tamaño.
+
+→ `201`:
+```json
+{
+  "id": "file-uuid",
+  "originalName": "foto.jpg",
+  "mimeType": "image/jpeg",
+  "extension": "jpg",
+  "size": 245678,
+  "url": "/uploads/chat/9f2b3c1a-....jpg",
+  "createdAt": "..."
+}
+```
+
+`url` es relativa al mismo host del backend (no lleva dominio) — armá la URL completa como `${backendBaseUrl}${url}` para mostrar la imagen/descargar el archivo. **Servir el archivo (`GET /uploads/...`) no requiere `Authorization`** — es estático y público una vez que tenés la URL (que incluye un UUID no adivinable). Solo subir/consultar metadata/borrar vía `/api/v1/files` requiere estar logueado.
+
+### 9.2 `GET /:id` — Metadata
+
+Misma forma que la respuesta de subida. `404` si no existe o está borrado.
+
+### 9.3 `DELETE /:id`
+
+Borrado lógico, solo quien lo subió (`403` para cualquier otro). → `200` `{ "id": "..." }`. No borra el archivo físico ni valida si sigue en uso por algún mensaje/conversación — si ya lo referenciaste en un mensaje enviado, ese mensaje sigue mostrando el archivo con normalidad aunque borres el `StoredFile` lógicamente (la limpieza real es un job pendiente, no afecta lo ya enviado).
+
+---
+
+## 10. Referencia de datos (enums)
+
+| Enum | Valores | Dónde aparece |
+|---|---|---|
+| `ConversationType` | `PRIVATE`, `GROUP` | `Conversation.type` |
+| `MessageType` | `TEXT`, `SYSTEM` | `Message.type` |
+| `UserStatus` | `ACTIVE`, `INACTIVE` | `ConversationMember.user.status` |
+| `MessageReceiptStatus` (no es un enum de Prisma, es propio del API) | `sent`, `delivered`, `read` | `receipts[].status`, `lastMessageStatus` |
+
+---
+
+## 11. Corriendo el backend en local
+
+```bash
+cd backend
+npm install
+npm run dev   # ts-node, puerto 4000 por default
+```
+
+Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`. Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 25).
+
+Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`socket`](./src/socket/README.md).
