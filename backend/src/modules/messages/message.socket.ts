@@ -1,4 +1,5 @@
 import { isConversationMember } from "../conversations/conversation.repository";
+import { SOCKET_LIFECYCLE_EVENTS } from "../../socket/events";
 import { conversationRoomName } from "../../socket/rooms";
 import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/types";
 
@@ -17,12 +18,30 @@ export const MESSAGE_EVENTS = {
 /// Conecta los listeners de este módulo a un socket recién conectado.
 /// Registrada explícitamente en socket/registry.ts (ver ese archivo).
 export function registerMessageSocket(socket: AppSocket, _io: AppServer): void {
+  // Conversaciones donde este socket mandó typing_start sin su typing_stop
+  // correspondiente todavía. Solo sirve para el cleanup de abajo — no es
+  // estado de negocio, por eso vive acá y no en ninguna tabla.
+  const typingIn = new Set<string>();
+
   socket.on(MESSAGE_EVENTS.TYPING_START, (conversationId: string) => {
+    typingIn.add(conversationId);
     void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_START);
   });
 
   socket.on(MESSAGE_EVENTS.TYPING_STOP, (conversationId: string) => {
+    typingIn.delete(conversationId);
     void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_STOP);
+  });
+
+  // Si el socket se cae mientras "escribía" (crash, cerrar la pestaña, perder
+  // la red) nadie manda typing_stop — sin esto, el indicador queda pegado en
+  // "escribiendo..." para siempre en el resto de los clientes. `disconnecting`
+  // (no `disconnect`) porque todavía hay que estar en la room para poder
+  // emitirle al resto.
+  socket.on(SOCKET_LIFECYCLE_EVENTS.DISCONNECTING, () => {
+    typingIn.forEach((conversationId) => {
+      void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_STOP);
+    });
   });
 }
 
