@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { IconLoader2 } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
+import { useConversations } from "@/features/conversations/hooks/use-conversations";
+import { DesktopSidebar } from "@/components/layout/DesktopSidebar";
+import { MobileChatListScreen } from "@/components/layout/MobileChatListScreen";
+import { cn } from "@/utils/cn";
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
-  const { status } = useAuth();
+  const { session, status } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isConversationRoute = pathname?.startsWith("/conversations/") ?? false;
+
+  const { conversations, status: conversationsStatus } = useConversations();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -15,14 +23,47 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     }
   }, [status, router]);
 
-  if (status !== "authenticated") {
+  if (status !== "authenticated" || !session) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center">
         <IconLoader2 className="animate-spin text-brand-blue" size={28} />
       </div>
     );
   }
 
-  // TODO: AppShell con Sidebar + lista de conversaciones (components/layout, features/conversations/components)
-  return <div className="flex min-h-screen">{children}</div>;
+  const currentUserId = session.user.internalUserId;
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      {/* Lista de conversaciones — siempre visible en desktop, pantalla completa en mobile
+          (oculta cuando hay una conversación abierta, como en WhatsApp Mobile). */}
+      <div
+        className={cn(
+          "border-black/5 dark:border-white/10 lg:flex lg:w-95 lg:shrink-0 lg:border-r",
+          isConversationRoute ? "hidden" : "flex w-full",
+        )}
+      >
+        <div className="hidden h-full w-full lg:block">
+          <DesktopSidebar
+            conversations={conversations}
+            status={conversationsStatus}
+            currentUserId={currentUserId}
+          />
+        </div>
+        <div className="block h-full w-full lg:hidden">
+          <MobileChatListScreen
+            conversations={conversations}
+            status={conversationsStatus}
+            currentUserId={currentUserId}
+          />
+        </div>
+      </div>
+
+      {/* Panel principal — en desktop siempre visible (empty state o conversación); en mobile
+          solo cuando hay una conversación abierta, ocupando toda la pantalla. */}
+      <div className={cn("flex-1 flex-col", isConversationRoute ? "flex" : "hidden lg:flex")}>
+        {children}
+      </div>
+    </div>
+  );
 }
