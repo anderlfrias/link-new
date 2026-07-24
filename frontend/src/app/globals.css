@@ -15,6 +15,18 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* Marca "Link" — extraídos de public/link-logo.png */
+  --color-brand-blue-light: #0098f0;
+  --color-brand-blue: #0068d8;
+  --color-brand-blue-dark: #0050c0;
+  --color-brand-teal-light: #10b8b8;
+  --color-brand-teal: #00a8a8;
+  --color-brand-teal-dark: #0898a0;
+  --color-brand-ink: #002040;
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-baloo);
 }
 
 html {
