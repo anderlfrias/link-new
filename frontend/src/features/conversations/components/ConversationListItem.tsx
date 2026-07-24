@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { UnreadBadge } from "@/components/ui/Badge";
-import { MessageStatusTicks } from "@/features/conversations/components/MessageStatusTicks";
+import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
 import { getConversationDisplayName, getOtherMembers } from "@/utils/conversation-display";
 import { formatConversationTimestamp } from "@/utils/format-date";
 import { cn } from "@/utils/cn";
@@ -30,8 +30,8 @@ export function ConversationListItem({ conversation, currentUserId }: Conversati
     <Link
       href={`/conversations/${conversation.id}`}
       className={cn(
-        "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/5",
-        isActive && "bg-black/[0.04] dark:bg-white/10",
+        "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-black/3 dark:hover:bg-white/5",
+        isActive && "bg-black/4 dark:bg-white/10",
       )}
     >
       <Avatar name={displayName} size="lg" />
