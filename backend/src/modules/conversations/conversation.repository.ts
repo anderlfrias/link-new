@@ -106,6 +106,27 @@ export function markRead(conversationId: string, userId: string, lastReadMessage
   });
 }
 
+/// Avanza el puntero de "entregado" solo si `deliveredThrough` es más reciente
+/// que el actual — nunca retrocede (ej. si el miembro pagina hacia mensajes más
+/// viejos después de ya haber recibido mensajes más nuevos en vivo). El `WHERE`
+/// se evalúa atómicamente en la base, así que es seguro bajo requests concurrentes.
+export async function markDelivered(
+  conversationId: string,
+  userId: string,
+  messageId: string,
+  deliveredThrough: Date,
+): Promise<boolean> {
+  const result = await prisma.conversationMember.updateMany({
+    where: {
+      conversationId,
+      userId,
+      OR: [{ lastDeliveredAt: null }, { lastDeliveredAt: { lt: deliveredThrough } }],
+    },
+    data: { lastDeliveredMessageId: messageId, lastDeliveredAt: deliveredThrough },
+  });
+  return result.count > 0;
+}
+
 export function countUnread(conversationId: string, userId: string, since: Date | null) {
   return prisma.message.count({
     where: {

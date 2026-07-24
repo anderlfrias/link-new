@@ -153,6 +153,10 @@ model Conversation {
   lastMessageId String?   @map("last_message_id")
   /// Fecha del último mensaje, usada para ordenar la lista de conversaciones.
   lastMessageAt DateTime? @map("last_message_at")
+  /// Quién envió `lastMessageId`. Sin esto, mostrar "✓✓ Leído" junto al último
+  /// mensaje en la lista de conversaciones (solo tiene sentido si el mensaje es
+  /// mío) obligaría a leer `Message` por cada conversación de la lista.
+  lastMessageSenderId String? @map("last_message_sender_id")
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -183,6 +187,14 @@ model ConversationMember {
   /// No es una relación de Prisma por la misma razón que `Conversation.lastMessageId`.
   lastReadMessageId String?   @map("last_read_message_id")
   lastReadAt        DateTime? @map("last_read_at")
+
+  /// Mismo patrón que `lastReadMessageId`/`lastReadAt`, pero para "entregado":
+  /// que al miembro le llegó el mensaje (push en vivo por socket, o al pedir el
+  /// historial), sin que haya hecho nada explícito todavía. "Leído" siempre
+  /// implica "entregado", pero no al revés — ver conversation.service.ts
+  /// (`computeReceipts`) para cómo se combinan en un solo estado por mensaje.
+  lastDeliveredMessageId String?   @map("last_delivered_message_id")
+  lastDeliveredAt        DateTime? @map("last_delivered_at")
 
   /// Un usuario solo puede tener una membresía por conversación.
   @@unique([conversationId, userId])

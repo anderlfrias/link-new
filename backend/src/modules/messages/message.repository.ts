@@ -36,7 +36,7 @@ export function createMessage(data: {
 
     await tx.conversation.update({
       where: { id: data.conversationId },
-      data: { lastMessageId: message.id, lastMessageAt: message.createdAt },
+      data: { lastMessageId: message.id, lastMessageAt: message.createdAt, lastMessageSenderId: data.senderId },
     });
 
     return message;

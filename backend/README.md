@@ -170,9 +170,15 @@ El modelo de datos del chat está definido en [`prisma/schema.prisma`](./prisma/
 * `MessageFile` N—1 `Message` y N—1 `StoredFile`.
 * `ChatAuditLog` referencia opcionalmente a `Conversation` y a `Message`, y siempre a un `User`.
 
-### ¿Por qué existen `lastReadMessageId` (en `ConversationMember`) y `lastMessageAt` (en `Conversation`)?
+### ¿Por qué existen `lastReadMessageId`/`lastMessageAt` y sus contrapartes `lastDeliveredMessageId`/`lastMessageSenderId`?
 
-Son campos **denormalizados**: guardan un dato que técnicamente podría calcularse con una consulta (el último mensaje de una conversación, o el último mensaje que un miembro marcó como leído), pero hacerlo así evitaría tener que agregar/ordenar sobre toda la tabla `Message` cada vez que se necesita listar conversaciones o calcular no leídos. Por eso mismo son campos sueltos (`String`/`DateTime`), sin relación formal de Prisma hacia `Message`: mantenerlos actualizados es responsabilidad de la capa de servicios (que se implementará en un paso posterior), no de la base de datos.
+Son campos **denormalizados**: guardan un dato que técnicamente podría calcularse con una consulta (el último mensaje de una conversación y quién lo envió, o el último mensaje que un miembro leyó/recibió), pero hacerlo así evitaría tener que agregar/ordenar sobre toda la tabla `Message` cada vez que se necesita listar conversaciones, calcular no leídos, o mostrar el estado de entrega/lectura de un mensaje. Por eso mismo son campos sueltos (`String`/`DateTime`), sin relación formal de Prisma hacia `Message`: mantenerlos actualizados es responsabilidad de la capa de servicios (`messages`, que es quien los vuelve stale), no de la base de datos.
+
+* `ConversationMember.lastReadMessageId`/`lastReadAt` — hasta dónde **leyó** explícitamente el miembro (`POST /conversations/:id/read`).
+* `ConversationMember.lastDeliveredMessageId`/`lastDeliveredAt` — hasta dónde le **llegó** el mensaje al miembro, sin acción explícita de su parte (en vivo por socket, o al pedir el historial).
+* `Conversation.lastMessageId`/`lastMessageAt`/`lastMessageSenderId` — el último mensaje de la conversación y quién lo envió, para poder mostrar su estado de entrega/lectura en la lista de conversaciones sin leer `Message`.
+
+Detalle completo (cómo se combinan en un estado por mensaje, quién actualiza qué) en [`src/modules/conversations/README.md`](./src/modules/conversations/README.md#confirmación-de-entrega-y-lectura) y [`src/modules/messages/README.md`](./src/modules/messages/README.md#confirmación-de-entrega-y-lectura).
 
 ### ¿Por qué "typing" (usuario escribiendo) no se almacena en la base de datos?
 

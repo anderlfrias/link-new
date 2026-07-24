@@ -1,4 +1,4 @@
-import { AppSocket } from "./types";
+import { AppServer, AppSocket, AuthenticatedSocketUser } from "./types";
 
 /// Construyen el nombre de una room a partir de un id. Ningún otro archivo del
 /// proyecto debe construir estos strings a mano.
@@ -27,4 +27,17 @@ export function joinUser(socket: AppSocket, userId: string): void {
 
 export function leaveUser(socket: AppSocket, userId: string): void {
   socket.leave(userRoomName(userId));
+}
+
+/// Ids de usuario (internos) actualmente conectados a la room de una
+/// conversación — quién está "en vivo" para recibir un mensaje ahora mismo
+/// (ver `markDelivered` en conversation.service.ts). Único punto autorizado a
+/// llamar `fetchSockets()`, por la misma razón que join/leave viven acá:
+/// ningún módulo de negocio debe tocar la API de socket.io directamente.
+export async function getConnectedUserIds(io: AppServer, conversationId: string): Promise<string[]> {
+  const sockets = await io.in(conversationRoomName(conversationId)).fetchSockets();
+  const userIds = sockets
+    .map((socket) => (socket.data.user as AuthenticatedSocketUser | undefined)?.internalUserId)
+    .filter((userId): userId is string => Boolean(userId));
+  return Array.from(new Set(userIds));
 }

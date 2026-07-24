@@ -3,9 +3,9 @@ import { joinConversation, leaveConversation } from "../../socket/rooms";
 import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/types";
 
 /// Eventos propios de este módulo. `JOIN`/`LEAVE` los emite el cliente;
-/// `CREATED`/`UPDATED`/`MEMBER_ADDED`/`MEMBER_REMOVED`/`DELETED` los emite el
-/// servidor (ver conversation.service.ts) hacia la room de la conversación o
-/// la room personal de cada usuario afectado.
+/// `CREATED`/`UPDATED`/`MEMBER_ADDED`/`MEMBER_REMOVED`/`DELETED`/`RECEIPT_UPDATED`
+/// los emite el servidor (ver conversation.service.ts) hacia la room de la
+/// conversación o la room personal de cada usuario afectado.
 export const CONVERSATION_EVENTS = {
   JOIN: "conversation:join",
   LEAVE: "conversation:leave",
@@ -14,6 +14,10 @@ export const CONVERSATION_EVENTS = {
   MEMBER_ADDED: "conversation:member_added",
   MEMBER_REMOVED: "conversation:member_removed",
   DELETED: "conversation:deleted",
+  /// Confirmación de entrega/lectura: el `lastRead*`/`lastDelivered*` de un
+  /// miembro avanzó. `kind` distingue cuál de los dos cambió — ver
+  /// `markConversationRead`/`markDelivered` en conversation.service.ts.
+  RECEIPT_UPDATED: "conversation:receipt_updated",
 } as const;
 
 type JoinAck = (response: { ok: true } | { ok: false; error: string }) => void;

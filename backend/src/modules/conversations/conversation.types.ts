@@ -27,4 +27,18 @@ export type ConversationWithMembers = Conversation & {
 export interface ConversationListItem extends ConversationWithMembers {
   /// Mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual.
   unreadCount: number;
+  /// Estado de confirmación del último mensaje, **solo si lo envió el usuario
+  /// actual** (no tiene sentido pedir un "recibo" de un mensaje ajeno).
+  /// `null` si el usuario actual no es quien envió `lastMessageId`, o si la
+  /// conversación todavía no tiene mensajes.
+  lastMessageStatus: MessageReceiptStatus | null;
+}
+
+export type MessageReceiptStatus = "sent" | "delivered" | "read";
+
+/// Estado de un mensaje para un miembro que no sea su propio autor. Ver
+/// `computeReceipts`/`aggregateReceiptStatus` en conversation.service.ts.
+export interface MessageReceipt {
+  userId: string;
+  status: MessageReceiptStatus;
 }

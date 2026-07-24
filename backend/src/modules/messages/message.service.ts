@@ -1,11 +1,18 @@
 import { ChatAuditAction, MessageType } from "@prisma/client";
-import { assertMembership } from "../conversations/conversation.service";
+import { assertMembership, computeReceipts, markDelivered } from "../conversations/conversation.service";
+import { MessageReceipt } from "../conversations/conversation.types";
 import { getIO } from "../../socket";
-import { conversationRoomName } from "../../socket/rooms";
+import { conversationRoomName, getConnectedUserIds } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as MessageRepository from "./message.repository";
 import { MESSAGE_EVENTS } from "./message.socket";
-import { CreateMessageInput, ListMessagesOptions, MessageWithRelations, UpdateMessageInput } from "./message.types";
+import {
+  CreateMessageInput,
+  ListMessagesOptions,
+  MessageWithReceipts,
+  MessageWithRelations,
+  UpdateMessageInput,
+} from "./message.types";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -18,8 +25,12 @@ async function assertOwnedMessage(conversationId: string, messageId: string): Pr
   return message;
 }
 
-export async function sendMessage(currentUserId: string, conversationId: string, input: CreateMessageInput) {
-  await assertMembership(conversationId, currentUserId);
+export async function sendMessage(
+  currentUserId: string,
+  conversationId: string,
+  input: CreateMessageInput,
+): Promise<MessageWithReceipts> {
+  const conversation = await assertMembership(conversationId, currentUserId);
 
   const fileIds = Array.from(new Set(input.fileIds ?? []));
   if (fileIds.length > 0) {
@@ -43,16 +54,51 @@ export async function sendMessage(currentUserId: string, conversationId: string,
     messageId: message.id,
   });
 
-  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, message);
-  return message;
+  // Quien ya está conectado a la room lo recibe en el acto: eso ES "entregado"
+  // (ver markDelivered en conversation.service.ts). El resto queda en "sent"
+  // hasta que se conecte o pida el historial (ver listMessages más abajo).
+  const io = getIO();
+  const connectedUserIds = await getConnectedUserIds(io, conversationId);
+  const deliveredNow = new Set(connectedUserIds.filter((userId) => userId !== currentUserId));
+  await Promise.all(
+    Array.from(deliveredNow).map((userId) => markDelivered(conversationId, userId, message.id, message.createdAt)),
+  );
+
+  const receipts: MessageReceipt[] = conversation.members
+    .filter((member) => member.userId !== currentUserId)
+    .map((member) => ({
+      userId: member.userId,
+      status: deliveredNow.has(member.userId) ? "delivered" : "sent",
+    }));
+
+  const messageWithReceipts: MessageWithReceipts = { ...message, receipts };
+  io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
+  return messageWithReceipts;
 }
 
-export async function listMessages(currentUserId: string, conversationId: string, options: ListMessagesOptions) {
-  await assertMembership(conversationId, currentUserId);
+export async function listMessages(
+  currentUserId: string,
+  conversationId: string,
+  options: ListMessagesOptions,
+): Promise<MessageWithReceipts[]> {
+  const conversation = await assertMembership(conversationId, currentUserId);
 
   const limit = Math.min(Math.max(options.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
   const messages = await MessageRepository.listMessages(conversationId, { beforeId: options.beforeId, limit });
-  return messages.reverse();
+  const ordered = messages.reverse();
+
+  // Pedir el historial también cuenta como "entregado" para quien lo pide:
+  // alcanza con avanzar el puntero hasta el mensaje más nuevo de esta página
+  // (markDelivered ya se encarga de no retroceder si ya estaba más adelante).
+  const newest = ordered[ordered.length - 1];
+  if (newest) {
+    await markDelivered(conversationId, currentUserId, newest.id, newest.createdAt);
+  }
+
+  return ordered.map((message) => ({
+    ...message,
+    receipts: computeReceipts(conversation.members, message),
+  }));
 }
 
 export async function editMessage(
@@ -60,8 +106,8 @@ export async function editMessage(
   conversationId: string,
   messageId: string,
   input: UpdateMessageInput,
-) {
-  await assertMembership(conversationId, currentUserId);
+): Promise<MessageWithReceipts> {
+  const conversation = await assertMembership(conversationId, currentUserId);
   const message = await assertOwnedMessage(conversationId, messageId);
 
   if (message.senderId !== currentUserId) {
@@ -79,8 +125,13 @@ export async function editMessage(
     messageId,
   });
 
-  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.UPDATED, updated);
-  return updated;
+  const messageWithReceipts: MessageWithReceipts = {
+    ...updated,
+    receipts: computeReceipts(conversation.members, updated),
+  };
+
+  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.UPDATED, messageWithReceipts);
+  return messageWithReceipts;
 }
 
 export async function deleteMessage(currentUserId: string, conversationId: string, messageId: string) {

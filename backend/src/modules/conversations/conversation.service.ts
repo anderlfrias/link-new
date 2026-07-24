@@ -4,7 +4,45 @@ import { conversationRoomName, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as ConversationRepository from "./conversation.repository";
 import { CONVERSATION_EVENTS } from "./conversation.socket";
-import { ConversationWithMembers, CreateConversationInput, UpdateConversationInput } from "./conversation.types";
+import {
+  ConversationMemberWithUser,
+  ConversationWithMembers,
+  CreateConversationInput,
+  MessageReceipt,
+  MessageReceiptStatus,
+  UpdateConversationInput,
+} from "./conversation.types";
+
+/// Estado de un mensaje para cada miembro que no sea su autor, a partir de los
+/// punteros denormalizados de `ConversationMember`. "Leído" implica "entregado"
+/// (por eso se chequea primero); ninguno de los dos implica que el mensaje
+/// exacto haya sido visto — es una aproximación por corte de tiempo, la misma
+/// que ya usa `countUnread` para no leídos, no un registro por mensaje.
+export function computeReceipts(
+  members: ConversationMemberWithUser[],
+  message: { senderId: string; createdAt: Date },
+): MessageReceipt[] {
+  return members
+    .filter((member) => member.userId !== message.senderId)
+    .map((member) => {
+      let status: MessageReceiptStatus = "sent";
+      if (member.lastReadAt && message.createdAt <= member.lastReadAt) {
+        status = "read";
+      } else if (member.lastDeliveredAt && message.createdAt <= member.lastDeliveredAt) {
+        status = "delivered";
+      }
+      return { userId: member.userId, status };
+    });
+}
+
+/// Colapsa los recibos de todos los destinatarios en un solo estado, para la
+/// lista de conversaciones (ej. "✓✓ azul" solo si TODOS ya leyeron).
+export function aggregateReceiptStatus(receipts: MessageReceipt[]): MessageReceiptStatus {
+  if (receipts.length === 0) return "sent";
+  if (receipts.every((receipt) => receipt.status === "read")) return "read";
+  if (receipts.every((receipt) => receipt.status === "read" || receipt.status === "delivered")) return "delivered";
+  return "sent";
+}
 
 /// Exportada para que otros módulos con recursos anidados dentro de una
 /// conversación (ej. `messages`) reutilicen la misma regla de autorización en
@@ -79,7 +117,19 @@ export async function listConversations(currentUserId: string) {
         currentUserId,
         membership?.lastReadAt ?? null,
       );
-      return { ...conversation, unreadCount };
+
+      // Un "recibo" solo tiene sentido para el mensaje que YO envié — nadie
+      // necesita saber si "leyó" un mensaje ajeno.
+      let lastMessageStatus: MessageReceiptStatus | null = null;
+      if (conversation.lastMessageSenderId === currentUserId && conversation.lastMessageAt) {
+        const receipts = computeReceipts(conversation.members, {
+          senderId: conversation.lastMessageSenderId,
+          createdAt: conversation.lastMessageAt,
+        });
+        lastMessageStatus = aggregateReceiptStatus(receipts);
+      }
+
+      return { ...conversation, unreadCount, lastMessageStatus };
     }),
   );
 }
@@ -215,5 +265,40 @@ export async function markConversationRead(
   lastReadMessageId?: string,
 ) {
   await assertMembership(conversationId, currentUserId);
-  return ConversationRepository.markRead(conversationId, currentUserId, lastReadMessageId);
+  const membership = await ConversationRepository.markRead(conversationId, currentUserId, lastReadMessageId);
+
+  getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.RECEIPT_UPDATED, {
+    conversationId,
+    userId: currentUserId,
+    kind: "read",
+    messageId: membership.lastReadMessageId,
+    at: membership.lastReadAt,
+  });
+
+  return membership;
+}
+
+/// Llamada por `messages` (al enviar un mensaje a destinatarios ya conectados,
+/// o al servir el historial vía `GET /messages`) — nunca por HTTP directo, no
+/// es algo que un cliente pida explícitamente como sí lo es "marcar como
+/// leído". Solo emite si el puntero realmente avanzó, para no spamear el
+/// evento en fetches repetidos que no aportan nada nuevo.
+export async function markDelivered(
+  conversationId: string,
+  userId: string,
+  messageId: string,
+  deliveredThrough: Date,
+): Promise<void> {
+  const advanced = await ConversationRepository.markDelivered(conversationId, userId, messageId, deliveredThrough);
+  if (!advanced) {
+    return;
+  }
+
+  getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.RECEIPT_UPDATED, {
+    conversationId,
+    userId,
+    kind: "delivered",
+    messageId,
+    at: deliveredThrough,
+  });
 }

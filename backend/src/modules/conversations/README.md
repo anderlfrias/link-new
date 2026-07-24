@@ -37,13 +37,13 @@ Base: `/api/v1/conversations`
 ```
 
 * **`PRIVATE`**: `memberIds` debe traer exactamente **un** id (el otro participante; el creador se agrega solo). Si ya existe una conversación `PRIVATE` activa entre ambos, la devuelve tal cual en vez de crear un duplicado — el endpoint es idempotente para este caso.
-* **`GROUP`**: requiere `name` y al menos **dos** ids además del creador (más de dos participantes en total, como documenta el enum `ConversationType` en el schema). `imageFileId` es opcional (debe ser el `id` de un `StoredFile` ya existente; este módulo no sube archivos, ver [`src/storage`](../../storage) cuando exista).
+* **`GROUP`**: requiere `name` y al menos **dos** ids además del creador (más de dos participantes en total, como documenta el enum `ConversationType` en el schema). `imageFileId` es opcional (debe ser el `id` de un `StoredFile` ya existente — subido antes vía [`files`](../files/README.md), este módulo no sube archivos).
 
 Respuesta `201` con la conversación y sus miembros (incluye `user: { id, name, email, avatarFileId, status }` por cada miembro). Emite `conversation:created` (ver [Eventos de socket](#eventos-de-socket)) a la room personal de cada miembro.
 
 ### `GET /` — Listar mis conversaciones
 
-Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas por `lastMessageAt` descendente, cada una con `unreadCount` (mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual — sin agregaciones sobre todo el historial, gracias a `lastReadAt`/`lastMessageAt` denormalizados que documenta el [README del backend](../../../README.md#por-qué-existen-lastreadmessageid-en-conversationmember-y-lastmessageat-en-conversation)).
+Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas por `lastMessageAt` descendente, cada una con `unreadCount` (mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual — sin agregaciones sobre todo el historial, gracias a `lastReadAt`/`lastMessageAt` denormalizados que documenta el [README del backend](../../../README.md#por-qué-existen-lastreadmessageid-en-conversationmember-y-lastmessageat-en-conversation)) y `lastMessageStatus` (ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura) — `null` si el último mensaje no lo enviaste vos).
 
 ### `PATCH /:id` — Renombrar / cambiar imagen
 
@@ -88,6 +88,27 @@ No hay roles por miembro en el modelo de datos (`ConversationMember` no tiene un
 
 Toda operación primero verifica membresía activa (`403` si el usuario no pertenece a la conversación, `404` si la conversación no existe o está borrada).
 
+## Confirmación de entrega y lectura
+
+Dos punteros denormalizados por miembro (`ConversationMember`), mismo patrón que `lastMessageId`/`lastMessageAt` en `Conversation`:
+
+| Campo | Significa | Quién lo actualiza |
+|---|---|---|
+| `lastReadAt` / `lastReadMessageId` | El miembro **leyó** explícitamente hasta acá — una acción del usuario. | `POST /:id/read` (este módulo). |
+| `lastDeliveredAt` / `lastDeliveredMessageId` | Al miembro **le llegó** el mensaje — en vivo (conectado a la room) o al pedir el historial. Nunca requiere una acción explícita. | `messages`, vía `markDelivered` (exportado desde `conversation.service.ts`; ver [`../messages/README.md`](../messages/README.md#confirmación-de-entrega-y-lectura)). |
+
+"Leído" siempre implica "entregado" (no puedes leer lo que no te llegó), pero no al revés. `computeReceipts(members, message)` (exportada desde `conversation.service.ts`) calcula, para un mensaje y sus destinatarios, el estado de cada uno comparando `message.createdAt` contra `lastReadAt`/`lastDeliveredAt` de cada miembro:
+
+```
+message.createdAt <= member.lastReadAt      → "read"
+message.createdAt <= member.lastDeliveredAt → "delivered"
+si no                                       → "sent"
+```
+
+Es una aproximación por corte de tiempo — la misma que ya usa `countUnread` para no leídos — no un registro por mensaje: no distingue "leyó exactamente este mensaje" de "leyó todo hasta un punto posterior a este mensaje". `aggregateReceiptStatus(receipts)` colapsa el arreglo en un solo estado (`"read"` solo si TODOS leyeron, `"delivered"` si todos al menos recibieron, si no `"sent"`) — es lo que usa `GET /conversations` para `lastMessageStatus`.
+
+`messages` es quien dispara `markDelivered` (al enviar, para destinatarios ya conectados; al pedir el historial, para quien lo pide) porque es quien sabe cuándo un mensaje efectivamente llegó a alguien — este módulo solo posee el dato (`ConversationMember`) y la regla de cómo combinarlo en un estado.
+
 ## Auditoría
 
 Cada operación que cambia el estado de una conversación escribe un `ChatAuditLog` (`CREATE_CONVERSATION`, `ADD_MEMBER`, `REMOVE_MEMBER`, `CHANGE_NAME`, `CHANGE_IMAGE`), con el `userId` de quien la ejecutó. `SEND_MESSAGE`/`EDIT_MESSAGE`/`DELETE_MESSAGE` los escribirá el módulo `messages`, no este.
@@ -105,6 +126,7 @@ Definidos en `conversation.socket.ts` (`CONVERSATION_EVENTS`). El cliente debe a
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | A la room de la conversación. |
 | `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | A la room de la conversación. |
 | `conversation:deleted` | servidor → cliente | `{ conversationId }` | A la room de la conversación. |
+| `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | A la room de la conversación, cuando el `lastRead*`/`lastDelivered*` de `userId` avanza (`POST /:id/read`, o `markDelivered` desde `messages`). Solo se emite si el puntero realmente cambió — no en cada fetch que no aporta nada nuevo. |
 
 El servicio (`conversation.service.ts`) emite estos eventos directamente con `getIO()` — no pasan por el registry de sockets, porque no son eventos que un socket dispare sobre sí mismo sino notificaciones que dispara la capa HTTP hacia todos los sockets conectados relevantes.
 
