@@ -86,9 +86,9 @@ export function useMessages(conversationId: string) {
   }, [token, conversationId, messages, loadingMore, hasMore]);
 
   const send = useCallback(
-    async (content: string) => {
+    async (content: string, fileIds?: string[]) => {
       if (!token) return;
-      const message = await sendMessageRequest(token, conversationId, { content });
+      const message = await sendMessageRequest(token, conversationId, { content, fileIds });
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
     },
     [token, conversationId],

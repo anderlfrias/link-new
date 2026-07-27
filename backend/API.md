@@ -320,7 +320,7 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 { "content": "Hola!", "fileIds": ["<storedFileId>"] }
 ```
 
-`content`: 1-4000 caracteres. `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 8).
+`content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9).
 
 → `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
 
