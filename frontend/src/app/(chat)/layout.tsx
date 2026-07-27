@@ -34,7 +34,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const currentUserId = session.user.internalUserId;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen h-[100dvh] overflow-hidden">
       {/* Lista de conversaciones — siempre visible en desktop, pantalla completa en mobile
           (oculta cuando hay una conversación abierta, como en WhatsApp Mobile). */}
       <div
@@ -61,7 +61,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
       {/* Panel principal — en desktop siempre visible (empty state o conversación); en mobile
           solo cuando hay una conversación abierta, ocupando toda la pantalla. */}
-      <div className={cn("flex-1 flex-col", isConversationRoute ? "flex" : "hidden lg:flex")}>
+      <div className={cn("h-full flex-1 flex-col min-h-0", isConversationRoute ? "flex" : "hidden lg:flex")}>
         {children}
       </div>
     </div>

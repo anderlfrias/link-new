@@ -59,7 +59,7 @@ export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }:
   return (
     <div className="border-t border-black/5 dark:border-white/10">
       {attachments.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto px-3 pt-2.5">
+        <div className="flex gap-2 overflow-x-auto pl-3 pr-5 pt-2.5">
           {attachments.map((attachment) => (
             <AttachmentPreviewChip
               key={attachment.localId}
@@ -69,7 +69,7 @@ export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }:
           ))}
         </div>
       )}
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 px-3 py-2.5">
+      <form onSubmit={handleSubmit} className="flex items-end gap-2 pl-3 pr-5 py-2.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -95,7 +95,7 @@ export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }:
           }}
           onKeyDown={handleKeyDown}
           placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
-          className="max-h-32 flex-1 resize-none rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm text-brand-ink outline-none focus:border-brand-blue dark:border-white/10 dark:bg-white/5 dark:text-white"
+          className="max-h-32 flex-1 min-w-0 resize-none rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm text-brand-ink outline-none focus:border-brand-blue dark:border-white/10 dark:bg-white/5 dark:text-white"
         />
         <button
           type="submit"

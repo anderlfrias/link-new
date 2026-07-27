@@ -54,7 +54,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
 
   return (
     <ImageLightboxProvider>
-      <div className="flex h-full flex-1 flex-col">
+      <div className="flex h-[100dvh] lg:h-full flex-1 flex-col min-h-0">
         <ConversationHeader title={displayName} subtitle={subtitle} />
         <MessageList
           messages={messages}
