@@ -1,7 +1,5 @@
-import type {
-  MessageReceipt,
-  MessageReceiptStatus,
-} from "@/features/conversations/types/conversation.types";
+import type { MessageReceiptStatus } from "@/features/conversations/types/conversation.types";
+import type { MessageReceipt } from "@/features/messages/types/message.types";
 
 /**
  * Mismo criterio que usa el backend para `lastMessageStatus`: "read" (✓✓ azul) solo
