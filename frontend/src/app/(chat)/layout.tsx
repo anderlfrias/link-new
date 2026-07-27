@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { IconLoader2 } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversations } from "@/features/conversations/hooks/use-conversations";
+import { useMessageNotifications } from "@/features/conversations/hooks/use-message-notifications";
+import { requestNotificationPermission } from "@/utils/browser-notifications";
 import { DesktopSidebar } from "@/components/layout/DesktopSidebar";
 import { MobileChatListScreen } from "@/components/layout/MobileChatListScreen";
 import { cn } from "@/utils/cn";
@@ -16,12 +18,21 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const isConversationRoute = pathname?.startsWith("/conversations/") ?? false;
 
   const { conversations, status: conversationsStatus } = useConversations();
+  useMessageNotifications(conversations, session?.user.internalUserId ?? "");
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login");
     }
   }, [status, router]);
+
+  // Recién acá adentro (ya logueado) — pedir el permiso antes solo genera
+  // rechazos automáticos del navegador por falta de interacción del usuario.
+  useEffect(() => {
+    if (status === "authenticated") {
+      requestNotificationPermission();
+    }
+  }, [status]);
 
   if (status !== "authenticated" || !session) {
     return (
