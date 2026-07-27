@@ -135,14 +135,11 @@ socket.emit("conversation:join", conversationId, (res) => {
 
 `conversation:join` verifica en cada llamada que el usuario autenticado del socket sea efectivamente miembro de esa conversación (falla con `ok: false` si no). Patrón sugerido: emitir `join` al abrir una conversación en la UI, `leave` al cerrarla/navegar a otra. Los eventos de **mensajes** (`message:*`, incluido "escribiendo") viajan sobre esta misma room — no hace falta unirse a nada aparte para ellos.
 
-### ⚠️ Limitación conocida: notificación en vivo de conversaciones nuevas
+### Room personal (`user:<internalUserId>`)
 
-`conversation:created` (ver tabla en 5) se emite a la room personal del usuario (`user:<internalUserId>`), pero **hoy ningún socket se une a esa room automáticamente** (es responsabilidad del módulo `presence`, que todavía no está implementado — solo existe como stub). En la práctica esto significa:
+Todo socket autenticado se une automáticamente a su propia room personal apenas conecta (`registerPresenceSocket`, `backend/src/modules/presence/presence.socket.ts`) — no hace falta emitir nada para esto, a diferencia de la room de una conversación (que sí requiere `conversation:join`, ver arriba). Esa room es donde llegan `conversation:created` (al crearse o ser agregado a una conversación) y `conversation:updated` con payload mínimo `{ conversationId }` (cuando cambia el último mensaje de una conversación — ver sección 5), sin importar si el socket está o no unido a la room de esa conversación en particular. Esto es lo que permite que la lista de conversaciones se actualice en vivo aunque no tengas ninguna conversación abierta.
 
-- Cuando **vos** creás una conversación o agregás miembros, la respuesta HTTP ya te da los datos completos — no dependas del evento para tu propia acción.
-- Cuando **otro usuario** te crea una conversación privada, o te agrega a un grupo, **no vas a recibir ninguna notificación en vivo** todavía. El frontend debe volver a pedir `GET /api/v1/conversations` periódicamente (o al menos al reabrir/enfocar la app) hasta que esto se resuelva del lado del backend.
-
-El resto de los eventos (los que viajan sobre la room de una conversación ya unida — `updated`, `member_added`, `member_removed`, `deleted`, `receipt_updated`, y todo `message:*`) **sí** funcionan en vivo hoy, siempre que el socket haya hecho `conversation:join`.
+Cuando **vos** creás una conversación o agregás miembros, la respuesta HTTP ya te da los datos completos — no dependas del evento para tu propia acción; el evento es para notificar a **los demás**.
 
 ---
 
@@ -196,7 +193,7 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 - `PRIVATE`: exactamente 1 id en `memberIds`. Si ya existe una conversación privada activa entre ambos, la devuelve tal cual en vez de crear otra (podés llamarlo sin chequear antes "¿ya existe un chat con este usuario?").
 - `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total). `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6).
 
-→ `201` con la conversación completa. Emite `conversation:created` (ver la limitación de 3.1).
+→ `201` con la conversación completa. Emite `conversation:created` a la room personal de cada miembro (ver 3.1).
 
 ### 4.2 `GET /` — Listar mis conversaciones
 
@@ -238,7 +235,7 @@ Al menos uno de los dos campos. Solo `GROUP` (`400` en `PRIVATE`). `imageFileId:
 { "userIds": ["<userId1>", "<userId2>"] }
 ```
 
-Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningún id nuevo, `400`. Emite `conversation:member_added` `{ conversationId, userIds }` a la room, y `conversation:created` (conversación completa) a la room personal de cada miembro nuevo (sujeto a la misma limitación de 3.1).
+Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningún id nuevo, `400`. Emite `conversation:member_added` `{ conversationId, userIds }` a la room, y `conversation:created` (conversación completa) a la room personal de cada miembro nuevo.
 
 ### 4.6 `DELETE /:id/members/:userId` — Quitar miembro / salir
 
@@ -271,7 +268,7 @@ No hay roles por miembro en el modelo de datos — la única distinción es `cre
 |---|---|---|---|
 | `conversation:join` | cliente → servidor | `conversationId`, con ack | Unirse a la room (ver 3.1) |
 | `conversation:leave` | cliente → servidor | `conversationId`, con ack | Salir de la room |
-| `conversation:created` | servidor → cliente | conversación completa | A la room personal de cada miembro, al crearse o al ser agregado — **ver limitación de 3.1** |
+| `conversation:created` | servidor → cliente | conversación completa | A la room personal de cada miembro, al crearse o al ser agregado (ver 3.1) |
 | `conversation:updated` | servidor → cliente | conversación completa, o `{ conversationId }` | Al renombrarse/cambiar imagen (room de la conversación); o cuando cambia el último mensaje — se envía, se edita o se borra el mensaje que era el último (a la room personal de cada miembro, **sin necesitar `join`** — igual que `created`, así la lista de conversaciones se refresca aunque esa conversación no esté abierta) |
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | Al agregar miembros |
 | `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | Al quitar/salir un miembro |

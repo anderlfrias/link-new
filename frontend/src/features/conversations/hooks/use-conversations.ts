@@ -16,8 +16,10 @@ interface UseConversationsResult {
 }
 
 /**
- * `conversation:created` solo llega en vivo para conversaciones propias (ver backend/API.md
- * sección 3.1) — por eso además refrescamos al enfocar la pestaña, como sugiere esa misma doc.
+ * El socket ya avisa en vivo (room personal `user:<id>`, ver backend/API.md sección 3.1)
+ * cuando cambia algo en cualquiera de tus conversaciones. El refresh al enfocar la pestaña
+ * es solo una red de contención por si el socket se cortó en silencio mientras tanto
+ * (throttling de timers en background — ver el listener de "connect" más abajo).
  */
 export function useConversations(): UseConversationsResult {
   const { session } = useAuth();
@@ -54,6 +56,11 @@ export function useConversations(): UseConversationsResult {
       SOCKET_EVENTS.conversation.memberAdded,
       SOCKET_EVENTS.conversation.memberRemoved,
       SOCKET_EVENTS.conversation.receiptUpdated,
+      // Evento propio de socket.io (no de nuestro protocolo, por eso no está en
+      // SOCKET_EVENTS): si el socket se cortó en silencio por throttling de
+      // timers en background (ver use-messages.ts) y reconecta, puede haber
+      // eventos que nunca llegaron — un refresh de más nunca rompe nada acá.
+      "connect",
     ];
     events.forEach((event) => socket.on(event, refresh));
     return () => {

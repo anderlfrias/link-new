@@ -58,7 +58,7 @@ Servicios          (lógica de negocio de cada módulo — se implementa en paso
    registerSocketModule(registerMessageSocket);
    ```
 
-Ningún otro archivo de la infraestructura necesita cambiar. Los módulos `messages`, `conversations` y `presence` ya existen con esta estructura mínima (sin eventos reales todavía) como ejemplo de referencia.
+Ningún otro archivo de la infraestructura necesita cambiar. Los módulos `messages` y `conversations` ya existen con esta estructura mínima (sin eventos reales todavía) como ejemplo de referencia. `presence` es la excepción: aunque todavía no emite eventos de presencia real (usuario en línea/desconectado), sí hace algo real en cada conexión — une el socket a su room personal (`joinUser`, ver "Rooms" abajo), que es lo que permite que `conversation:created`/`conversation:updated` lleguen en vivo a un usuario sin importar qué esté mirando.
 
 Nótese que el `*.socket.ts` de cada módulo **no** importa `registry.ts` — solo exporta una función. Es `registry.ts` quien importa a los módulos, nunca al revés. Mantener esta dirección única evita una dependencia circular entre este archivo y cada módulo.
 

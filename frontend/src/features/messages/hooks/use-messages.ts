@@ -45,6 +45,38 @@ export function useMessages(conversationId: string) {
     };
   }, [socket, conversationId]);
 
+  // El socket puede desconectarse en silencio si Chrome tira los timers de la
+  // pestaña en segundo plano (el heartbeat de Socket.IO depende de setTimeout,
+  // que Chrome throttlea cuando la pestaña no está enfocada/visible) — nada
+  // avisa que se cortó, así que el hilo abierto puede quedarse sin enterarse
+  // de mensajes nuevos hasta que pasa algo. Al reconectar o al recuperar el
+  // foco, volvemos a pedir la página más reciente y mergeamos lo que falte —
+  // mismo patrón que ya usa useConversations con el focus de la ventana.
+  const refreshLatest = useCallback(() => {
+    if (!token) return;
+    listMessages(token, conversationId, { limit: PAGE_SIZE })
+      .then((latest) => {
+        setMessages((prev) => {
+          const knownIds = new Set(prev.map((m) => m.id));
+          const fresh = latest.filter((m) => !knownIds.has(m.id));
+          if (fresh.length === 0) return prev;
+          return [...prev, ...fresh].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        });
+        markConversationRead(token, conversationId).catch(() => {});
+      })
+      .catch(() => {});
+  }, [token, conversationId]);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on("connect", refreshLatest);
+    window.addEventListener("focus", refreshLatest);
+    return () => {
+      socket.off("connect", refreshLatest);
+      window.removeEventListener("focus", refreshLatest);
+    };
+  }, [socket, refreshLatest]);
+
   useEffect(() => {
     if (!socket) return;
 
