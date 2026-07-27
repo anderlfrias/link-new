@@ -22,3 +22,19 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     next(error);
   }
 }
+
+export async function getProfilePicture(req: Request, res: Response, next: NextFunction) {
+  try {
+    // `authenticate` (middleware previo) ya validó el formato "Bearer <token>".
+    const token = req.headers.authorization!.slice("Bearer ".length);
+    const picture = await AuthService.getProfilePicture(token);
+
+    res.setHeader("Content-Type", picture.contentType);
+    // La foto de perfil cambia poco — evita repetir el proxy a EXTERNAL_AUTH en cada
+    // render de <Avatar> mientras dure la sesión del browser.
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(picture.buffer);
+  } catch (error) {
+    next(error);
+  }
+}

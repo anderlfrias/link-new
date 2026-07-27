@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { IconLogout } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
+import { useProfilePicture } from "@/features/auth/hooks/use-profile-picture";
 import { Avatar } from "@/components/ui/Avatar";
 
 export function UserMenu() {
   const { session, logout } = useAuth();
+  const profilePictureUrl = useProfilePicture();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +32,7 @@ export function UserMenu() {
         aria-label="Menú de usuario"
         className="flex items-center gap-2 rounded-full"
       >
-        <Avatar name={session.user.fullName || session.user.username} />
+        <Avatar name={session.user.fullName || session.user.username} imageUrl={profilePictureUrl} />
       </button>
 
       {open && (

@@ -8,6 +8,8 @@ export interface ApiRequestOptions {
   token?: string;
   query?: Record<string, string | number | undefined>;
   signal?: AbortSignal;
+  /** "blob" para respuestas binarias (ej. la foto de perfil) — default "json". */
+  responseType?: "json" | "blob";
 }
 
 function buildUrl(path: string, query?: ApiRequestOptions["query"]): string {
@@ -22,7 +24,7 @@ function buildUrl(path: string, query?: ApiRequestOptions["query"]): string {
 
 export async function apiRequest<T>(
   path: string,
-  { method = "GET", body, token, query, signal }: ApiRequestOptions = {},
+  { method = "GET", body, token, query, signal, responseType = "json" }: ApiRequestOptions = {},
 ): Promise<T> {
   const isFormData = body instanceof FormData;
 
@@ -43,6 +45,10 @@ export async function apiRequest<T>(
 
   if (response.status === 204) {
     return undefined as T;
+  }
+
+  if (responseType === "blob") {
+    return (await response.blob()) as T;
   }
 
   return (await response.json()) as T;

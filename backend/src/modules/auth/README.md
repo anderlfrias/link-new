@@ -90,6 +90,30 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 | `429` | Más de 10 intentos de login en 15 minutos desde la misma IP (`rate-limit.middleware.ts`) |
 | `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) o devolvió un status inesperado (5xx u otro distinto de `200`/`401`/`403`) |
 
+## Endpoint: foto de perfil
+
+```
+GET /api/v1/auth/profile/picture
+```
+
+A diferencia de `/login`, este sí requiere `Authorization: Bearer <token>` — es el único endpoint de este módulo detrás de `authenticate`. Proxea `GET /api/v1/profile/picture` de EXTERNAL_AUTH (`auth.service.ts`, `getProfilePicture()`): reenvía el mismo token recibido, y devuelve la imagen tal cual (bytes + `Content-Type` de EXTERNAL_AUTH), no JSON.
+
+```bash
+curl http://localhost:4000/api/v1/auth/profile/picture \
+  -H "Authorization: Bearer <token>" \
+  --output foto.jpg
+```
+
+**Por qué solo trae "mi" foto y no la de otro usuario**: EXTERNAL_AUTH identifica a quién pertenece la foto exclusivamente por el token — su endpoint no acepta un id de usuario como parámetro. Este proxy hereda esa misma limitación: sirve para mostrar la foto de quien está logueado (ej. en `UserMenu`), pero no hay forma de pedir la foto de otro miembro de una conversación a través de este mecanismo.
+
+No se cachea del lado del backend (cada request vuelve a pedirle a EXTERNAL_AUTH), pero sí manda `Cache-Control: private, max-age=300` para que el navegador no repita el request en cada render de `<Avatar>`.
+
+| Status | Causa |
+|---|---|
+| `401` | Token inválido o expirado |
+| `404` | El usuario no tiene foto cargada en EXTERNAL_AUTH |
+| `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) |
+
 ## Usar el token en rutas protegidas
 
 Cualquier ruta de otro módulo que necesite autenticación usa el middleware transversal `authenticate` (`src/middlewares/auth.middleware.ts`):

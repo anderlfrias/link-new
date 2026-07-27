@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { cn } from "@/utils/cn";
 
 /** Variaciones sobre la paleta de marca — sin colores ajenos al branding de Link. */
@@ -20,12 +23,28 @@ const SIZE_CLASSES = {
 
 interface AvatarProps {
   name: string;
+  /** Si se rompe la carga, cae solo a las iniciales — no hace falta manejarlo desde afuera. */
+  imageUrl?: string | null;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
 }
 
-export function Avatar({ name, size = "md", className }: AvatarProps) {
+export function Avatar({ name, imageUrl, size = "md", className }: AvatarProps) {
+  const [imageFailed, setImageFailed] = useState(false);
   const trimmed = name.trim();
+
+  if (imageUrl && !imageFailed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt={trimmed}
+        onError={() => setImageFailed(true)}
+        className={cn("inline-flex shrink-0 rounded-full object-cover", SIZE_CLASSES[size], className)}
+      />
+    );
+  }
+
   const initial = trimmed.charAt(0).toUpperCase() || "?";
   const color = PALETTE[hashToIndex(trimmed || "?", PALETTE.length)];
 

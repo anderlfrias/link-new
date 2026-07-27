@@ -98,6 +98,24 @@ Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token
 
 Después del login, todo el resto del API (HTTP y socket) usa el mismo `token` — no hay un endpoint de logout ni de refresh; "cerrar sesión" en el frontend es simplemente descartar el token guardado y desconectar el socket.
 
+### `GET /api/v1/auth/profile/picture`
+
+Proxea `GET /api/v1/profile/picture` de EXTERNAL_AUTH — requiere `Authorization: Bearer <token>`, igual que el resto del API (a diferencia de `/login`, este endpoint sí necesita sesión).
+
+```js
+const response = await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
+  headers: { Authorization: `Bearer ${token}` },
+});
+const blob = await response.blob();
+const url = URL.createObjectURL(blob); // usar como <img src={url}> y hacer URL.revokeObjectURL(url) después
+```
+
+→ `200` con la imagen tal cual la devuelve EXTERNAL_AUTH (`Content-Type` reenviado, ej. `image/jpeg`), no JSON. `Cache-Control: private, max-age=300` para no repetir el proxy en cada render de `<Avatar>`.
+
+**EXTERNAL_AUTH identifica al usuario únicamente por el token** (no recibe ningún id) — por eso este endpoint solo puede traer la foto de **quien está autenticado**, nunca la de otro usuario de una conversación. No hay forma de pedir la foto de un tercero con el API actual de EXTERNAL_AUTH.
+
+Errores: `401` (token inválido/expirado), `404` (el usuario no tiene foto cargada en EXTERNAL_AUTH), `503` (EXTERNAL_AUTH caído o no responde en 5s).
+
 ---
 
 ## 3. Tiempo real — conectar el socket
