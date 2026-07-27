@@ -46,6 +46,8 @@ export interface Conversation {
 export interface ConversationListItem extends Conversation {
   unreadCount: number;
   lastMessageStatus: MessageReceiptStatus | null;
+  /** Preview ya resuelto del último mensaje (texto, "Mensaje eliminado", adjunto). `null` sin mensajes. */
+  lastMessagePreview: string | null;
 }
 
 export interface CreatePrivateConversationInput {

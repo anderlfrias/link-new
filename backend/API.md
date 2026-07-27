@@ -200,23 +200,26 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 
 ### 4.2 `GET /` — Listar mis conversaciones
 
-Sin body ni query params. Devuelve un array, cada conversación con dos campos extra:
+Sin body ni query params. Devuelve un array, cada conversación con tres campos extra:
 
 ```json
 {
   "...": "...(todos los campos de arriba)",
   "unreadCount": 3,
-  "lastMessageStatus": "delivered"
+  "lastMessageStatus": "delivered",
+  "lastMessagePreview": "Nos vemos mañana"
 }
 ```
 
 - Ordenadas por `lastMessageAt` descendente (las más recientes primero) — ideal para pintar directo como lista de chats.
 - `unreadCount`: mensajes de otros posteriores a tu `lastReadAt` en esa conversación.
 - `lastMessageStatus`: `"sent"` | `"delivered"` | `"read"` | `null`. **Solo tiene un valor si el último mensaje lo enviaste vos** (para pintar el check ✓/✓✓/✓✓azul junto a tu propio último mensaje en la lista); es `null` si el último mensaje es de otra persona, o si la conversación no tiene mensajes todavía. Ver sección 7 para el detalle de qué significa cada estado.
+- `lastMessagePreview`: texto del último mensaje, ya resuelto para mostrar en una lista (una sola línea, whitespace colapsado). `"Mensaje eliminado"` si fue borrado, `"📎 Archivo adjunto"` si no tiene texto pero sí adjuntos, `null` si la conversación todavía no tiene mensajes. No arma el prefijo de quién lo mandó (eso es un criterio de presentación del cliente, ej. "Vos: " o "Nombre: " en grupos) — solo el texto del mensaje en sí.
+- Enviar/editar/borrar el último mensaje de una conversación (propia o ajena) reemite `conversation:updated` a la room personal (`user:<id>`) de cada miembro, además de los eventos de `message:*` a la room de la conversación — así la lista se refresca sola aunque esa conversación no esté abierta (ver 3.1 y sección 5).
 
 ### 4.3 `GET /:id` — Detalle de una conversación
 
-Igual forma que arriba (sin `unreadCount`/`lastMessageStatus`, esos son solo del listado). `403` si no sos miembro, `404` si no existe o está borrada.
+Igual forma que arriba (sin `unreadCount`/`lastMessageStatus`/`lastMessagePreview`, esos son solo del listado). `403` si no sos miembro, `404` si no existe o está borrada.
 
 ### 4.4 `PATCH /:id` — Renombrar / cambiar imagen
 
@@ -269,13 +272,13 @@ No hay roles por miembro en el modelo de datos — la única distinción es `cre
 | `conversation:join` | cliente → servidor | `conversationId`, con ack | Unirse a la room (ver 3.1) |
 | `conversation:leave` | cliente → servidor | `conversationId`, con ack | Salir de la room |
 | `conversation:created` | servidor → cliente | conversación completa | A la room personal de cada miembro, al crearse o al ser agregado — **ver limitación de 3.1** |
-| `conversation:updated` | servidor → cliente | conversación completa | Al renombrarse o cambiar imagen |
+| `conversation:updated` | servidor → cliente | conversación completa, o `{ conversationId }` | Al renombrarse/cambiar imagen (room de la conversación); o cuando cambia el último mensaje — se envía, se edita o se borra el mensaje que era el último (a la room personal de cada miembro, **sin necesitar `join`** — igual que `created`, así la lista de conversaciones se refresca aunque esa conversación no esté abierta) |
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | Al agregar miembros |
 | `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | Al quitar/salir un miembro |
 | `conversation:deleted` | servidor → cliente | `{ conversationId }` | Al borrarse |
 | `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | Cuando `userId` leyó o recibió mensajes — ver sección 7 |
 
-Todos (salvo `created`) llegan por la room de la conversación — necesitás haber hecho `conversation:join` primero.
+Salvo `created` y el caso de "cambió el último mensaje" arriba, todos llegan por la room de la conversación — necesitás haber hecho `conversation:join` primero. El cliente no necesita distinguir la forma del payload de `updated`: alcanza con volver a pedir `GET /api/v1/conversations` (ver `frontend/src/features/conversations/hooks/use-conversations.ts`, que ya hace exactamente eso para cualquier evento de esta tabla).
 
 ---
 
@@ -319,7 +322,7 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 
 `content`: 1-4000 caracteres. `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 8).
 
-→ `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room.
+→ `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
 
 ### 6.2 `GET /` — Listar mensajes
 
@@ -337,11 +340,11 @@ Pedir el historial también marca como **entregados** (no leídos) para vos todo
 { "content": "Texto corregido" }
 ```
 
-Solo tu propio mensaje (`403` para cualquier otro, incluido el creador de la conversación), y solo `type: "TEXT"` (`400` para `SYSTEM`). Actualiza `editedAt`. Emite `message:updated`.
+Solo tu propio mensaje (`403` para cualquier otro, incluido el creador de la conversación), y solo `type: "TEXT"` (`400` para `SYSTEM`). Actualiza `editedAt`. Emite `message:updated`, y además `conversation:updated` (sección 5) a cada miembro **solo si** este era el último mensaje de la conversación — así `lastMessagePreview` se refresca en la lista sin recargar la conversación entera al editar un mensaje viejo.
 
 ### 6.4 `DELETE /:id` — Borrar
 
-Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado).
+Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado). Igual que en 6.3, emite `conversation:updated` a cada miembro solo si el mensaje borrado era el último de la conversación.
 
 ### 6.5 Eventos de socket de mensajes
 

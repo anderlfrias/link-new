@@ -1,8 +1,9 @@
 import { ChatAuditAction, MessageType } from "@prisma/client";
 import { assertMembership, computeReceipts, markDelivered } from "../conversations/conversation.service";
-import { MessageReceipt } from "../conversations/conversation.types";
+import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
+import { ConversationMemberWithUser, MessageReceipt } from "../conversations/conversation.types";
 import { getIO } from "../../socket";
-import { conversationRoomName, getConnectedUserIds } from "../../socket/rooms";
+import { conversationRoomName, getConnectedUserIds, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as MessageRepository from "./message.repository";
 import { MESSAGE_EVENTS } from "./message.socket";
@@ -13,6 +14,18 @@ import {
   MessageWithRelations,
   UpdateMessageInput,
 } from "./message.types";
+
+/// Avisa a cada miembro (en su room personal, no la de la conversación) que
+/// el "último mensaje" de la conversación cambió, para que su lista de
+/// conversaciones se refresque sola aunque no tengan esta conversación
+/// abierta — la room de conversación sola no alcanza para eso (ver
+/// use-conversations.ts en el frontend, que reacciona a este mismo evento).
+function notifyConversationListChanged(members: ConversationMemberWithUser[], conversationId: string): void {
+  const io = getIO();
+  members.forEach((member) => {
+    io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.UPDATED, { conversationId });
+  });
+}
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -73,6 +86,7 @@ export async function sendMessage(
 
   const messageWithReceipts: MessageWithReceipts = { ...message, receipts };
   io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
+  notifyConversationListChanged(conversation.members, conversationId);
   return messageWithReceipts;
 }
 
@@ -131,6 +145,11 @@ export async function editMessage(
   };
 
   getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.UPDATED, messageWithReceipts);
+  // Solo importa para la lista de conversaciones si justo edité el último
+  // mensaje — editar uno viejo no cambia lo que se muestra ahí.
+  if (messageId === conversation.lastMessageId) {
+    notifyConversationListChanged(conversation.members, conversationId);
+  }
   return messageWithReceipts;
 }
 
@@ -153,5 +172,8 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
   });
 
   getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.DELETED, { conversationId, messageId });
+  if (messageId === conversation.lastMessageId) {
+    notifyConversationListChanged(conversation.members, conversationId);
+  }
   return { conversationId, messageId };
 }

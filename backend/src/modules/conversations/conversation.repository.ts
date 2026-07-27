@@ -61,6 +61,24 @@ export function listForUser(userId: string) {
   });
 }
 
+/// Trae en un solo query el contenido de varios `lastMessageId` a la vez, para
+/// que la lista de conversaciones pueda mostrar un preview sin un N+1 (un
+/// query de `Message` por conversación). No es un `include` de Prisma porque
+/// `lastMessageId` no es una relación (ver comentario en el modelo).
+export function findLastMessagesByIds(messageIds: string[]) {
+  if (messageIds.length === 0) return Promise.resolve([]);
+  return prisma.message.findMany({
+    where: { id: { in: messageIds } },
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      deletedAt: true,
+      files: { select: { id: true }, take: 1 },
+    },
+  });
+}
+
 export async function isConversationMember(conversationId: string, userId: string): Promise<boolean> {
   const membership = await prisma.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId, userId } },

@@ -32,6 +32,12 @@ export interface ConversationListItem extends ConversationWithMembers {
   /// `null` si el usuario actual no es quien envió `lastMessageId`, o si la
   /// conversación todavía no tiene mensajes.
   lastMessageStatus: MessageReceiptStatus | null;
+  /// Texto ya resuelto para mostrar como preview en la lista (ej. "Mensaje
+  /// eliminado" si fue borrado, "📎 Archivo adjunto" si no tiene texto pero sí
+  /// adjuntos). `null` si la conversación todavía no tiene mensajes. Se
+  /// resuelve acá y no en el cliente para no duplicar esta regla en cada
+  /// consumidor (web, futuras apps, etc.).
+  lastMessagePreview: string | null;
 }
 
 export type MessageReceiptStatus = "sent" | "delivered" | "read";

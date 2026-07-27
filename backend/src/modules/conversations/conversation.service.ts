@@ -44,6 +44,23 @@ export function aggregateReceiptStatus(receipts: MessageReceipt[]): MessageRecei
   return "sent";
 }
 
+/// Texto a mostrar en la lista de conversaciones para el último mensaje.
+/// Mismo criterio que `MessageBubble` en el frontend: un mensaje borrado
+/// siempre muestra "Mensaje eliminado", sin importar su contenido original.
+/// El whitespace se colapsa porque el preview se renderiza en una sola línea.
+export function buildLastMessagePreview(message: {
+  content: string;
+  deletedAt: Date | null;
+  files: { id: string }[];
+}): string {
+  if (message.deletedAt) return "Mensaje eliminado";
+
+  const text = message.content.trim().replace(/\s+/g, " ");
+  if (text) return text;
+
+  return message.files.length > 0 ? "📎 Archivo adjunto" : "";
+}
+
 /// Exportada para que otros módulos con recursos anidados dentro de una
 /// conversación (ej. `messages`) reutilicen la misma regla de autorización en
 /// vez de duplicarla: conversación activa + el usuario es miembro.
@@ -109,6 +126,14 @@ export async function createConversation(currentUserId: string, input: CreateCon
 export async function listConversations(currentUserId: string) {
   const conversations = await ConversationRepository.listForUser(currentUserId);
 
+  // Un solo query para el contenido de todos los `lastMessageId` de la
+  // página, en vez de uno por conversación (ver findLastMessagesByIds).
+  const lastMessageIds = conversations
+    .map((conversation) => conversation.lastMessageId)
+    .filter((id): id is string => id !== null);
+  const lastMessages = await ConversationRepository.findLastMessagesByIds(lastMessageIds);
+  const lastMessageById = new Map(lastMessages.map((message) => [message.id, message]));
+
   return Promise.all(
     conversations.map(async (conversation) => {
       const membership = conversation.members.find((member) => member.userId === currentUserId);
@@ -129,7 +154,10 @@ export async function listConversations(currentUserId: string) {
         lastMessageStatus = aggregateReceiptStatus(receipts);
       }
 
-      return { ...conversation, unreadCount, lastMessageStatus };
+      const lastMessage = conversation.lastMessageId ? lastMessageById.get(conversation.lastMessageId) : undefined;
+      const lastMessagePreview = lastMessage ? buildLastMessagePreview(lastMessage) : null;
+
+      return { ...conversation, unreadCount, lastMessageStatus, lastMessagePreview };
     }),
   );
 }

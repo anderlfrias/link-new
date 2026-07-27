@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
-import { getConversationDisplayName, getOtherMembers } from "@/utils/conversation-display";
+import { getConversationDisplayName, getLastMessagePreviewText } from "@/utils/conversation-display";
 import { formatConversationTimestamp } from "@/utils/format-date";
 import { cn } from "@/utils/cn";
 import type { ConversationListItem as ConversationListItemType } from "@/features/conversations/types/conversation.types";
@@ -19,12 +19,7 @@ export function ConversationListItem({ conversation, currentUserId }: Conversati
   const pathname = usePathname();
   const isActive = pathname === `/conversations/${conversation.id}`;
   const displayName = getConversationDisplayName(conversation, currentUserId);
-  const secondaryText =
-    conversation.type === "GROUP"
-      ? getOtherMembers(conversation, currentUserId)
-          .map((member) => member.user.name)
-          .join(", ")
-      : null;
+  const secondaryText = getLastMessagePreviewText(conversation, currentUserId);
 
   return (
     <Link
@@ -44,7 +39,7 @@ export function ConversationListItem({ conversation, currentUserId }: Conversati
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <span className="truncate text-sm text-neutral-500 dark:text-neutral-400">
-            {secondaryText || " "}
+            {secondaryText}
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
             {conversation.lastMessageSenderId === currentUserId && (
