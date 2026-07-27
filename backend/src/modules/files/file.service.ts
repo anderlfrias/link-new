@@ -4,8 +4,21 @@ import { StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { storage } from "../../storage";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
+import { isConversationMember } from "../conversations/conversation.repository";
 import * as FileRepository from "./file.repository";
 import { StoredFileResponse, UploadedFile } from "./file.types";
+
+/// Con `conversationId`, namespacea el archivo bajo esa conversación y el
+/// año/mes actual (`chat/<conversationId>/<yyyy>/<mm>/...`), para no acumular
+/// miles de archivos sueltos en una sola carpeta plana. Sin `conversationId`
+/// (subidas que todavía no tienen un destino conocido, ej. futuro avatar de
+/// usuario) cae a `chat/<yyyy>/<mm>/...`.
+function buildStorageDir(conversationId?: string): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  return conversationId ? `chat/${conversationId}/${yyyy}/${mm}` : `chat/${yyyy}/${mm}`;
+}
 
 /// La extensión del nombre original es solo un indicio, nunca se confía en
 /// ella para construir la ruta física: si no es alfanumérica simple, se cae
@@ -32,16 +45,23 @@ function toResponse(file: StoredFile): StoredFileResponse {
   };
 }
 
-export async function uploadFile(currentUserId: string, upload: UploadedFile): Promise<StoredFileResponse> {
+export async function uploadFile(
+  currentUserId: string,
+  upload: UploadedFile,
+  conversationId?: string,
+): Promise<StoredFileResponse> {
   if (!ALLOWED_MIME_TYPES[upload.mimetype]) {
     throw new BadRequestError(`File type not allowed: ${upload.mimetype}`);
+  }
+  if (conversationId && !(await isConversationMember(conversationId, currentUserId))) {
+    throw new ForbiddenError("You are not a member of this conversation");
   }
 
   const extension = safeExtension(upload.originalname, upload.mimetype);
   const storedName = `${randomUUID()}.${extension}`;
   const checksum = createHash("sha256").update(upload.buffer).digest("hex");
 
-  const saved = await storage.save(upload.buffer, `chat/${storedName}`);
+  const saved = await storage.save(upload.buffer, `${buildStorageDir(conversationId)}/${storedName}`);
 
   const file = await FileRepository.createStoredFile({
     originalName: upload.originalname,

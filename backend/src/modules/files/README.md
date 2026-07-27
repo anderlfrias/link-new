@@ -10,7 +10,7 @@ Base: `/api/v1/files`
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `POST` | `/` | Sube un archivo (`multipart/form-data`, campo `file`). |
+| `POST` | `/` | Sube un archivo (`multipart/form-data`, campo `file`, `conversationId` opcional). |
 | `GET` | `/:id` | Metadata del archivo (incluye `url`). |
 | `DELETE` | `/:id` | Borrado lógico (solo quien lo subió). |
 
@@ -21,12 +21,16 @@ Todas requieren autenticación (`authenticate` + `attachInternalUser`), igual qu
 ```bash
 curl -X POST http://localhost:4000/api/v1/files \
   -H "Authorization: Bearer <token>" \
-  -F "file=@/ruta/local/foto.jpg"
+  -F "file=@/ruta/local/foto.jpg" \
+  -F "conversationId=<uuid-de-la-conversación>"
 ```
+
+`conversationId` es opcional y **solo afecta dónde se guarda el archivo en disco** (ver más abajo) — no crea ninguna relación en la base; la única relación real la crea después `messages` (`fileIds`) o `conversations` (`imageFileId`) al referenciar este `id`.
 
 Validaciones, en este orden:
 1. **Tipo MIME** contra el allowlist de [`ALLOWED_MIME_TYPES`](../../constants/allowed-file-types.constant.ts) (imágenes comunes, PDF, texto plano, Office, zip) — `400` si no está permitido. Se rechaza en el propio middleware de `multer` (`file.route.ts`), antes de leer el body completo.
 2. **Tamaño** contra `MAX_UPLOAD_SIZE_MB` (`.env`, default 25 MB) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial).
+3. **Membresía**, solo si mandaste `conversationId`: `403` si no sos miembro de esa conversación. Sin este chequeo, cualquiera podría namespacear archivos bajo una conversación ajena.
 
 Respuesta `201`:
 ```json
@@ -36,12 +40,21 @@ Respuesta `201`:
   "mimeType": "image/jpeg",
   "extension": "jpg",
   "size": 245678,
-  "url": "/uploads/chat/9f2b3c1a-....jpg",
+  "url": "/uploads/chat/<conversationId>/2026/07/9f2b3c1a-....jpg",
   "createdAt": "2026-07-23T20:00:00.000Z"
 }
 ```
 
 `url` la construye el `StorageProvider` activo a partir de la ruta relativa guardada en `StoredFile.path` — nunca se expone `path` ni `storedName` (rutas físicas) directamente en la respuesta.
+
+### Organización en disco (`buildStorageDir()` en `file.service.ts`)
+
+Para no acumular todos los archivos sueltos en una única carpeta plana, cada subida se namespacea por conversación y por año/mes de subida:
+
+* Con `conversationId`: `chat/<conversationId>/<yyyy>/<mm>/<uuid>.<ext>`.
+* Sin `conversationId` (subida sin destino conocido todavía, ej. futuro avatar de usuario): `chat/<yyyy>/<mm>/<uuid>.<ext>`.
+
+El nombre físico (`storedName`) sigue siendo siempre un UUID — la carpeta agrupa, pero no reemplaza la garantía de "nombre no adivinable" (ver más abajo).
 
 ### `GET /:id`
 

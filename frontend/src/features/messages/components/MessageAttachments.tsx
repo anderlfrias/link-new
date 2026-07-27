@@ -1,5 +1,8 @@
+"use client";
+
 import { IconDownload } from "@tabler/icons-react";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
+import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
 import { buildStoredFileUrl } from "@/utils/file-url";
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
 import { cn } from "@/utils/cn";
@@ -12,6 +15,8 @@ interface MessageAttachmentsProps {
 
 /** Adjuntos de un mensaje ya enviado: imágenes en línea, el resto como tarjeta descargable. */
 export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
+  const { open: openLightbox } = useImageLightbox();
+
   if (files.length === 0) return null;
 
   return (
@@ -21,10 +26,16 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
 
         if (isImageMimeType(file.mimeType)) {
           return (
-            <a key={id} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
+            <button
+              key={id}
+              type="button"
+              onClick={() => openLightbox({ url, name: file.originalName })}
+              aria-label={`Ver imagen ${file.originalName}`}
+              className="block w-full cursor-pointer overflow-hidden rounded-lg border-0 bg-transparent p-0"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt={file.originalName} className="max-h-64 w-full object-cover" />
-            </a>
+            </button>
           );
         }
 

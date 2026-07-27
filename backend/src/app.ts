@@ -14,7 +14,15 @@ app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+// helmet() ya seteó Cross-Origin-Resource-Policy: same-origin arriba, lo que
+// bloquea que el frontend (otro puerto = otro origen) cargue estas imágenes en
+// un <img>. Se relaja solo acá, no globalmente: es la única ruta pensada para
+// consumirse desde otro origen (ver backend/API.md sección 9).
+app.use(
+  "/uploads",
+  helmet.crossOriginResourcePolicy({ policy: "cross-origin" }),
+  express.static(path.join(__dirname, "..", "uploads")),
+);
 
 app.get("/", (_req, res) => {
   res.send("Backend is running");

@@ -8,6 +8,7 @@ import { useTyping } from "@/features/messages/hooks/use-typing";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
+import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationDisplayName } from "@/utils/conversation-display";
 
 interface ConversationViewProps {
@@ -52,19 +53,26 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
         : undefined;
 
   return (
-    <div className="flex h-full flex-1 flex-col">
-      <ConversationHeader title={displayName} subtitle={subtitle} />
-      <MessageList
-        messages={messages}
-        status={messagesStatus}
-        currentUserId={currentUserId}
-        conversationType={conversation.type}
-        hasMore={hasMore}
-        loadingMore={loadingMore}
-        onLoadMore={loadMore}
-        isTyping={typingNames.length > 0}
-      />
-      <MessageInput onSend={send} onTyping={notifyTyping} onStopTyping={notifyStopped} />
-    </div>
+    <ImageLightboxProvider>
+      <div className="flex h-full flex-1 flex-col">
+        <ConversationHeader title={displayName} subtitle={subtitle} />
+        <MessageList
+          messages={messages}
+          status={messagesStatus}
+          currentUserId={currentUserId}
+          conversationType={conversation.type}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          isTyping={typingNames.length > 0}
+        />
+        <MessageInput
+          conversationId={conversationId}
+          onSend={send}
+          onTyping={notifyTyping}
+          onStopTyping={notifyStopped}
+        />
+      </div>
+    </ImageLightboxProvider>
   );
 }

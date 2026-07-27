@@ -7,17 +7,18 @@ import { useMessageAttachments } from "@/features/messages/hooks/use-message-att
 import { ATTACHMENT_ACCEPT } from "@/constants/allowed-file-types";
 
 interface MessageInputProps {
+  conversationId: string;
   onSend: (content: string, fileIds?: string[]) => Promise<void> | void;
   onTyping: () => void;
   onStopTyping: () => void;
 }
 
-export function MessageInput({ onSend, onTyping, onStopTyping }: MessageInputProps) {
+export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }: MessageInputProps) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { attachments, addFiles, removeAttachment, reset: resetAttachments, isUploading, fileIds } =
-    useMessageAttachments();
+    useMessageAttachments(conversationId);
 
   const canSend = (Boolean(value.trim()) || fileIds.length > 0) && !sending && !isUploading;
 

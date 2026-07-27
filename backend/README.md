@@ -260,7 +260,7 @@ Una URL pública depende del proveedor de almacenamiento activo (rutas de un ser
 
 ### ¿Por qué se almacena únicamente la ruta relativa?
 
-Por ejemplo `chat/550e8400.pdf`, nunca `https://miapp.com/uploads/chat/550e8400.pdf` ni `C:\uploads\chat\550e8400.pdf`. Una ruta relativa es portable: sirve igual sin importar el dominio, el servidor o el sistema operativo donde corra la aplicación, y es lo único que un proveedor de almacenamiento necesita para ubicar el archivo dentro de su propio espacio (disco local, bucket, etc.).
+Por ejemplo `chat/<conversationId>/2026/07/550e8400.pdf` (o `chat/2026/07/550e8400.pdf` si la subida todavía no tiene una conversación asociada — ver [`src/modules/files/README.md`](./src/modules/files/README.md)), nunca `https://miapp.com/uploads/chat/550e8400.pdf` ni `C:\uploads\chat\550e8400.pdf`. Una ruta relativa es portable: sirve igual sin importar el dominio, el servidor o el sistema operativo donde corra la aplicación, y es lo único que un proveedor de almacenamiento necesita para ubicar el archivo dentro de su propio espacio (disco local, bucket, etc.).
 
 ### Propósito del campo `provider`
 

@@ -424,11 +424,12 @@ Base HTTP: `/api/v1/files`.
 
 ### 9.1 `POST /` — Subir
 
-`multipart/form-data`, un único campo `file`:
+`multipart/form-data`, campo `file` obligatorio y `conversationId` opcional:
 
 ```js
 const form = new FormData();
 form.append("file", fileBlob);
+form.append("conversationId", conversationId); // opcional — ver más abajo
 await fetch("http://localhost:4000/api/v1/files", {
   method: "POST",
   headers: { Authorization: `Bearer ${token}` }, // NO seteés Content-Type manualmente, el browser arma el boundary
@@ -436,7 +437,9 @@ await fetch("http://localhost:4000/api/v1/files", {
 });
 ```
 
-Validado por tipo MIME (imágenes jpeg/png/gif/webp, PDF, texto plano, Word/Excel, zip — lista completa en `src/constants/allowed-file-types.constant.ts`) y tamaño (`MAX_UPLOAD_SIZE_MB`, default **25 MB**). `400` si el tipo no está permitido o si excede el tamaño.
+Validado por tipo MIME (imágenes jpeg/png/gif/webp, PDF, texto plano, Word/Excel, zip — lista completa en `src/constants/allowed-file-types.constant.ts`) y tamaño (`MAX_UPLOAD_SIZE_MB`, default **25 MB**). `400` si el tipo no está permitido o si excede el tamaño. Si mandás `conversationId`, además valida que seas miembro de esa conversación — `403` si no lo sos.
+
+`conversationId` **no crea ninguna relación**: solo le dice al backend bajo qué conversación organizar el archivo en disco (`chat/<conversationId>/<yyyy>/<mm>/<uuid>.<ext>`, en vez de todo suelto bajo `chat/`). La relación real la creás después mandando el `id` que te devuelve esto en `fileIds` (mensajes) o `imageFileId` (conversaciones). Si no lo mandás, se guarda igual bajo `chat/<yyyy>/<mm>/<uuid>.<ext>`.
 
 → `201`:
 ```json
@@ -446,12 +449,14 @@ Validado por tipo MIME (imágenes jpeg/png/gif/webp, PDF, texto plano, Word/Exce
   "mimeType": "image/jpeg",
   "extension": "jpg",
   "size": 245678,
-  "url": "/uploads/chat/9f2b3c1a-....jpg",
+  "url": "/uploads/chat/<conversationId>/2026/07/9f2b3c1a-....jpg",
   "createdAt": "..."
 }
 ```
 
 `url` es relativa al mismo host del backend (no lleva dominio) — armá la URL completa como `${backendBaseUrl}${url}` para mostrar la imagen/descargar el archivo. **Servir el archivo (`GET /uploads/...`) no requiere `Authorization`** — es estático y público una vez que tenés la URL (que incluye un UUID no adivinable). Solo subir/consultar metadata/borrar vía `/api/v1/files` requiere estar logueado.
+
+Si el frontend corre en otro origen que el backend (otro puerto en desarrollo, otro dominio en producción) y vas a mostrar la imagen con un `<img>`, necesitás que `/uploads` responda `Cross-Origin-Resource-Policy: cross-origin` — ya está así en `app.ts` (Helmet lo deja en `same-origin` por defecto para el resto de la API, pero esta ruta lo relaja explícitamente). Sin ese header el navegador bloquea la carga de la imagen aunque el request HTTP haya devuelto `200`.
 
 ### 9.2 `GET /:id` — Metadata
 

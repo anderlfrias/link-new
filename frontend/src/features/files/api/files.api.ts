@@ -3,9 +3,11 @@ import type { UploadedFile } from "@/features/files/types/file.types";
 
 const BASE_PATH = "/v1/files";
 
-export function uploadFile(token: string, file: File): Promise<UploadedFile> {
+/** `conversationId` es solo para que el backend organice el archivo bajo esa conversación en disco. */
+export function uploadFile(token: string, file: File, conversationId?: string): Promise<UploadedFile> {
   const form = new FormData();
   form.append("file", file);
+  if (conversationId) form.append("conversationId", conversationId);
   return apiRequest<UploadedFile>(BASE_PATH, { method: "POST", token, body: form });
 }
 

@@ -20,7 +20,7 @@ export interface PendingAttachment {
  * WhatsApp Web/Telegram: el usuario ve progreso o error por adjunto antes de
  * tocar "enviar", en vez de que todo el envío falle recién al final.
  */
-export function useMessageAttachments() {
+export function useMessageAttachments(conversationId: string) {
   const { session } = useAuth();
   const token = session?.token;
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -33,7 +33,7 @@ export function useMessageAttachments() {
         const localId = `${Date.now()}-${nextId.current++}`;
         setAttachments((prev) => [...prev, { localId, file, status: "uploading" }]);
 
-        uploadFile(token, file)
+        uploadFile(token, file, conversationId)
           .then((uploaded) => {
             setAttachments((prev) =>
               prev.map((attachment) =>
@@ -56,7 +56,7 @@ export function useMessageAttachments() {
           });
       });
     },
-    [token],
+    [token, conversationId],
   );
 
   const removeAttachment = useCallback((localId: string) => {
