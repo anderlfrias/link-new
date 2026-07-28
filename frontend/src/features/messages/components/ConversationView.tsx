@@ -9,7 +9,7 @@ import { ConversationHeader } from "@/components/layout/ConversationHeader";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
-import { getConversationDisplayName } from "@/utils/conversation-display";
+import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
 
 interface ConversationViewProps {
   conversationId: string;
@@ -41,6 +41,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   }
 
   const displayName = getConversationDisplayName(conversation, currentUserId);
+  const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const typingNames = typingUserIds
     .map((userId) => conversation.members.find((member) => member.userId === userId)?.user.name)
     .filter((name): name is string => Boolean(name));
@@ -55,7 +56,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   return (
     <ImageLightboxProvider>
       <div className="flex h-[100dvh] lg:h-full flex-1 flex-col min-h-0">
-        <ConversationHeader title={displayName} subtitle={subtitle} />
+        <ConversationHeader title={displayName} subtitle={subtitle} imageUrl={avatarUrl} />
         <MessageList
           messages={messages}
           status={messagesStatus}

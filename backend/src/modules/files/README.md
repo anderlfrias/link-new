@@ -68,8 +68,13 @@ Borrado lógico (`deletedAt`) — igual que `Conversation`/`Message` en el resto
 
 `safeExtension()` (`file.service.ts`) intenta usar la extensión del nombre original **solo si** es alfanumérica simple (`^[a-z0-9]{1,10}$`); si no, cae al mapeo por tipo MIME en `ALLOWED_MIME_TYPES`, y si tampoco hay match, a `"bin"`. El nombre físico (`storedName`) siempre es un UUID generado acá, nunca el nombre que mandó el cliente — por eso no hay riesgo de path traversal ni de colisión, sin necesidad de sanitizar rutas en `src/storage`.
 
+## Avatar de usuario (`User.avatarFileId`)
+
+Se cachea automáticamente en cada login, no lo setea el cliente. EXTERNAL_AUTH solo sirve `GET /v1/profile/picture` identificando por token — nunca por id de un tercero (ver `modules/auth/README.md`), así que es imposible pedirle a EXTERNAL_AUTH la foto de "otro usuario" cuando se arma la lista de contactos o los miembros de una conversación. La solución: `auth.service.ts` (`syncProfilePicture`) guarda la foto de **cada usuario la primera vez que ese usuario mismo inicia sesión** (fire-and-forget desde `auth.controller.ts`, nunca bloquea ni rompe el login) como un `StoredFile` normal vía `file.service.ts` (`storeAvatar`), bajo `avatars/<userId>/...`, y apunta `User.avatarFileId` a ese archivo. A partir de ahí, cualquier otro usuario puede verla — se sirve como cualquier otro `StoredFile`, sin pasar de nuevo por EXTERNAL_AUTH.
+
+Para no reescribir un archivo nuevo en cada login si la foto no cambió, se compara el checksum de lo que devuelve EXTERNAL_AUTH contra el del `StoredFile` ya guardado (`getFileChecksum`) antes de guardar uno nuevo. Si EXTERNAL_AUTH devuelve `404` (el usuario borró su foto), se limpia `avatarFileId` a `null`.
+
 ## Qué falta a propósito
 
-* **Avatar de usuario** (`User.avatarFileId`): no hay todavía un módulo `users` con un endpoint para setearlo — cuando exista, solo necesita guardar el `id` que devuelve este módulo, igual que ya hacen `conversations` y `messages`.
-* **Limpieza de archivos huérfanos**: un `StoredFile` borrado lógicamente, o nunca referenciado por nada, no se borra físicamente. Candidato natural para `src/workers`.
+* **Limpieza de archivos huérfanos**: un `StoredFile` borrado lógicamente, o reemplazado por una foto de perfil nueva, no se borra físicamente. Candidato natural para `src/workers`.
 * **Proveedores remotos** (S3, MinIO): la interfaz (`StorageProvider`) ya está pensada para eso, pero hoy solo existe `LocalDiskStorage`.

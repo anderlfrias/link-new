@@ -1,4 +1,4 @@
-import { Conversation, ConversationMember, ConversationType, User } from "@prisma/client";
+import { Conversation, ConversationMember, ConversationType, StoredFile, User } from "@prisma/client";
 
 export interface CreateConversationInput {
   type: ConversationType;
@@ -17,7 +17,10 @@ export interface UpdateConversationInput {
 }
 
 export type ConversationMemberWithUser = ConversationMember & {
-  user: Pick<User, "id" | "name" | "email" | "avatarFileId" | "status">;
+  user: Pick<User, "id" | "name" | "email" | "avatarFileId" | "status"> & {
+    /// Solo `path` — lo demás del `StoredFile` no hace falta para construir la URL pública.
+    avatarFile: Pick<StoredFile, "path"> | null;
+  };
 };
 
 export type ConversationWithMembers = Conversation & {

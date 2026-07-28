@@ -96,7 +96,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 GET /api/v1/auth/profile/picture
 ```
 
-A diferencia de `/login`, este sí requiere `Authorization: Bearer <token>` — es el único endpoint de este módulo detrás de `authenticate`. Proxea `GET /api/v1/profile/picture` de EXTERNAL_AUTH (`auth.service.ts`, `getProfilePicture()`): reenvía el mismo token recibido, y devuelve la imagen tal cual (bytes + `Content-Type` de EXTERNAL_AUTH), no JSON.
+A diferencia de `/login`, este sí requiere `Authorization: Bearer <token>` de parte del cliente — es el único endpoint de este módulo detrás de `authenticate`. Proxea `GET /api/v1/profile/picture` de EXTERNAL_AUTH (`auth.service.ts`, `getProfilePicture()`) y devuelve la imagen ya como bytes + `Content-Type`, no JSON.
 
 ```bash
 curl http://localhost:4000/api/v1/auth/profile/picture \
@@ -104,15 +104,22 @@ curl http://localhost:4000/api/v1/auth/profile/picture \
   --output foto.jpg
 ```
 
-**Por qué solo trae "mi" foto y no la de otro usuario**: EXTERNAL_AUTH identifica a quién pertenece la foto exclusivamente por el token — su endpoint no acepta un id de usuario como parámetro. Este proxy hereda esa misma limitación: sirve para mostrar la foto de quien está logueado (ej. en `UserMenu`), pero no hay forma de pedir la foto de otro miembro de una conversación a través de este mecanismo.
+**Detalle importante al reenviar el token a EXTERNAL_AUTH**: a EXTERNAL_AUTH *no* se le manda el prefijo `Bearer `. Su controller decodifica el header tal cual con `jwt-decode` (`const token = req.headers.authorization; jwtDecode(token)`), sin recortar ningún prefijo — si se le manda `Bearer <jwt>`, el decode falla y EXTERNAL_AUTH cae a su bloque `catch` (`500 ERROR_FETCHING_PROFILE_PICTURE`), que este proxy traduce como `503`. Por eso `getProfilePicture()` reenvía `Authorization: <token>` a secas (solo hacia EXTERNAL_AUTH; el cliente sigue mandando `Bearer <token>` a este backend como siempre).
+
+**Detalle importante sobre la respuesta de EXTERNAL_AUTH**: tampoco devuelve bytes crudos con un `Content-Type` de imagen — su `res.ok(user.profilePicture)` manda el data URI completo como body (`"data:image/jpeg;base64,/9j/4AAQ..."`, a veces envuelto en comillas de JSON según negotiation). `getProfilePicture()` parsea ese data URI con una regex, separa el `contentType` real y decodifica el base64 a `Buffer` antes de devolverlo — así el controller sí puede responder con bytes + `Content-Type` correctos hacia el cliente.
+
+**Mapeo de errores de EXTERNAL_AUTH**: no hay un `401` explícito — `USER_ID_REQUIRED`, `USER_NOT_FOUND` y `PROFILE_PICTURE_NOT_FOUND` llegan todos como `400` (`res.badRequest`) con un `code` distinto en el body; un token realmente inválido rompe el `jwtDecode` y cae en el `catch` genérico (`500`). `getProfilePicture()` lee el `code` del body: `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND` → `404` local; cualquier otro no-`ok` → `503`.
+
+**Por qué manda `Vary: Authorization`**: la respuesta también trae `Cache-Control: private, max-age=300` para no repetir el proxy en cada render de `<Avatar>` — pero la caché HTTP del navegador solo distingue entradas por URL, no por el valor de `Authorization`, a menos que el header `Vary` lo indique. Sin `Vary: Authorization`, si un usuario cierra sesión y otro inicia sesión en la misma pestaña dentro de esos 300s, un fetch a esta misma URL con OTRO token puede devolver de caché los bytes de la foto del usuario anterior (bug real, reportado y corregido). Con `Vary: Authorization`, el navegador guarda una entrada de caché distinta por token, así que el cacheo sigue funcionando para el mismo usuario pero nunca se filtra entre usuarios distintos.
+
+**Por qué solo trae "mi" foto y no la de otro usuario**: EXTERNAL_AUTH identifica a quién pertenece la foto exclusivamente por el token — su endpoint no acepta un id de usuario como parámetro. Este proxy hereda esa misma limitación: solo sirve para que un usuario pida su propia foto (ej. `UserMenu`). Para mostrar la foto de **otros** usuarios (lista de contactos, miembros de una conversación) no se puede volver a llamar a EXTERNAL_AUTH — en vez de eso, cada usuario cachea su propia foto como `StoredFile` la primera vez que él mismo inicia sesión (`syncProfilePicture` en `auth.service.ts`, ver `modules/files/README.md`), y de ahí en adelante se sirve desde nuestro propio storage para cualquiera que la necesite.
 
 No se cachea del lado del backend (cada request vuelve a pedirle a EXTERNAL_AUTH), pero sí manda `Cache-Control: private, max-age=300` para que el navegador no repita el request en cada render de `<Avatar>`.
 
 | Status | Causa |
 |---|---|
-| `401` | Token inválido o expirado |
-| `404` | El usuario no tiene foto cargada en EXTERNAL_AUTH |
-| `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) |
+| `404` | EXTERNAL_AUTH respondió `USER_NOT_FOUND` o `PROFILE_PICTURE_NOT_FOUND` (usuario no existe o no tiene foto cargada) |
+| `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s), devolvió un `code` inesperado, o el body no era un data URI parseable |
 
 ## Usar el token en rutas protegidas
 

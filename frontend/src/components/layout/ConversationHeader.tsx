@@ -5,9 +5,10 @@ import { Avatar } from "@/components/ui/Avatar";
 interface ConversationHeaderProps {
   title: string;
   subtitle?: string;
+  imageUrl?: string | null;
 }
 
-export function ConversationHeader({ title, subtitle }: ConversationHeaderProps) {
+export function ConversationHeader({ title, subtitle, imageUrl }: ConversationHeaderProps) {
   return (
     <div className="flex items-center gap-3 border-b border-black/5 px-3 py-2.5 dark:border-white/10">
       <Link
@@ -17,7 +18,7 @@ export function ConversationHeader({ title, subtitle }: ConversationHeaderProps)
       >
         <IconChevronLeft size={22} stroke={1.75} />
       </Link>
-      <Avatar name={title} />
+      <Avatar name={title} imageUrl={imageUrl} />
       <div className="min-w-0">
         <p className="truncate font-medium text-brand-ink dark:text-white">{title}</p>
         {subtitle && (

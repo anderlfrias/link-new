@@ -85,6 +85,37 @@ export async function getFile(fileId: string): Promise<StoredFileResponse> {
   return toResponse(file);
 }
 
+export async function getFileChecksum(fileId: string): Promise<string | null> {
+  const file = await FileRepository.findActiveById(fileId);
+  return file?.checksum ?? null;
+}
+
+/// Usado por el módulo auth para cachear la foto de perfil de EXTERNAL_AUTH como
+/// `StoredFile` (ver auth.service.ts `syncProfilePicture`). No pasa por
+/// `ALLOWED_MIME_TYPES` como `uploadFile` — EXTERNAL_AUTH puede devolver cualquier
+/// tipo de imagen, y este flujo no viene de un formulario del usuario.
+export async function storeAvatar(userId: string, buffer: Buffer, mimeType: string): Promise<StoredFileResponse> {
+  const subtype = mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const extension = ALLOWED_MIME_TYPES[mimeType]?.extension ?? subtype ?? "bin";
+  const storedName = `${randomUUID()}.${extension}`;
+  const checksum = createHash("sha256").update(buffer).digest("hex");
+
+  const saved = await storage.save(buffer, `avatars/${userId}/${storedName}`);
+
+  const file = await FileRepository.createStoredFile({
+    originalName: `avatar.${extension}`,
+    storedName,
+    path: saved.path,
+    mimeType,
+    extension,
+    size: saved.size,
+    checksum,
+    createdById: userId,
+  });
+
+  return toResponse(file);
+}
+
 export async function deleteFile(currentUserId: string, fileId: string): Promise<{ id: string }> {
   const file = await FileRepository.findActiveById(fileId);
   if (!file) {

@@ -6,5 +6,6 @@ export interface DirectoryUser {
   name: string;
   email: string;
   avatarFileId: string | null;
+  avatarFile: { path: string } | null;
   status: UserStatus;
 }

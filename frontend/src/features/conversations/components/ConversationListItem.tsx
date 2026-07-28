@@ -5,7 +5,11 @@ import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
-import { getConversationDisplayName, getLastMessagePreviewText } from "@/utils/conversation-display";
+import {
+  getConversationAvatarUrl,
+  getConversationDisplayName,
+  getLastMessagePreviewText,
+} from "@/utils/conversation-display";
 import { formatConversationTimestamp } from "@/utils/format-date";
 import { cn } from "@/utils/cn";
 import type { ConversationListItem as ConversationListItemType } from "@/features/conversations/types/conversation.types";
@@ -19,6 +23,7 @@ export function ConversationListItem({ conversation, currentUserId }: Conversati
   const pathname = usePathname();
   const isActive = pathname === `/conversations/${conversation.id}`;
   const displayName = getConversationDisplayName(conversation, currentUserId);
+  const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const secondaryText = getLastMessagePreviewText(conversation, currentUserId);
 
   return (
@@ -29,7 +34,7 @@ export function ConversationListItem({ conversation, currentUserId }: Conversati
         isActive && "bg-black/4 dark:bg-white/10",
       )}
     >
-      <Avatar name={displayName} size="lg" />
+      <Avatar name={displayName} imageUrl={avatarUrl} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <span className="truncate font-medium text-brand-ink dark:text-white">{displayName}</span>

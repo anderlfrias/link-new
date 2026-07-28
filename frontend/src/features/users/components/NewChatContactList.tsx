@@ -12,6 +12,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Input } from "@/components/ui/Input";
 import { useUsers } from "@/features/users/hooks/use-users";
 import { useStartConversation } from "@/features/conversations/hooks/use-start-conversation";
+import { buildStoredFileUrl } from "@/utils/file-url";
 
 interface NewChatContactListProps {
   onClose: () => void;
@@ -93,7 +94,11 @@ export function NewChatContactList({ onClose }: NewChatContactListProps) {
               onClick={() => startWithUser(user.id)}
               className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/3 disabled:opacity-60 dark:hover:bg-white/5"
             >
-              <Avatar name={user.name} size="lg" />
+              <Avatar
+                name={user.name}
+                imageUrl={user.avatarFile ? buildStoredFileUrl(user.avatarFile.path) : null}
+                size="lg"
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-brand-ink dark:text-white">{user.name}</p>
                 <p className="truncate text-sm text-neutral-500 dark:text-neutral-400">

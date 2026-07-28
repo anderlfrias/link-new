@@ -3,6 +3,7 @@ import type {
   ConversationMember,
   ConversationListItem,
 } from "@/features/conversations/types/conversation.types";
+import { buildStoredFileUrl } from "@/utils/file-url";
 
 export function getOtherMembers(conversation: Conversation, currentUserId: string): ConversationMember[] {
   return conversation.members.filter((member) => member.userId !== currentUserId);
@@ -15,6 +16,13 @@ export function getConversationDisplayName(conversation: Conversation, currentUs
   }
   const other = getOtherMembers(conversation, currentUserId)[0];
   return other?.user.name ?? "Usuario";
+}
+
+/** PRIVATE: foto del otro miembro. GROUP: `null` (todavía sin imagen de grupo), cae a iniciales. */
+export function getConversationAvatarUrl(conversation: Conversation, currentUserId: string): string | null {
+  if (conversation.type === "GROUP") return null;
+  const other = getOtherMembers(conversation, currentUserId)[0];
+  return other?.user.avatarFile ? buildStoredFileUrl(other.user.avatarFile.path) : null;
 }
 
 /**

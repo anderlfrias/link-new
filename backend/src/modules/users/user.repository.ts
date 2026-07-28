@@ -6,6 +6,7 @@ const publicSelect = {
   name: true,
   email: true,
   avatarFileId: true,
+  avatarFile: { select: { path: true } },
   status: true,
 } satisfies Prisma.UserSelect;
 

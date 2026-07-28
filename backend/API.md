@@ -110,11 +110,13 @@ const blob = await response.blob();
 const url = URL.createObjectURL(blob); // usar como <img src={url}> y hacer URL.revokeObjectURL(url) después
 ```
 
-→ `200` con la imagen tal cual la devuelve EXTERNAL_AUTH (`Content-Type` reenviado, ej. `image/jpeg`), no JSON. `Cache-Control: private, max-age=300` para no repetir el proxy en cada render de `<Avatar>`.
+→ `200` con la imagen ya como bytes + `Content-Type` correcto (ej. `image/jpeg`), no JSON. `Cache-Control: private, max-age=300` + `Vary: Authorization` para no repetir el proxy en cada render de `<Avatar>` **sin** que la caché HTTP del navegador mezcle la foto de un usuario con la de otro si cierran sesión y entra alguien distinto en la misma pestaña dentro de esos 300s (la caché por URL sola no distingue por token; con `Vary: Authorization` sí).
 
-**EXTERNAL_AUTH identifica al usuario únicamente por el token** (no recibe ningún id) — por eso este endpoint solo puede traer la foto de **quien está autenticado**, nunca la de otro usuario de una conversación. No hay forma de pedir la foto de un tercero con el API actual de EXTERNAL_AUTH.
+**Nota interna**: hacia EXTERNAL_AUTH el backend manda `Authorization: <token>` sin `Bearer ` (su controller decodifica el header tal cual con `jwt-decode`, sin recortar prefijo), y EXTERNAL_AUTH responde con el data URI completo en base64 (`"data:image/jpeg;base64,..."`), no bytes crudos — `auth.service.ts` lo parsea y decodifica antes de reenviarlo. Esto solo importa si se está debugueando la llamada al proxy; el cliente de este backend sigue mandando `Bearer <token>` normal.
 
-Errores: `401` (token inválido/expirado), `404` (el usuario no tiene foto cargada en EXTERNAL_AUTH), `503` (EXTERNAL_AUTH caído o no responde en 5s).
+**EXTERNAL_AUTH identifica al usuario únicamente por el token** (no recibe ningún id) — por eso este endpoint solo puede traer la foto de **quien está autenticado**, nunca la de otro usuario de una conversación. Este backend resuelve eso por otro lado, no llamando de nuevo a EXTERNAL_AUTH: cada usuario cachea su propia foto (como `StoredFile`, en `User.avatarFileId`) la primera vez que **él mismo** inicia sesión, y desde ahí se sirve a cualquiera vía `user.avatarFile` embebido en conversaciones/directorio (ver sección 4 y 9) — nunca pidiéndosela a EXTERNAL_AUTH por un tercero.
+
+Errores: `404` (EXTERNAL_AUTH respondió `USER_NOT_FOUND` o `PROFILE_PICTURE_NOT_FOUND`), `503` (EXTERNAL_AUTH caído, no responde en 5s, o devolvió algo inesperado — incluye el caso de un token inválido, que en EXTERNAL_AUTH rompe el decode y cae a su error genérico).
 
 ---
 
@@ -190,13 +192,15 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
       "lastReadAt": "...-o-null",
       "lastDeliveredMessageId": "msg-uuid-o-null",
       "lastDeliveredAt": "...-o-null",
-      "user": { "id": "user-uuid", "name": "Juan", "email": "juan@x.com", "avatarFileId": null, "status": "ACTIVE" }
+      "user": { "id": "user-uuid", "name": "Juan", "email": "juan@x.com", "avatarFileId": "file-uuid-o-null", "avatarFile": { "path": "avatars/user-uuid/....jpg" }, "status": "ACTIVE" }
     }
   ]
 }
 ```
 
 `type` es `"PRIVATE"` (exactamente 2 miembros fijos) o `"GROUP"` (3 o más). `name`/`imageFileId` solo aplican a `GROUP`.
+
+`user.avatarFile` viene embebido (igual que los adjuntos de mensajes) para no tener que pedir cada avatar por separado: si no es `null`, construir la URL como `<origin-del-backend>/uploads/<avatarFile.path>` (sin autenticación, igual que cualquier otro `StoredFile` servido por `express.static`). Se cachea automáticamente en cada login de **ese** usuario — ver "Endpoint: foto de perfil" más abajo y `backend/src/modules/files/README.md`.
 
 ### 4.1 `POST /` — Crear conversación
 

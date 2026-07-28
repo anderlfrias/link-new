@@ -5,7 +5,14 @@ const withMembers = {
   members: {
     include: {
       user: {
-        select: { id: true, name: true, email: true, avatarFileId: true, status: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarFileId: true,
+          avatarFile: { select: { path: true } },
+          status: true,
+        },
       },
     },
   },

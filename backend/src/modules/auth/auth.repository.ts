@@ -19,3 +19,7 @@ export function upsertUserFromExternalUser(mappedUser: MappedUser): Promise<User
     },
   });
 }
+
+export function updateAvatarFileId(userId: string, avatarFileId: string | null): Promise<User> {
+  return prisma.user.update({ where: { id: userId }, data: { avatarFileId } });
+}

@@ -18,6 +18,10 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       token,
       user: { ...mappedUser, internalUserId: internalUser.id },
     });
+
+    // Fire-and-forget: no debe retrasar ni romper el login si EXTERNAL_AUTH está lento
+    // o caído (syncProfilePicture nunca lanza — ver auth.service.ts).
+    void AuthService.syncProfilePicture(internalUser.id, internalUser.avatarFileId, token);
   } catch (error) {
     next(error);
   }
@@ -33,6 +37,11 @@ export async function getProfilePicture(req: Request, res: Response, next: NextF
     // La foto de perfil cambia poco — evita repetir el proxy a EXTERNAL_AUTH en cada
     // render de <Avatar> mientras dure la sesión del browser.
     res.setHeader("Cache-Control", "private, max-age=300");
+    // Sin esto, la caché HTTP del navegador solo distingue por URL: si un
+    // usuario cierra sesión y otro entra en la misma pestaña dentro de esos
+    // 300s, el fetch a esta misma URL con OTRO token puede devolver de caché
+    // los bytes de la foto del usuario anterior en vez de pedirla de nuevo.
+    res.setHeader("Vary", "Authorization");
     res.send(picture.buffer);
   } catch (error) {
     next(error);
