@@ -115,10 +115,17 @@ export async function createConversation(currentUserId: string, input: CreateCon
     conversationId: conversation.id,
   });
 
-  const io = getIO();
-  conversation.members.forEach((member) => {
-    io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.CREATED, conversation);
-  });
+  // Una PRIVATE recién creada todavía no tiene mensajes (`lastMessageId` null),
+  // así que `listForUser` la esconde de la lista de todos — avisar por socket
+  // ahora solo generaría un refresh inútil. El primer mensaje la revela solo
+  // (ver `notifyConversationListChanged` en message.service.ts). GROUP sí se
+  // avisa de una: crearlo ya es una acción explícita con miembros elegidos.
+  if (conversation.type === ConversationType.GROUP) {
+    const io = getIO();
+    conversation.members.forEach((member) => {
+      io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.CREATED, conversation);
+    });
+  }
 
   return conversation;
 }

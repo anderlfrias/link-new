@@ -62,7 +62,16 @@ export function createConversation(data: {
 
 export function listForUser(userId: string) {
   return prisma.conversation.findMany({
-    where: { deletedAt: null, members: { some: { userId } } },
+    where: {
+      deletedAt: null,
+      members: { some: { userId } },
+      // Una conversación PRIVATE recién creada (sin ningún mensaje) todavía no
+      // "existe" para nadie: evita que abrir un contacto nuevo le muestre un
+      // chat vacío a la otra persona antes de que se mande el primer mensaje.
+      // GROUP sí aparece de una — crearlo ya es una acción explícita con
+      // miembros elegidos, no una simple apertura de contacto.
+      OR: [{ type: ConversationType.GROUP }, { lastMessageId: { not: null } }],
+    },
     include: withMembers,
     orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
   });

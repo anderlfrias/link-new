@@ -215,7 +215,9 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 - `PRIVATE`: exactamente 1 id en `memberIds`. Si ya existe una conversación privada activa entre ambos, la devuelve tal cual en vez de crear otra (podés llamarlo sin chequear antes "¿ya existe un chat con este usuario?").
 - `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total). `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6).
 
-→ `201` con la conversación completa. Emite `conversation:created` a la room personal de cada miembro (ver 3.1).
+→ `201` con la conversación completa.
+
+**`PRIVATE` recién creada (sin mensajes) no aparece para nadie todavía**: no emite `conversation:created` ni sale en `GET /` (para ninguno de los dos miembros) hasta que se manda el primer mensaje — así abrir el perfil de un contacto nuevo no le arma un chat vacío a la otra persona. Vos igual podés seguir usando el `id` que devuelve esta respuesta para pedir `GET /:id` o mandar el primer mensaje directamente; una vez que ese mensaje se envía, la conversación se revela sola para ambos vía el `conversation:updated` que ya dispara toda `POST /messages` (ver 4.2 y sección 6). `GROUP` sí emite `conversation:created` de una — crear un grupo ya es una acción explícita con miembros elegidos, no una simple apertura de contacto.
 
 ### 4.2 `GET /` — Listar mis conversaciones
 
@@ -231,6 +233,7 @@ Sin body ni query params. Devuelve un array, cada conversación con tres campos 
 ```
 
 - Ordenadas por `lastMessageAt` descendente (las más recientes primero) — ideal para pintar directo como lista de chats.
+- Una `PRIVATE` sin ningún mensaje todavía **no aparece acá** para ninguno de sus dos miembros (ver 4.1) — `GROUP` sí, desde que se crea.
 - `unreadCount`: mensajes de otros posteriores a tu `lastReadAt` en esa conversación.
 - `lastMessageStatus`: `"sent"` | `"delivered"` | `"read"` | `null`. **Solo tiene un valor si el último mensaje lo enviaste vos** (para pintar el check ✓/✓✓/✓✓azul junto a tu propio último mensaje en la lista); es `null` si el último mensaje es de otra persona, o si la conversación no tiene mensajes todavía. Ver sección 7 para el detalle de qué significa cada estado.
 - `lastMessagePreview`: texto del último mensaje, ya resuelto para mostrar en una lista (una sola línea, whitespace colapsado). `"Mensaje eliminado"` si fue borrado, `"📎 Archivo adjunto"` si no tiene texto pero sí adjuntos, `null` si la conversación todavía no tiene mensajes. No arma el prefijo de quién lo mandó (eso es un criterio de presentación del cliente, ej. "Vos: " o "Nombre: " en grupos) — solo el texto del mensaje en sí.
