@@ -4,6 +4,7 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
+    "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "build": "tsc",
     "prisma:sync": "npx prisma db push && npx prisma generate"
