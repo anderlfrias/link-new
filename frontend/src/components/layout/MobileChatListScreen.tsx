@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Input } from "@/components/ui/Input";
 import { ConversationList } from "@/features/conversations/components/ConversationList";
 import { NewChatContactList } from "@/features/users/components/NewChatContactList";
+import { ProfileSettingsPanel } from "@/features/profile/components/ProfileSettingsPanel";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
 import type { ConversationListItem } from "@/features/conversations/types/conversation.types";
 
@@ -22,17 +23,21 @@ export function MobileChatListScreen({
   currentUserId,
 }: MobileChatListScreenProps) {
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"list" | "newChat">("list");
+  const [view, setView] = useState<"list" | "newChat" | "profileSettings">("list");
 
   if (view === "newChat") {
     return <NewChatContactList onClose={() => setView("list")} />;
+  }
+
+  if (view === "profileSettings") {
+    return <ProfileSettingsPanel onClose={() => setView("list")} />;
   }
 
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
         <div className="flex items-center gap-3">
-          <UserMenu />
+          <UserMenu onOpenProfileSettings={() => setView("profileSettings")} />
           <h1 className="font-display text-2xl font-semibold text-brand-ink dark:text-white">
             Chats
           </h1>

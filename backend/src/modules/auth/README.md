@@ -121,6 +121,32 @@ No se cachea del lado del backend (cada request vuelve a pedirle a EXTERNAL_AUTH
 | `404` | EXTERNAL_AUTH respondió `USER_NOT_FOUND` o `PROFILE_PICTURE_NOT_FOUND` (usuario no existe o no tiene foto cargada) |
 | `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s), devolvió un `code` inesperado, o el body no era un data URI parseable |
 
+## Endpoint: cambiar/quitar mi foto de perfil
+
+```
+PUT    /api/v1/auth/profile/picture
+DELETE /api/v1/auth/profile/picture
+```
+
+A diferencia de `GET` (arriba), estas dos sí necesitan `attachInternalUser` además de `authenticate` (`auth.route.ts`): cachean/limpian la foto como `StoredFile` propio, lo que requiere el `internalUserId`, no solo el token.
+
+**`PUT`** recibe `multipart/form-data` con un campo `file` (imagen, límite propio de 5 MB — más chico que `MAX_UPLOAD_SIZE_MB` de adjuntos, definido en `auth.route.ts` porque EXTERNAL_AUTH guarda esto como texto, no como archivo). El controller (`updateProfilePicture`) arma un data URI (`data:<mimeType>;base64,<...>`) desde el buffer subido y llama a `AuthService.setProfilePicture(userId, token, buffer, mimeType)`, que:
+
+1. Manda ese data URI a EXTERNAL_AUTH vía `PUT /v1/profile/picture` (`{ profilePicture: dataUri }` en el body, mismo formato que devuelve `GET` — simétrico, EXTERNAL_AUTH lo guarda tal cual sin transformarlo). Igual que `GET`, el `Authorization` hacia EXTERNAL_AUTH va sin el prefijo `Bearer `.
+2. Solo si eso funciona, cachea el mismo buffer localmente (`FileService.storeAvatar` + `updateAvatarFileId` — la misma función interna, `cacheAvatarLocally()`, que ya usa `syncProfilePicture()` en el login) y devuelve el `StoredFileResponse` resultante (`200`).
+
+Si el `PUT` a EXTERNAL_AUTH falla, no se toca la caché local — nunca queda desincronizada con lo que EXTERNAL_AUTH realmente tiene guardado.
+
+**`DELETE`** no manda body. Llama a `AuthService.removeProfilePicture(userId, token)`: borra la foto en EXTERNAL_AUTH (`DELETE /v1/profile/picture` — endpoint agregado por el equipo de EXTERNAL_AUTH siguiendo la misma estructura que `GET`/`PUT`, con el mismo mapeo de errores conservador) y, si eso funciona, limpia `avatarFileId` a `null` localmente. Responde `204`.
+
+No importa si la imagen del `PUT` viene de un archivo real elegido por el usuario o de un avatar de [Boring Avatars](https://boringavatars.com) rasterizado a PNG en el frontend (ver `frontend/src/features/profile`) — el endpoint no distingue entre ambos, siempre es "un archivo de imagen".
+
+| Status | Causa |
+|---|---|
+| `400` | Falta el archivo (`PUT`), o el tipo de imagen no está permitido |
+| `404` | EXTERNAL_AUTH respondió `USER_NOT_FOUND` |
+| `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) o devolvió un `code` inesperado |
+
 ## Usar el token en rutas protegidas
 
 Cualquier ruta de otro módulo que necesite autenticación usa el middleware transversal `authenticate` (`src/middlewares/auth.middleware.ts`):

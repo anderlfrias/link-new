@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { IconLogout } from "@tabler/icons-react";
+import { IconLogout, IconUserEdit } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useProfilePicture } from "@/features/auth/hooks/use-profile-picture";
 import { Avatar } from "@/components/ui/Avatar";
 
-export function UserMenu() {
+interface UserMenuProps {
+  onOpenProfileSettings: () => void;
+}
+
+export function UserMenu({ onOpenProfileSettings }: UserMenuProps) {
   const { session, logout } = useAuth();
-  const profilePictureUrl = useProfilePicture();
+  const { url: profilePictureUrl } = useProfilePicture();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +49,17 @@ export function UserMenu() {
               {session.user.email}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onOpenProfileSettings();
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+          >
+            <IconUserEdit size={16} stroke={1.75} />
+            Editar perfil
+          </button>
           <button
             type="button"
             onClick={logout}

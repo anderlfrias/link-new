@@ -118,6 +118,34 @@ const url = URL.createObjectURL(blob); // usar como <img src={url}> y hacer URL.
 
 Errores: `404` (EXTERNAL_AUTH respondió `USER_NOT_FOUND` o `PROFILE_PICTURE_NOT_FOUND`), `503` (EXTERNAL_AUTH caído, no responde en 5s, o devolvió algo inesperado — incluye el caso de un token inválido, que en EXTERNAL_AUTH rompe el decode y cae a su error genérico).
 
+### `PUT /api/v1/auth/profile/picture` — Cambiar mi foto de perfil
+
+`multipart/form-data` con un único campo `file` (imagen — jpeg/png/gif/webp, máx. 5 MB, más chico que el límite de adjuntos porque EXTERNAL_AUTH la guarda como data URI en un campo de texto, no en storage de archivos).
+
+```js
+const form = new FormData();
+form.append("file", fileOrBlob); // File de un <input type="file"> o un Blob (ej. un avatar generado, ya rasterizado a PNG)
+
+const response = await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
+  method: "PUT",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+});
+const stored = await response.json(); // { id, originalName, mimeType, extension, size, url, createdAt }
+```
+
+→ `200` con la misma forma que devuelve `POST /api/v1/files` (sección 9) — usá `stored.url` para mostrarla de inmediato sin esperar un refetch. Internamente: primero se sube a EXTERNAL_AUTH (`PUT /v1/profile/picture`, fuente de verdad para cualquier otra app que lea de ahí — mismo data URI en base64 que devuelve el `GET`, en el campo `profilePicture` del body JSON), y solo si eso funciona se cachea localmente (mismo mecanismo que ya usa el login, ver nota del `GET` arriba) para que el resto de los usuarios de este chat la vean sin depender de EXTERNAL_AUTH.
+
+No importa si la imagen viene de un archivo real subido por el usuario o de un avatar generado (ej. Boring Avatars, ver `frontend/src/features/profile`) rasterizado a PNG del lado del cliente — para este endpoint son exactamente lo mismo, un archivo de imagen.
+
+Errores: `400` (falta el archivo, o el tipo de imagen no está permitido), `404`/`503` con el mismo criterio que `GET` de arriba.
+
+### `DELETE /api/v1/auth/profile/picture` — Quitar mi foto de perfil
+
+Sin body. Borra la foto en EXTERNAL_AUTH (`DELETE /v1/profile/picture`) y limpia `User.avatarFileId` localmente — vuelve a mostrar las iniciales por defecto en todos lados.
+
+→ `204` sin body. Errores: `404`/`503` con el mismo criterio que `GET`/`PUT` de arriba.
+
 ---
 
 ## 3. Tiempo real — conectar el socket

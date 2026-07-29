@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/utils/cn";
 
 /** Variaciones sobre la paleta de marca — sin colores ajenos al branding de Link. */
@@ -19,6 +19,7 @@ const SIZE_CLASSES = {
   sm: "h-8 w-8 text-xs",
   md: "h-10 w-10 text-sm",
   lg: "h-12 w-12 text-base",
+  xl: "h-24 w-24 text-2xl",
 };
 
 interface AvatarProps {
@@ -31,6 +32,10 @@ interface AvatarProps {
 
 export function Avatar({ name, imageUrl, size = "md", className }: AvatarProps) {
   const [imageFailed, setImageFailed] = useState(false);
+  // Sin esto, una vez que una `imageUrl` falla el componente queda pegado en
+  // iniciales para siempre — incluso después de subir una foto nueva válida
+  // (ej. al cambiar de foto de perfil), porque el estado no se resetea solo.
+  useEffect(() => setImageFailed(false), [imageUrl]);
   const trimmed = name.trim();
 
   if (imageUrl && !imageFailed) {

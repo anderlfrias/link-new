@@ -47,3 +47,28 @@ export async function getProfilePicture(req: Request, res: Response, next: NextF
     next(error);
   }
 }
+
+export async function updateProfilePicture(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.file) {
+      throw new BadRequestError('Missing image (expected multipart/form-data field "file")');
+    }
+    const token = req.headers.authorization!.slice("Bearer ".length);
+    const userId = req.user!.internalUserId!;
+    const stored = await AuthService.setProfilePicture(userId, token, req.file.buffer, req.file.mimetype);
+    res.json(stored);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteProfilePicture(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = req.headers.authorization!.slice("Bearer ".length);
+    const userId = req.user!.internalUserId!;
+    await AuthService.removeProfilePicture(userId, token);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+}

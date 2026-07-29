@@ -1,14 +1,42 @@
 import { Router } from "express";
+import multer from "multer";
 import { authenticate } from "../../middlewares/auth.middleware";
+import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import { loginRateLimiter } from "../../middlewares/rate-limit.middleware";
-import { getProfilePicture, login } from "./auth.controller";
+import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
+import { BadRequestError } from "../../utils/errors";
+import { deleteProfilePicture, getProfilePicture, login, updateProfilePicture } from "./auth.controller";
 
 const router = Router();
 
 router.post("/login", loginRateLimiter, login);
-// Único endpoint de este módulo que sí requiere sesión — proxya
-// GET /api/v1/profile/picture de EXTERNAL_AUTH, que identifica al usuario por el
-// propio token (no hace falta attachInternalUser: no toca la base local).
+// GET no hace falta attachInternalUser: solo proxea EXTERNAL_AUTH, no toca la base local.
 router.get("/profile/picture", authenticate, getProfilePicture);
+
+// Límite propio, más chico que `MAX_UPLOAD_SIZE_MB` (adjuntos): EXTERNAL_AUTH guarda
+// esto como data URI en un campo de texto de su base, no en storage de
+// archivos — no tiene sentido mandarle fotos de perfil gigantes.
+const MAX_AVATAR_SIZE_MB = 5;
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_AVATAR_SIZE_MB * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/") || !ALLOWED_MIME_TYPES[file.mimetype]) {
+      return cb(new BadRequestError(`Image type not allowed: ${file.mimetype}`));
+    }
+    cb(null, true);
+  },
+});
+
+// PUT/DELETE sí necesitan attachInternalUser: cachean la foto como StoredFile
+// propio (ver auth.service.ts) y eso requiere el id interno, no el externo.
+router.put(
+  "/profile/picture",
+  authenticate,
+  attachInternalUser,
+  avatarUpload.single("file"),
+  updateProfilePicture,
+);
+router.delete("/profile/picture", authenticate, attachInternalUser, deleteProfilePicture);
 
 export default router;

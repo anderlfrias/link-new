@@ -2,7 +2,7 @@ import { env } from "@/lib/env";
 import { ApiError, type ApiErrorBody } from "@/types/api.types";
 
 export interface ApiRequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Objeto para serializar como JSON, o FormData para multipart (subida de archivos). */
   body?: unknown;
   token?: string;
