@@ -1,10 +1,14 @@
 "use client";
 
-import { IconLoader2, IconX } from "@tabler/icons-react";
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { IconAlertCircle, IconCamera, IconCheck, IconLoader2, IconPencil, IconX } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { useConversationFiles } from "@/features/messages/hooks/use-conversation-files";
+import { useUpdateConversation } from "@/features/conversations/hooks/use-update-conversation";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
+import { uploadFile } from "@/features/files/api/files.api";
+import { useAuth } from "@/providers/auth-provider";
 import {
   getConversationAvatarUrl,
   getConversationDisplayName,
@@ -21,16 +25,64 @@ interface ConversationDetailPanelProps {
 }
 
 /** Panel de detalle de la conversación, tipo WhatsApp/Telegram: en GROUP
- * muestra los integrantes, en PRIVATE solo a la otra persona — y en ambos
- * casos, los archivos compartidos en el chat. */
+ * muestra los integrantes (y deja renombrar/cambiar la foto — cualquier
+ * miembro puede, no hay roles, ver backend/API.md sección 4), en PRIVATE
+ * solo a la otra persona — y en ambos casos, los archivos compartidos. */
 export function ConversationDetailPanel({ conversation, currentUserId, onClose }: ConversationDetailPanelProps) {
   const { files, status: filesStatus, hasMore, loadingMore, loadMore } = useConversationFiles(conversation.id);
   const { open: openLightbox } = useImageLightbox();
+  const { session } = useAuth();
+  const { update, pending: updating, error: updateError } = useUpdateConversation(conversation.id);
 
   const isGroup = conversation.type === "GROUP";
   const displayName = getConversationDisplayName(conversation, currentUserId);
   const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const otherMember = getOtherMembers(conversation, currentUserId)[0];
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(conversation.name ?? "");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // El nombre puede cambiar por socket (otro miembro lo editó) mientras no
+  // estás vos mismo editándolo — si ya estás editando, no pisar lo que estás
+  // escribiendo con lo que llegue de afuera.
+  useEffect(() => {
+    if (!editingName) setNameDraft(conversation.name ?? "");
+  }, [conversation.name, editingName]);
+
+  async function saveName() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === conversation.name) {
+      setEditingName(false);
+      return;
+    }
+    const ok = await update({ name: trimmed });
+    if (ok) setEditingName(false);
+  }
+
+  function handleNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void saveName();
+    } else if (event.key === "Escape") {
+      setNameDraft(conversation.name ?? "");
+      setEditingName(false);
+    }
+  }
+
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !session) return;
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadFile(session.token, file, conversation.id);
+      await update({ imageFileId: uploaded.id });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
@@ -49,9 +101,92 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {updateError && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
+            <IconAlertCircle size={16} className="shrink-0" />
+            <span>{updateError}</span>
+          </div>
+        )}
+
         <div className="flex flex-col items-center gap-1 py-4 text-center">
-          <Avatar name={displayName} imageUrl={avatarUrl} size="xl" />
-          <p className="mt-2 font-display text-lg font-semibold text-brand-ink dark:text-white">{displayName}</p>
+          <div className="relative">
+            <Avatar name={displayName} imageUrl={avatarUrl} size="xl" />
+            {isGroup && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  aria-label="Cambiar foto del grupo"
+                  className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue text-white shadow disabled:opacity-60"
+                >
+                  <IconCamera size={16} stroke={1.75} />
+                </button>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+              </>
+            )}
+            {uploadingPhoto && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30">
+                <IconLoader2 className="animate-spin text-white" size={24} />
+              </div>
+            )}
+          </div>
+
+          {isGroup && editingName ? (
+            <div className="mt-2 flex w-full items-center gap-1.5">
+              <input
+                autoFocus
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={handleNameKeyDown}
+                maxLength={120}
+                disabled={updating}
+                className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-1.5 text-center text-sm text-brand-ink outline-none focus:border-brand-blue dark:border-white/10 dark:bg-white/5 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={saveName}
+                disabled={updating || !nameDraft.trim()}
+                aria-label="Guardar nombre"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-brand-blue hover:bg-black/5 disabled:opacity-40 dark:hover:bg-white/10"
+              >
+                {updating ? <IconLoader2 className="animate-spin" size={16} /> : <IconCheck size={18} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNameDraft(conversation.name ?? "");
+                  setEditingName(false);
+                }}
+                disabled={updating}
+                aria-label="Cancelar"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/10"
+              >
+                <IconX size={18} />
+              </button>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-1.5">
+              <p className="font-display text-lg font-semibold text-brand-ink dark:text-white">{displayName}</p>
+              {isGroup && (
+                <button
+                  type="button"
+                  onClick={() => setEditingName(true)}
+                  aria-label="Editar nombre del grupo"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  <IconPencil size={14} stroke={1.75} />
+                </button>
+              )}
+            </div>
+          )}
+
           {isGroup ? (
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
               {conversation.members.length} participantes
