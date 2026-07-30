@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import {
   IconAlertCircle,
-  IconArrowLeft,
   IconLoader2,
   IconSearch,
   IconUsers,
+  IconX,
 } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Input } from "@/components/ui/Input";
@@ -31,20 +31,25 @@ export function NewChatContactList({ onClose }: NewChatContactListProps) {
     );
   }, [users, search]);
 
+  async function handleSelectUser(userId: string) {
+    const conversation = await startWithUser(userId);
+    if (conversation) onClose();
+  }
+
   return (
-    <div className="flex h-full w-full flex-col">
-      <div className="flex items-center gap-3 px-4 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Volver"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
-        >
-          <IconArrowLeft size={20} stroke={1.75} />
-        </button>
+    <div className="flex min-h-0 w-full flex-col">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
         <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">
           Chat nuevo
         </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          <IconX size={20} stroke={1.75} />
+        </button>
       </div>
       <div className="px-3 pb-2">
         <Input
@@ -91,7 +96,7 @@ export function NewChatContactList({ onClose }: NewChatContactListProps) {
               key={user.id}
               type="button"
               disabled={pending}
-              onClick={() => startWithUser(user.id)}
+              onClick={() => handleSelectUser(user.id)}
               className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-black/3 disabled:opacity-60 dark:hover:bg-white/5"
             >
               <Avatar

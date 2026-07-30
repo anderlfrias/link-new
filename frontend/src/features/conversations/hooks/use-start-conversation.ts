@@ -13,7 +13,7 @@ export function useStartConversation() {
 
   const startWithUser = useCallback(
     async (userId: string) => {
-      if (!session) return;
+      if (!session) return null;
       setPending(true);
       setError(null);
       try {
@@ -22,8 +22,10 @@ export function useStartConversation() {
           memberIds: [userId],
         });
         router.push(`/conversations/${conversation.id}`);
+        return conversation;
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo iniciar la conversación.");
+        return null;
       } finally {
         setPending(false);
       }
