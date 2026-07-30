@@ -395,11 +395,35 @@ Pedir el historial también marca como **entregados** (no leídos) para vos todo
 
 Solo tu propio mensaje (`403` para cualquier otro, incluido el creador de la conversación), y solo `type: "TEXT"` (`400` para `SYSTEM`). Actualiza `editedAt`. Emite `message:updated`, y además `conversation:updated` (sección 5) a cada miembro **solo si** este era el último mensaje de la conversación — así `lastMessagePreview` se refresca en la lista sin recargar la conversación entera al editar un mensaje viejo.
 
-### 6.4 `DELETE /:id` — Borrar
+### 6.4 `GET /files` — Archivos compartidos
+
+Query params: `?before=<messageFileId>&limit=<1-100, default 50>` — misma paginación por cursor que `GET /` (6.2), pero acá el cursor es el `id` de la entrada devuelta (no el de un mensaje). Sin `before`: los `limit` más recientes. Pensado para un panel de detalle de la conversación (tipo "Media, links y docs" de WhatsApp/Telegram) sin tener que paginar todo el historial de mensajes para juntar sus adjuntos.
+
+→ `200` con un array, más reciente primero:
+
+```json
+[
+  {
+    "id": "file-uuid",
+    "originalName": "foto.jpg",
+    "mimeType": "image/jpeg",
+    "extension": "jpg",
+    "size": 245678,
+    "url": "http://localhost:4000/uploads/chat/....jpg",
+    "createdAt": "2026-07-24T10:00:00.000Z",
+    "messageId": "msg-uuid",
+    "senderId": "user-uuid"
+  }
+]
+```
+
+Misma forma que devuelve `POST /api/v1/files` (sección 9) más `messageId`/`senderId` para saber en qué mensaje se compartió y quién lo mandó. Solo incluye archivos de mensajes no borrados (`deletedAt: null`) — si borrás el mensaje, desaparece de acá también, aunque el `StoredFile` en sí no se borre.
+
+### 6.5 `DELETE /:id` — Borrar
 
 Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado). Igual que en 6.3, emite `conversation:updated` a cada miembro solo si el mensaje borrado era el último de la conversación.
 
-### 6.5 Eventos de socket de mensajes
+### 6.6 Eventos de socket de mensajes
 
 | Evento | Dirección | Payload | Cuándo |
 |---|---|---|---|

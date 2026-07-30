@@ -1,6 +1,8 @@
 import { apiRequest } from "@/lib/api-client";
 import type {
+  ConversationFile,
   EditMessageInput,
+  ListConversationFilesQuery,
   ListMessagesQuery,
   Message,
   SendMessageInput,
@@ -14,6 +16,17 @@ export function listMessages(
   query: ListMessagesQuery = {},
 ): Promise<Message[]> {
   return apiRequest<Message[]>(basePath(conversationId), {
+    token,
+    query: { before: query.before, limit: query.limit },
+  });
+}
+
+export function listConversationFiles(
+  token: string,
+  conversationId: string,
+  query: ListConversationFilesQuery = {},
+): Promise<ConversationFile[]> {
+  return apiRequest<ConversationFile[]>(`${basePath(conversationId)}/files`, {
     token,
     query: { before: query.before, limit: query.limit },
   });

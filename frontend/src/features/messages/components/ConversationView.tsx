@@ -7,9 +7,11 @@ import { useConversation } from "@/features/conversations/hooks/use-conversation
 import { useMessages } from "@/features/messages/hooks/use-messages";
 import { useTyping } from "@/features/messages/hooks/use-typing";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
+import { Drawer } from "@/components/ui/Drawer";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
+import { ConversationDetailPanel } from "@/features/conversations/components/ConversationDetailPanel";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
 
@@ -32,6 +34,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   // que el overlay parpadee al pasar entre elementos internos.
   const dragCounter = useRef(0);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   function handleDragEnter(event: DragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.types.includes("Files")) return;
@@ -98,7 +101,12 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <ConversationHeader title={displayName} subtitle={subtitle} imageUrl={avatarUrl} />
+        <ConversationHeader
+          title={displayName}
+          subtitle={subtitle}
+          imageUrl={avatarUrl}
+          onOpenDetails={() => setShowDetails(true)}
+        />
         <MessageList
           messages={messages}
           status={messagesStatus}
@@ -123,6 +131,15 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
               <p className="font-display text-base font-semibold">Soltá los archivos para adjuntarlos</p>
             </div>
           </div>
+        )}
+        {showDetails && (
+          <Drawer onClose={() => setShowDetails(false)} aria-label="Información de la conversación">
+            <ConversationDetailPanel
+              conversation={conversation}
+              currentUserId={currentUserId}
+              onClose={() => setShowDetails(false)}
+            />
+          </Drawer>
         )}
       </div>
     </ImageLightboxProvider>

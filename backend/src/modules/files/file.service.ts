@@ -33,7 +33,10 @@ function safeExtension(originalName: string, mimeType: string): string {
   return ALLOWED_MIME_TYPES[mimeType]?.extension ?? "bin";
 }
 
-function toResponse(file: StoredFile): StoredFileResponse {
+/// Exportada para que otros módulos que ya tienen un `StoredFile` en mano
+/// (ej. messages, al listar los archivos compartidos de una conversación)
+/// arme la misma forma pública sin duplicar la lógica de `url`.
+export function toStoredFileResponse(file: StoredFile): StoredFileResponse {
   return {
     id: file.id,
     originalName: file.originalName,
@@ -74,7 +77,7 @@ export async function uploadFile(
     createdById: currentUserId,
   });
 
-  return toResponse(file);
+  return toStoredFileResponse(file);
 }
 
 export async function getFile(fileId: string): Promise<StoredFileResponse> {
@@ -82,7 +85,7 @@ export async function getFile(fileId: string): Promise<StoredFileResponse> {
   if (!file) {
     throw new NotFoundError("File not found");
   }
-  return toResponse(file);
+  return toStoredFileResponse(file);
 }
 
 export async function getFileChecksum(fileId: string): Promise<string | null> {
@@ -113,7 +116,7 @@ export async function storeAvatar(userId: string, buffer: Buffer, mimeType: stri
     createdById: userId,
   });
 
-  return toResponse(file);
+  return toStoredFileResponse(file);
 }
 
 export async function deleteFile(currentUserId: string, fileId: string): Promise<{ id: string }> {

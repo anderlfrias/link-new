@@ -13,6 +13,7 @@ router.use(authenticate, attachInternalUser);
 
 router.post("/", validateBody(createMessageSchema), MessageController.create);
 router.get("/", MessageController.list);
+router.get("/files", MessageController.listFiles);
 router.patch("/:id", validateBody(updateMessageSchema), MessageController.update);
 router.delete("/:id", MessageController.remove);
 

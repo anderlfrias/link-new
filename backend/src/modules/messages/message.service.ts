@@ -2,13 +2,16 @@ import { ChatAuditAction, MessageType } from "@prisma/client";
 import { assertMembership, computeReceipts, markDelivered } from "../conversations/conversation.service";
 import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
 import { ConversationMemberWithUser, MessageReceipt } from "../conversations/conversation.types";
+import { toStoredFileResponse } from "../files/file.service";
 import { getIO } from "../../socket";
 import { conversationRoomName, getConnectedUserIds, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as MessageRepository from "./message.repository";
 import { MESSAGE_EVENTS } from "./message.socket";
 import {
+  ConversationFileResponse,
   CreateMessageInput,
+  ListConversationFilesOptions,
   ListMessagesOptions,
   MessageWithReceipts,
   MessageWithRelations,
@@ -112,6 +115,25 @@ export async function listMessages(
   return ordered.map((message) => ({
     ...message,
     receipts: computeReceipts(conversation.members, message),
+  }));
+}
+
+/// Archivos compartidos en la conversación, para el panel de detalle (tipo
+/// WhatsApp/Telegram) — misma paginación por cursor que `listMessages`.
+export async function listConversationFiles(
+  currentUserId: string,
+  conversationId: string,
+  options: ListConversationFilesOptions,
+): Promise<ConversationFileResponse[]> {
+  await assertMembership(conversationId, currentUserId);
+
+  const limit = Math.min(Math.max(options.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
+  const entries = await MessageRepository.listFiles(conversationId, { beforeId: options.beforeId, limit });
+
+  return entries.map((entry) => ({
+    ...toStoredFileResponse(entry.file),
+    messageId: entry.message.id,
+    senderId: entry.message.senderId,
   }));
 }
 

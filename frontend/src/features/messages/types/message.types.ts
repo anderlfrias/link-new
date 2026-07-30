@@ -53,3 +53,21 @@ export interface ListMessagesQuery {
   before?: string;
   limit?: number;
 }
+
+/** Ver backend/API.md, sección 6.4 (`GET /messages/files`). */
+export interface ConversationFile {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  extension: string;
+  size: number;
+  url: string;
+  createdAt: string;
+  messageId: string;
+  senderId: string;
+}
+
+export interface ListConversationFilesQuery {
+  before?: string;
+  limit?: number;
+}

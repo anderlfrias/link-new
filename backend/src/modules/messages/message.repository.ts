@@ -6,6 +6,11 @@ const withRelations = {
   files: { include: { file: true } },
 } satisfies Prisma.MessageInclude;
 
+const fileWithRelations = {
+  file: true,
+  message: { select: { id: true, createdAt: true, senderId: true } },
+} satisfies Prisma.MessageFileInclude;
+
 export function countExistingFiles(fileIds: string[]): Promise<number> {
   if (fileIds.length === 0) return Promise.resolve(0);
   return prisma.storedFile.count({ where: { id: { in: fileIds }, deletedAt: null } });
@@ -50,6 +55,20 @@ export function listMessages(conversationId: string, options: { beforeId?: strin
   return prisma.message.findMany({
     where: { conversationId, deletedAt: null },
     include: withRelations,
+    orderBy: { createdAt: "desc" },
+    take: options.limit,
+    ...(options.beforeId ? { cursor: { id: options.beforeId }, skip: 1 } : {}),
+  });
+}
+
+/// Archivos compartidos en la conversación (a través de `MessageFile`), más
+/// reciente primero — mismo criterio de paginación por cursor que
+/// `listMessages` (el panel de detalle de la conversación, tipo
+/// WhatsApp/Telegram, pagina esto igual que el historial de mensajes).
+export function listFiles(conversationId: string, options: { beforeId?: string; limit: number }) {
+  return prisma.messageFile.findMany({
+    where: { message: { conversationId, deletedAt: null }, file: { deletedAt: null } },
+    include: fileWithRelations,
     orderBy: { createdAt: "desc" },
     take: options.limit,
     ...(options.beforeId ? { cursor: { id: options.beforeId }, skip: 1 } : {}),

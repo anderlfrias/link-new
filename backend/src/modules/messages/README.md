@@ -12,6 +12,7 @@ Base: `/api/v1/conversations/:conversationId/messages` (montado en `route.ts` **
 |---|---|---|
 | `POST` | `/` | Envía un mensaje. |
 | `GET` | `/` | Lista mensajes, paginado por cursor. |
+| `GET` | `/files` | Archivos compartidos en la conversación, paginado por cursor. |
 | `PATCH` | `/:id` | Edita el contenido (solo el propio autor, solo `TEXT`). |
 | `DELETE` | `/:id` | Borrado lógico (el autor o el creador de la conversación). |
 
@@ -34,6 +35,10 @@ Respuesta `201` con el mensaje, su remitente (`sender: { id, name, email, avatar
 Query params: `before` (id de mensaje, cursor) y `limit` (1-100, default 50). Paginación por cursor de Prisma (`cursor: { id }, skip: 1`), más reciente primero internamente — la respuesta llega **en orden cronológico ascendente** (el service invierte el arreglo), lista para renderizar directamente en un hilo de chat. Para cargar mensajes más antiguos, repetir la llamada con `before` = id del mensaje más antiguo ya cargado.
 
 Pedir el historial también marca como **entregados** para quien lo pide todos los mensajes hasta el más nuevo de la página — ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura).
+
+### `GET /files` — Archivos compartidos
+
+Query params: `before` (id de la entrada `MessageFile`, cursor) y `limit` (1-100, default 50) — misma paginación por cursor que `GET /`, pero el cursor acá es el `id` de la fila `MessageFile`, no el de un mensaje. Junta los adjuntos de todos los mensajes no borrados de la conversación (join contra `MessageFile`/`StoredFile`) sin tener que paginar todo el historial de texto para encontrarlos — pensado para un panel de detalle de la conversación (media/archivos, tipo WhatsApp/Telegram). Cada entrada devuelve la misma forma que `POST /api/v1/files` (`toStoredFileResponse`, reexportada de [`files`](../files/README.md) para no duplicar cómo se arma `url`) más `messageId`/`senderId`.
 
 ### `PATCH /:id` — Editar
 

@@ -28,6 +28,20 @@ export async function list(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function listFiles(req: Request, res: Response, next: NextFunction) {
+  try {
+    const before = typeof req.query.before === "string" ? req.query.before : undefined;
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const files = await MessageService.listConversationFiles(currentUserId(req), req.params.conversationId, {
+      beforeId: before,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    res.json(files);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
     const message = await MessageService.editMessage(
