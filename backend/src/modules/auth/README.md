@@ -112,7 +112,23 @@ curl http://localhost:4000/api/v1/auth/profile/picture \
 
 **Por qué manda `Vary: Authorization`**: la respuesta también trae `Cache-Control: private, max-age=300` para no repetir el proxy en cada render de `<Avatar>` — pero la caché HTTP del navegador solo distingue entradas por URL, no por el valor de `Authorization`, a menos que el header `Vary` lo indique. Sin `Vary: Authorization`, si un usuario cierra sesión y otro inicia sesión en la misma pestaña dentro de esos 300s, un fetch a esta misma URL con OTRO token puede devolver de caché los bytes de la foto del usuario anterior (bug real, reportado y corregido). Con `Vary: Authorization`, el navegador guarda una entrada de caché distinta por token, así que el cacheo sigue funcionando para el mismo usuario pero nunca se filtra entre usuarios distintos.
 
-**Por qué solo trae "mi" foto y no la de otro usuario**: EXTERNAL_AUTH identifica a quién pertenece la foto exclusivamente por el token — su endpoint no acepta un id de usuario como parámetro. Este proxy hereda esa misma limitación: solo sirve para que un usuario pida su propia foto (ej. `UserMenu`). Para mostrar la foto de **otros** usuarios (lista de contactos, miembros de una conversación) no se puede volver a llamar a EXTERNAL_AUTH — en vez de eso, cada usuario cachea su propia foto como `StoredFile` la primera vez que él mismo inicia sesión (`syncProfilePicture` en `auth.service.ts`, ver `modules/files/README.md`), y de ahí en adelante se sirve desde nuestro propio storage para cualquiera que la necesite.
+**Por qué este proxy solo trae "mi" foto y no la de otro usuario**: `GET /v1/profile/picture` de EXTERNAL_AUTH identifica a quién pertenece la foto exclusivamente por el token — no acepta un id/username como parámetro. Este proxy (usado por `UserMenu`) hereda esa misma limitación a propósito. EXTERNAL_AUTH sí expone un endpoint aparte para terceros — ver más abajo —, pero no está detrás de este proxy porque nada del backend necesita pedirle a EXTERNAL_AUTH la foto de otro usuario en tiempo real: en vez de eso, se cachea localmente de antemano (`syncProfilePicture` para la propia al iniciar sesión, `syncContactAvatar` para contactos vía `syncAppUsers` — ambas en `auth.service.ts`, ver `modules/files/README.md`), y de ahí en adelante se sirve desde nuestro propio storage para cualquiera que la necesite, sin volver a tocar EXTERNAL_AUTH.
+
+## Endpoint: foto de perfil de un tercero (uso interno, sin proxy propio)
+
+```
+GET /v1/profile/picture/:username
+```
+
+A diferencia del anterior, EXTERNAL_AUTH identifica al usuario por `username` en la URL, no por el token — puede traer la foto de **cualquier** usuario de la app, no solo la de quien está autenticado. No hay una ruta HTTP propia que lo exponga (no hace falta: nada en el frontend necesita pedir la foto de un tercero en tiempo real) — solo lo usa `getProfilePictureByUsername()`/`syncContactAvatar()` en `auth.service.ts`, server-to-server, para cachear localmente el avatar de contactos que `syncAppUsers()` trae de `GET /v1/apps/users/by-codes` (ver "Endpoint: contactos de la app" abajo) y que todavía no iniciaron sesión acá. Mismo formato de respuesta y mismo mapeo de errores que el `GET` de arriba (data URI, `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND` → 404 local).
+
+## Endpoint: contactos de la app
+
+```
+GET /v1/apps/users/by-codes?codes=<APP_CODE_EXTERNAL_AUTH>
+```
+
+Devuelve todos los usuarios de EXTERNAL_AUTH con acceso a esta app (identificada por `APP_CODE_EXTERNAL_AUTH`), hayan iniciado sesión acá alguna vez o no — a diferencia del directorio local (`GET /api/v1/users`), que hasta ahora solo listaba a quien ya se había logueado. `AuthService.getAppUsers()` lo llama y `AuthService.syncAppUsers()` (invocado desde `UserService.listUsers()` en cada `GET /api/v1/users`) upsertea cada uno como `User` local — necesario porque `createConversation` exige que el otro miembro ya exista localmente — y cachea su foto si todavía no tiene una (`syncContactAvatar`, arriba). Si EXTERNAL_AUTH no responde, `syncAppUsers()` no lanza: el directorio simplemente se sirve con lo que ya había en la base local.
 
 No se cachea del lado del backend (cada request vuelve a pedirle a EXTERNAL_AUTH), pero sí manda `Cache-Control: private, max-age=300` para que el navegador no repita el request en cada render de `<Avatar>`.
 
