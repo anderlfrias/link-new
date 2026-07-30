@@ -1,10 +1,12 @@
 "use client";
 
-import { IconLoader2 } from "@tabler/icons-react";
+import { DragEvent, useRef, useState } from "react";
+import { IconLoader2, IconPaperclip } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversation } from "@/features/conversations/hooks/use-conversation";
 import { useMessages } from "@/features/messages/hooks/use-messages";
 import { useTyping } from "@/features/messages/hooks/use-typing";
+import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
@@ -23,6 +25,40 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send } =
     useMessages(conversationId);
   const { typingUserIds, notifyTyping, notifyStopped } = useTyping(conversationId);
+  const attachmentsState = useMessageAttachments(conversationId);
+
+  // Arrastrar un archivo sobre un hijo (ej. una burbuja de mensaje) dispara
+  // dragLeave del contenedor antes que dragEnter del hijo — un contador evita
+  // que el overlay parpadee al pasar entre elementos internos.
+  const dragCounter = useRef(0);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  function handleDragEnter(event: DragEvent<HTMLDivElement>) {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    dragCounter.current += 1;
+    setIsDraggingFile(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    // Sin este preventDefault el navegador nunca dispara onDrop.
+    if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setIsDraggingFile(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    dragCounter.current = 0;
+    setIsDraggingFile(false);
+    if (event.dataTransfer.files.length > 0) {
+      attachmentsState.addFiles(event.dataTransfer.files);
+    }
+  }
 
   if (conversationStatus === "loading" || conversationStatus === "idle") {
     return (
@@ -55,7 +91,13 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
 
   return (
     <ImageLightboxProvider>
-      <div className="flex h-[100dvh] lg:h-full flex-1 flex-col min-h-0">
+      <div
+        className="relative flex h-[100dvh] lg:h-full flex-1 flex-col min-h-0"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <ConversationHeader title={displayName} subtitle={subtitle} imageUrl={avatarUrl} />
         <MessageList
           messages={messages}
@@ -72,7 +114,16 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onSend={send}
           onTyping={notifyTyping}
           onStopTyping={notifyStopped}
+          attachmentsState={attachmentsState}
         />
+        {isDraggingFile && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-brand-blue/10 backdrop-blur-[1px]">
+            <div className="m-4 flex flex-1 flex-col items-center justify-center gap-2 self-stretch rounded-2xl border-2 border-dashed border-brand-blue text-brand-blue dark:bg-neutral-900/60">
+              <IconPaperclip size={36} stroke={1.5} />
+              <p className="font-display text-base font-semibold">Soltá los archivos para adjuntarlos</p>
+            </div>
+          </div>
+        )}
       </div>
     </ImageLightboxProvider>
   );

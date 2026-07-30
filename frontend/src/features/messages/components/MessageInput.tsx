@@ -11,15 +11,22 @@ interface MessageInputProps {
   onSend: (content: string, fileIds?: string[]) => Promise<void> | void;
   onTyping: () => void;
   onStopTyping: () => void;
+  attachmentsState: ReturnType<typeof useMessageAttachments>;
 }
 
-export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }: MessageInputProps) {
+export function MessageInput({
+  conversationId,
+  onSend,
+  onTyping,
+  onStopTyping,
+  attachmentsState,
+}: MessageInputProps) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { attachments, addFiles, removeAttachment, reset: resetAttachments, isUploading, fileIds } =
-    useMessageAttachments(conversationId);
+    attachmentsState;
 
   useEffect(() => {
     textareaRef.current?.focus();
