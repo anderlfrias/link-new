@@ -33,6 +33,7 @@ export interface Conversation {
   name: string | null;
   type: ConversationType;
   imageFileId: string | null;
+  imageFile: { path: string } | null;
   createdById: string;
   lastMessageId: string | null;
   lastMessageAt: string | null;

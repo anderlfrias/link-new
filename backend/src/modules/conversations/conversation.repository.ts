@@ -2,6 +2,7 @@ import { ChatAuditAction, ConversationType, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 
 const withMembers = {
+  imageFile: { select: { path: true } },
   members: {
     include: {
       user: {

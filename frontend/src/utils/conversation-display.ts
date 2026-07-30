@@ -18,9 +18,11 @@ export function getConversationDisplayName(conversation: Conversation, currentUs
   return other?.user.name ?? "Usuario";
 }
 
-/** PRIVATE: foto del otro miembro. GROUP: `null` (todavía sin imagen de grupo), cae a iniciales. */
+/** GROUP: foto del grupo si se subió una (si no, cae a iniciales). PRIVATE: foto del otro miembro. */
 export function getConversationAvatarUrl(conversation: Conversation, currentUserId: string): string | null {
-  if (conversation.type === "GROUP") return null;
+  if (conversation.type === "GROUP") {
+    return conversation.imageFile ? buildStoredFileUrl(conversation.imageFile.path) : null;
+  }
   const other = getOtherMembers(conversation, currentUserId)[0];
   return other?.user.avatarFile ? buildStoredFileUrl(other.user.avatarFile.path) : null;
 }

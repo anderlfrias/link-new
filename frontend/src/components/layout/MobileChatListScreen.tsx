@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { ConversationList } from "@/features/conversations/components/ConversationList";
-import { NewChatContactList } from "@/features/users/components/NewChatContactList";
+import { NewChatModal } from "@/features/users/components/NewChatModal";
 import { ProfileSettingsPanel } from "@/features/profile/components/ProfileSettingsPanel";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
 import type { ConversationListItem } from "@/features/conversations/types/conversation.types";
@@ -76,7 +76,7 @@ export function MobileChatListScreen({
       </button>
       {showNewChat && (
         <Modal onClose={() => setShowNewChat(false)} aria-label="Chat nuevo">
-          <NewChatContactList onClose={() => setShowNewChat(false)} />
+          <NewChatModal onClose={() => setShowNewChat(false)} />
         </Modal>
       )}
     </div>

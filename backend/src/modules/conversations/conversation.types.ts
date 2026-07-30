@@ -24,6 +24,9 @@ export type ConversationMemberWithUser = ConversationMember & {
 };
 
 export type ConversationWithMembers = Conversation & {
+  /// Solo `path` — igual que `avatarFile` en `ConversationMemberWithUser`. Solo
+  /// tiene valor cuando `type` es GROUP (ver `imageFileId` en schema.prisma).
+  imageFile: Pick<StoredFile, "path"> | null;
   members: ConversationMemberWithUser[];
 };
 

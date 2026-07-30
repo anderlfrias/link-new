@@ -203,6 +203,7 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
   "name": "Proyecto X",
   "type": "GROUP",
   "imageFileId": "file-uuid-o-null",
+  "imageFile": { "path": "chat/2026/07/....jpg" },
   "createdById": "user-uuid",
   "lastMessageId": "msg-uuid-o-null",
   "lastMessageAt": "2026-07-24T10:00:00.000Z",
@@ -226,9 +227,11 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 }
 ```
 
-`type` es `"PRIVATE"` (exactamente 2 miembros fijos) o `"GROUP"` (3 o más). `name`/`imageFileId` solo aplican a `GROUP`.
+`type` es `"PRIVATE"` (exactamente 2 miembros fijos) o `"GROUP"` (3 o más). `name`/`imageFileId`/`imageFile` solo aplican a `GROUP`.
 
 `user.avatarFile` viene embebido (igual que los adjuntos de mensajes) para no tener que pedir cada avatar por separado: si no es `null`, construir la URL como `<origin-del-backend>/uploads/<avatarFile.path>` (sin autenticación, igual que cualquier otro `StoredFile` servido por `express.static`). Se cachea automáticamente en cada login de **ese** usuario — ver "Endpoint: foto de perfil" más abajo y `backend/src/modules/files/README.md`.
+
+`imageFile` (imagen del grupo) viene embebido con el mismo criterio que `avatarFile` — `null` si el grupo no tiene foto (o es `PRIVATE`), y si no es `null` se construye la URL igual: `<origin-del-backend>/uploads/<imageFile.path>`.
 
 ### 4.1 `POST /` — Crear conversación
 
