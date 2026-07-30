@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, KeyboardEvent, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, useRef, useState, useEffect } from "react";
 import { IconPaperclip, IconSend2 } from "@tabler/icons-react";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
@@ -17,8 +17,13 @@ export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }:
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { attachments, addFiles, removeAttachment, reset: resetAttachments, isUploading, fileIds } =
     useMessageAttachments(conversationId);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [conversationId]);
 
   const canSend = (Boolean(value.trim()) || fileIds.length > 0) && !sending && !isUploading;
 
@@ -87,6 +92,7 @@ export function MessageInput({ conversationId, onSend, onTyping, onStopTyping }:
           <IconPaperclip size={20} stroke={1.75} />
         </button>
         <textarea
+          ref={textareaRef}
           rows={1}
           value={value}
           onChange={(event) => {
