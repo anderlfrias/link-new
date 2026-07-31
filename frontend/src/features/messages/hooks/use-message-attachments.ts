@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { uploadFile } from "@/features/files/api/files.api";
+import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 import type { UploadedFile } from "@/features/files/types/file.types";
 
 export type AttachmentStatus = "uploading" | "done" | "error";
@@ -33,7 +34,19 @@ export function useMessageAttachments(conversationId: string) {
         const localId = `${Date.now()}-${nextId.current++}`;
         setAttachments((prev) => [...prev, { localId, file, status: "uploading" }]);
 
-        uploadFile(token, file, conversationId)
+        compressImage(file, file.name, IMAGE_COMPRESSION_PRESETS.message)
+          .then((compressed) => {
+            // Reemplaza el archivo mostrado en el chip por el comprimido —
+            // así el tamaño que ve el usuario ya refleja lo que se sube.
+            if (compressed !== file) {
+              setAttachments((prev) =>
+                prev.map((attachment) =>
+                  attachment.localId === localId ? { ...attachment, file: compressed } : attachment,
+                ),
+              );
+            }
+            return uploadFile(token, compressed, conversationId);
+          })
           .then((uploaded) => {
             setAttachments((prev) =>
               prev.map((attachment) =>

@@ -19,6 +19,7 @@ import { useUsers } from "@/features/users/hooks/use-users";
 import { useStartConversation } from "@/features/conversations/hooks/use-start-conversation";
 import { useCreateGroup } from "@/features/conversations/hooks/use-create-group";
 import { buildStoredFileUrl } from "@/utils/file-url";
+import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 
 interface NewChatModalProps {
   onClose: () => void;
@@ -35,6 +36,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
   const [groupName, setGroupName] = useState("");
   const [groupImage, setGroupImage] = useState<File | null>(null);
   const [groupImagePreview, setGroupImagePreview] = useState<string | null>(null);
+  const [compressingImage, setCompressingImage] = useState(false);
 
   const { users, status } = useUsers(true);
   const { startWithUser, pending: startingChat, error: startError } = useStartConversation();
@@ -67,12 +69,18 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
     setSelectedIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
   }
 
-  function handleGroupImageChange(event: ChangeEvent<HTMLInputElement>) {
+  async function handleGroupImageChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setGroupImage(file);
-    setGroupImagePreview(URL.createObjectURL(file));
+    setCompressingImage(true);
+    try {
+      const compressed = await compressImage(file, file.name, IMAGE_COMPRESSION_PRESETS.avatar);
+      setGroupImage(compressed);
+      setGroupImagePreview(URL.createObjectURL(compressed));
+    } finally {
+      setCompressingImage(false);
+    }
   }
 
   async function handleCreateGroup() {
@@ -234,8 +242,14 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
                 type="file"
                 accept="image/*"
                 className="hidden"
+                disabled={compressingImage}
                 onChange={handleGroupImageChange}
               />
+              {compressingImage && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30">
+                  <IconLoader2 className="animate-spin text-white" size={24} />
+                </div>
+              )}
             </div>
           </div>
 

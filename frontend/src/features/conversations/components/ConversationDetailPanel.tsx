@@ -16,6 +16,7 @@ import {
 } from "@/utils/conversation-display";
 import { buildStoredFileUrl, buildUploadedFileUrl } from "@/utils/file-url";
 import { downloadFile } from "@/utils/download-file";
+import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
 import type { Conversation } from "@/features/conversations/types/conversation.types";
 
@@ -78,7 +79,8 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
     if (!file || !session) return;
     setUploadingPhoto(true);
     try {
-      const uploaded = await uploadFile(session.token, file, conversation.id);
+      const compressed = await compressImage(file, file.name, IMAGE_COMPRESSION_PRESETS.avatar);
+      const uploaded = await uploadFile(session.token, compressed, conversation.id);
       await update({ imageFileId: uploaded.id });
     } finally {
       setUploadingPhoto(false);
