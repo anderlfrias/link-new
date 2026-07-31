@@ -5,7 +5,7 @@ import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
 import { buildStoredFileUrl } from "@/utils/file-url";
 import { downloadFile } from "@/utils/download-file";
-import { formatFileSize, isImageMimeType } from "@/utils/file-format";
+import { formatFileSize, isAudioMimeType, isImageMimeType } from "@/utils/file-format";
 import { cn } from "@/utils/cn";
 import type { MessageFile } from "@/features/messages/types/message.types";
 
@@ -37,6 +37,26 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt={file.originalName} className="max-h-64 w-full object-cover" />
             </button>
+          );
+        }
+
+        if (isAudioMimeType(file.mimeType)) {
+          return (
+            <div key={id} className="flex items-center gap-1.5">
+              {/* Reproductor nativo: sin librería para esto, alcanza con play/pausa/seek. */}
+              <audio controls src={url} className="h-9 min-w-0 flex-1" style={{ maxWidth: 240 }} />
+              <button
+                type="button"
+                onClick={() => downloadFile(url, file.originalName)}
+                aria-label={`Descargar ${file.originalName}`}
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+                  isOwn ? "hover:bg-white/10" : "hover:bg-black/5 dark:hover:bg-white/10",
+                )}
+              >
+                <IconDownload size={16} className="opacity-70" />
+              </button>
+            </div>
           );
         }
 

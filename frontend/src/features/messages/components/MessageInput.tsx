@@ -2,16 +2,23 @@
 
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
+  IconCheck,
   IconFileText,
   IconHeadphones,
+  IconLoader2,
+  IconMicrophone,
   IconPaperclip,
   IconPhoto,
   IconSend2,
+  IconTrash,
   IconVideo,
   type TablerIcon,
 } from "@tabler/icons-react";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
+import { useVoiceRecorder } from "@/features/messages/hooks/use-voice-recorder";
+import { useAuth } from "@/providers/auth-provider";
+import { uploadFile } from "@/features/files/api/files.api";
 
 interface MessageInputProps {
   conversationId: string;
@@ -33,6 +40,14 @@ const ATTACHMENT_OPTIONS: { label: string; accept?: string; icon: TablerIcon }[]
   { label: "Documento", icon: IconFileText },
 ];
 
+/** "125000" -> "2:05". */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function MessageInput({
   conversationId,
   onSend,
@@ -43,9 +58,13 @@ export function MessageInput({
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [sendingVoiceNote, setSendingVoiceNote] = useState(false);
+  const [voiceNoteError, setVoiceNoteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { session } = useAuth();
+  const recorder = useVoiceRecorder();
   const { attachments, addFiles, removeAttachment, reset: resetAttachments, isUploading, fileIds } =
     attachmentsState;
 
@@ -114,6 +133,31 @@ export function MessageInput({
     input?.click();
   }
 
+  async function handleStartRecording() {
+    setVoiceNoteError(null);
+    await recorder.start();
+  }
+
+  async function handleSendRecording() {
+    const file = await recorder.stop();
+    if (!file || !session) return;
+    setSendingVoiceNote(true);
+    setVoiceNoteError(null);
+    try {
+      const uploaded = await uploadFile(session.token, file, conversationId);
+      await onSend("", [uploaded.id]);
+    } catch (error) {
+      setVoiceNoteError(error instanceof Error ? error.message : "No se pudo enviar la nota de voz.");
+    } finally {
+      setSendingVoiceNote(false);
+    }
+  }
+
+  // Igual que WhatsApp/Telegram: el botón de enviar se vuelve micrófono
+  // cuando no hay nada más que mandar — apenas escribís algo o adjuntás un
+  // archivo, vuelve a ser el botón de enviar.
+  const showMicButton = !value.trim() && attachments.length === 0;
+
   return (
     <div className="border-t border-black/5 dark:border-white/10">
       {attachments.length > 0 && (
@@ -127,54 +171,97 @@ export function MessageInput({
           ))}
         </div>
       )}
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 pl-3 pr-5 py-2.5">
-        <input ref={fileInputRef} type="file" multiple onChange={handleFilesSelected} className="hidden" />
-        <div className="relative" ref={attachMenuRef}>
-          {attachMenuOpen && (
-            <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
-              {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => openPicker(accept)}
-                  className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
-                >
-                  <OptionIcon size={18} stroke={1.75} />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
+      {(voiceNoteError || recorder.status === "error") && (
+        <p className="px-4 pt-2 text-xs text-red-500">
+          {voiceNoteError ?? "No se pudo acceder al micrófono."}
+        </p>
+      )}
+      {recorder.status === "recording" ? (
+        <div className="flex items-center gap-3 pl-3 pr-5 py-2.5">
           <button
             type="button"
-            onClick={() => setAttachMenuOpen((prev) => !prev)}
-            aria-label="Adjuntar"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+            onClick={recorder.cancel}
+            aria-label="Cancelar grabación"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
           >
-            <IconPaperclip size={20} stroke={1.75} />
+            <IconTrash size={20} stroke={1.75} />
+          </button>
+          <div className="flex flex-1 items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
+            <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
+            <span className="tabular-nums">{formatDuration(recorder.elapsedMs)}</span>
+            <span className="text-neutral-400 dark:text-neutral-500">Grabando nota de voz...</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleSendRecording()}
+            disabled={sendingVoiceNote}
+            aria-label="Enviar nota de voz"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity disabled:opacity-40"
+          >
+            {sendingVoiceNote ? <IconLoader2 className="animate-spin" size={18} /> : <IconCheck size={20} />}
           </button>
         </div>
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={value}
-          onChange={(event) => {
-            setValue(event.target.value);
-            onTyping();
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
-          className="max-h-32 flex-1 min-w-0 resize-none rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm text-brand-ink outline-none focus:border-brand-blue dark:border-white/10 dark:bg-white/5 dark:text-white"
-        />
-        <button
-          type="submit"
-          disabled={!canSend}
-          aria-label="Enviar mensaje"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity disabled:opacity-40"
-        >
-          <IconSend2 size={18} stroke={1.75} />
-        </button>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex items-end gap-2 pl-3 pr-5 py-2.5">
+          <input ref={fileInputRef} type="file" multiple onChange={handleFilesSelected} className="hidden" />
+          <div className="relative" ref={attachMenuRef}>
+            {attachMenuOpen && (
+              <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
+                {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => openPicker(accept)}
+                    className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+                  >
+                    <OptionIcon size={18} stroke={1.75} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setAttachMenuOpen((prev) => !prev)}
+              aria-label="Adjuntar"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <IconPaperclip size={20} stroke={1.75} />
+            </button>
+          </div>
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              onTyping();
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
+            className="max-h-32 flex-1 min-w-0 resize-none rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm text-brand-ink outline-none focus:border-brand-blue dark:border-white/10 dark:bg-white/5 dark:text-white"
+          />
+          {showMicButton ? (
+            <button
+              type="button"
+              onClick={() => void handleStartRecording()}
+              aria-label="Grabar nota de voz"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <IconMicrophone size={20} stroke={1.75} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!canSend}
+              aria-label="Enviar mensaje"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity disabled:opacity-40"
+            >
+              <IconSend2 size={18} stroke={1.75} />
+            </button>
+          )}
+        </form>
+      )}
     </div>
   );
 }

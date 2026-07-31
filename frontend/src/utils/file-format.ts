@@ -16,3 +16,7 @@ export function formatFileSize(bytes: number): string {
 export function isImageMimeType(mimeType: string): boolean {
   return mimeType.startsWith("image/");
 }
+
+export function isAudioMimeType(mimeType: string): boolean {
+  return mimeType.startsWith("audio/");
+}
