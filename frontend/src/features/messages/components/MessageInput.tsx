@@ -19,6 +19,7 @@ import { useMessageAttachments } from "@/features/messages/hooks/use-message-att
 import { useVoiceRecorder } from "@/features/messages/hooks/use-voice-recorder";
 import { useAuth } from "@/providers/auth-provider";
 import { uploadFile } from "@/features/files/api/files.api";
+import { formatDuration } from "@/utils/format-duration";
 
 interface MessageInputProps {
   conversationId: string;
@@ -39,14 +40,6 @@ const ATTACHMENT_OPTIONS: { label: string; accept?: string; icon: TablerIcon }[]
   { label: "Audio", accept: "audio/*", icon: IconHeadphones },
   { label: "Documento", icon: IconFileText },
 ];
-
-/** "125000" -> "2:05". */
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
 
 export function MessageInput({
   conversationId,
