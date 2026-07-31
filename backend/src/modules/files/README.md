@@ -28,9 +28,10 @@ curl -X POST http://localhost:4000/api/v1/files \
 `conversationId` es opcional y **solo afecta dónde se guarda el archivo en disco** (ver más abajo) — no crea ninguna relación en la base; la única relación real la crea después `messages` (`fileIds`) o `conversations` (`imageFileId`) al referenciar este `id`.
 
 Validaciones, en este orden:
-1. **Tipo MIME** contra el allowlist de [`ALLOWED_MIME_TYPES`](../../constants/allowed-file-types.constant.ts) (imágenes comunes, PDF, texto plano, Office, zip) — `400` si no está permitido. Se rechaza en el propio middleware de `multer` (`file.route.ts`), antes de leer el body completo.
-2. **Tamaño** contra `MAX_UPLOAD_SIZE_MB` (`.env`, default 25 MB) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial).
-3. **Membresía**, solo si mandaste `conversationId`: `403` si no sos miembro de esa conversación. Sin este chequeo, cualquiera podría namespacear archivos bajo una conversación ajena.
+1. **Tamaño** contra `MAX_UPLOAD_SIZE_MB` (`.env`, default 25 MB) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial).
+2. **Membresía**, solo si mandaste `conversationId`: `403` si no sos miembro de esa conversación. Sin este chequeo, cualquiera podría namespacear archivos bajo una conversación ajena.
+
+**Sin allowlist de tipo MIME a propósito**: un adjunto de mensaje acepta cualquier tipo de archivo (csv, exe, lo que sea) — a diferencia del avatar/foto de grupo (`auth.route.ts`), que sí exige `image/*` contra [`ALLOWED_MIME_TYPES`](../../constants/allowed-file-types.constant.ts) porque ahí sí tiene sentido restringir el tipo. Ese mismo mapa sigue existiendo solo como respaldo de extensión en `safeExtension()` (ver más abajo) y como gate del avatar — no como filtro de adjuntos.
 
 Respuesta `201`:
 ```json

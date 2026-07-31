@@ -514,7 +514,7 @@ await fetch("http://localhost:4000/api/v1/files", {
 });
 ```
 
-Validado por tipo MIME (imágenes jpeg/png/gif/webp, PDF, texto plano, Word/Excel, zip — lista completa en `src/constants/allowed-file-types.constant.ts`) y tamaño (`MAX_UPLOAD_SIZE_MB`, default **25 MB**). `400` si el tipo no está permitido o si excede el tamaño. Si mandás `conversationId`, además valida que seas miembro de esa conversación — `403` si no lo sos.
+Sin restricción de tipo de archivo (subís lo que sea — csv, exe, lo que haga falta). Sí hay límite de tamaño (`MAX_UPLOAD_SIZE_MB`, default **25 MB**) — `400` si lo excede. Si mandás `conversationId`, además valida que seas miembro de esa conversación — `403` si no lo sos.
 
 `conversationId` **no crea ninguna relación**: solo le dice al backend bajo qué conversación organizar el archivo en disco (`chat/<conversationId>/<yyyy>/<mm>/<uuid>.<ext>`, en vez de todo suelto bajo `chat/`). La relación real la creás después mandando el `id` que te devuelve esto en `fileIds` (mensajes) o `imageFileId` (conversaciones). Si no lo mandás, se guarda igual bajo `chat/<yyyy>/<mm>/<uuid>.<ext>`.
 

@@ -3,7 +3,7 @@ import path from "path";
 import { StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { storage } from "../../storage";
-import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
+import { ForbiddenError, NotFoundError } from "../../utils/errors";
 import { isConversationMember } from "../conversations/conversation.repository";
 import * as FileRepository from "./file.repository";
 import { StoredFileResponse, UploadedFile } from "./file.types";
@@ -48,14 +48,16 @@ export function toStoredFileResponse(file: StoredFile): StoredFileResponse {
   };
 }
 
+/// Sin allowlist de tipo MIME a propósito: adjuntos de mensaje aceptan
+/// cualquier tipo de archivo (csv, exe, lo que sea), a diferencia del avatar
+/// (`auth.route.ts`, que sí exige `image/*` — ese es un caso distinto, no un
+/// adjunto). Sigue habiendo un límite de tamaño (`MAX_UPLOAD_SIZE_MB`, en el
+/// `multer` de `file.route.ts`) — eso no cambió.
 export async function uploadFile(
   currentUserId: string,
   upload: UploadedFile,
   conversationId?: string,
 ): Promise<StoredFileResponse> {
-  if (!ALLOWED_MIME_TYPES[upload.mimetype]) {
-    throw new BadRequestError(`File type not allowed: ${upload.mimetype}`);
-  }
   if (conversationId && !(await isConversationMember(conversationId, currentUserId))) {
     throw new ForbiddenError("You are not a member of this conversation");
   }

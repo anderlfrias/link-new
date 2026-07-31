@@ -4,7 +4,6 @@ import { ChangeEvent, FormEvent, KeyboardEvent, useRef, useState, useEffect } fr
 import { IconPaperclip, IconSend2 } from "@tabler/icons-react";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
-import { ATTACHMENT_ACCEPT } from "@/constants/allowed-file-types";
 
 interface MessageInputProps {
   conversationId: string;
@@ -82,11 +81,12 @@ export function MessageInput({
         </div>
       )}
       <form onSubmit={handleSubmit} className="flex items-end gap-2 pl-3 pr-5 py-2.5">
+        {/* Sin `accept`: cualquier tipo de archivo (el backend ya no tiene
+            allowlist de MIME para adjuntos, ver backend/API.md sección 9). */}
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          accept={ATTACHMENT_ACCEPT}
           onChange={handleFilesSelected}
           className="hidden"
         />

@@ -1,8 +1,11 @@
-/// Tipos MIME que este sistema acepta como adjunto (avatar, imagen de
-/// conversación, adjunto de mensaje — el mismo `StoredFile` sirve a los tres,
-/// ver backend/README.md "Gestión de Archivos"). La extensión de cada entrada
-/// es el respaldo cuando el nombre original no trae una extensión reconocible
-/// (ver `safeExtension` en `modules/files/file.service.ts`).
+/// Ya NO es un allowlist para adjuntos de mensaje — esos aceptan cualquier
+/// tipo de archivo (ver `file.service.ts`, `uploadFile`). Este mapa sobrevive
+/// para dos cosas nada más: (1) el gate de avatar/foto de grupo en
+/// `auth.route.ts` (`image/*` + acá adentro — un avatar sí debe ser una
+/// imagen conocida), y (2) el respaldo de extensión en `safeExtension`
+/// (`modules/files/file.service.ts`) cuando el nombre original no trae una
+/// extensión reconocible — para el resto de los tipos, la extensión sale
+/// directo del nombre del archivo, no hace falta que estén listados acá.
 export const ALLOWED_MIME_TYPES: Record<string, { extension: string }> = {
   "image/jpeg": { extension: "jpg" },
   "image/png": { extension: "png" },
