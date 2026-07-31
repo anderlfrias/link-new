@@ -5,9 +5,17 @@ function currentUserId(req: Request): string {
   return req.user!.internalUserId!;
 }
 
+function currentUserRoles(req: Request): string[] {
+  return req.user?.roles ?? [];
+}
+
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
-    const conversation = await ConversationService.createConversation(currentUserId(req), req.body);
+    const conversation = await ConversationService.createConversation(
+      currentUserId(req),
+      req.body,
+      currentUserRoles(req),
+    );
     res.status(201).json(conversation);
   } catch (error) {
     next(error);
@@ -53,7 +61,12 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
 export async function addMembers(req: Request, res: Response, next: NextFunction) {
   try {
     const { userIds } = req.body as { userIds: string[] };
-    const conversation = await ConversationService.addMembers(currentUserId(req), req.params.id, userIds);
+    const conversation = await ConversationService.addMembers(
+      currentUserId(req),
+      req.params.id,
+      userIds,
+      currentUserRoles(req),
+    );
     res.json(conversation);
   } catch (error) {
     next(error);
@@ -62,7 +75,12 @@ export async function addMembers(req: Request, res: Response, next: NextFunction
 
 export async function removeMember(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await ConversationService.removeMember(currentUserId(req), req.params.id, req.params.userId);
+    const result = await ConversationService.removeMember(
+      currentUserId(req),
+      req.params.id,
+      req.params.userId,
+      currentUserRoles(req),
+    );
     res.json(result);
   } catch (error) {
     next(error);

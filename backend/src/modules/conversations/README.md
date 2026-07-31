@@ -37,7 +37,7 @@ Base: `/api/v1/conversations`
 ```
 
 * **`PRIVATE`**: `memberIds` debe traer exactamente **un** id (el otro participante; el creador se agrega solo). Si ya existe una conversación `PRIVATE` activa entre ambos, la devuelve tal cual en vez de crear un duplicado — el endpoint es idempotente para este caso.
-* **`GROUP`**: requiere `name` y al menos **dos** ids además del creador (más de dos participantes en total, como documenta el enum `ConversationType` en el schema). `imageFileId` es opcional (debe ser el `id` de un `StoredFile` ya existente — subido antes vía [`files`](../files/README.md), este módulo no sube archivos).
+* **`GROUP`**: requiere `name` y al menos **dos** ids además del creador (más de dos participantes en total, como documenta el enum `ConversationType` en el schema), sin superar `AppSettings.maxGroupMembers` (`400` si se excede). Si `AppSettings.whoCanCreateGroups` es `ADMINS_ONLY`, solo un usuario con rol `"admin"` puede crear un grupo (`403` en caso contrario) — ver [Autorización](#autorización). `imageFileId` es opcional (debe ser el `id` de un `StoredFile` ya existente — subido antes vía [`files`](../files/README.md), este módulo no sube archivos).
 
 Respuesta `201` con la conversación y sus miembros (incluye `user: { id, name, email, avatarFileId, status }` por cada miembro).
 
@@ -61,12 +61,12 @@ Solo aplica a `GROUP` (`400` en `PRIVATE`). Cualquier miembro puede renombrar o 
 { "userIds": ["<userId>", "<userId>"] }
 ```
 
-Solo `GROUP`. Ids ya miembros se ignoran silenciosamente (no es error); si no queda ningún id nuevo, `400`.
+Solo `GROUP`. Ids ya miembros se ignoran silenciosamente (no es error); si no queda ningún id nuevo, `400`. Sujeto a `AppSettings.whoCanAddMembers` y `AppSettings.maxGroupMembers` (ver [Autorización](#autorización)).
 
 ### `DELETE /:id/members/:userId`
 
-* Si `:userId` es el propio usuario autenticado: **salir** de la conversación, permitido a cualquier miembro.
-* Si es otro usuario: solo el creador de la conversación puede quitarlo (`403` en caso contrario).
+* Si `:userId` es el propio usuario autenticado: **salir** de la conversación, permitido a cualquier miembro, sin importar la configuración.
+* Si es otro usuario: sujeto a `AppSettings.whoCanRemoveMembers` (ver [Autorización](#autorización)).
 * No aplica a `PRIVATE` (`400`): una conversación privada siempre tiene exactamente sus dos miembros originales.
 
 ### `DELETE /:id` — Borrar conversación
@@ -83,10 +83,19 @@ Borrado lógico (`deletedAt`), solo el creador (`403` para cualquier otro miembr
 
 ## Autorización
 
-No hay roles por miembro en el modelo de datos (`ConversationMember` no tiene un campo `role`): la única distinción es `Conversation.createdById`. Por eso:
+No hay roles por miembro en el modelo de datos (`ConversationMember` no tiene un campo `role`): la única distinción propia del modelo es `Conversation.createdById`. A partir de eso:
 
-* Cualquier miembro puede: ver la conversación, renombrarla/cambiar su imagen, agregar miembros, marcarla como leída, y salir de ella.
-* Solo el creador puede: quitar a **otro** miembro, o borrar la conversación.
+* Cualquier miembro puede siempre: ver la conversación, renombrarla/cambiar su imagen, marcarla como leída, y salir de ella (auto-remoción).
+* Solo el creador puede siempre: borrar la conversación (esto no es configurable).
+* Crear un grupo, agregar miembros y quitar a **otro** miembro son configurables en runtime por un admin, vía [`AppSettings`](../settings/README.md) (`GroupPermissionLevel`: `ALL_MEMBERS` / `ADMINS_ONLY` / `CREATOR_ONLY`):
+
+  | Acción | Campo | Default | `ALL_MEMBERS` | `ADMINS_ONLY` | `CREATOR_ONLY` |
+  |---|---|---|---|---|---|
+  | Crear grupo | `whoCanCreateGroups` | `ALL_MEMBERS` | cualquier usuario | solo rol `"admin"` | (no aplica — no hay creador antes de crear el grupo) |
+  | Agregar miembros | `whoCanAddMembers` | `ALL_MEMBERS` | cualquier miembro | solo rol `"admin"` | solo el creador de la conversación |
+  | Quitar a otro miembro | `whoCanRemoveMembers` | `CREATOR_ONLY` | cualquier miembro | solo rol `"admin"` | solo el creador de la conversación |
+
+  El default de `whoCanRemoveMembers` (`CREATOR_ONLY`) reproduce el comportamiento histórico de este módulo antes de que `AppSettings` existiera.
 
 Toda operación primero verifica membresía activa (`403` si el usuario no pertenece a la conversación, `404` si la conversación no existe o está borrada).
 

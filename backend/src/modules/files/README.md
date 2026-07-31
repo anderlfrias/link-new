@@ -10,7 +10,7 @@ Base: `/api/v1/files`
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `POST` | `/` | Sube un archivo (`multipart/form-data`, campo `file`, `conversationId` opcional). |
+| `POST` | `/` | Sube un archivo (`multipart/form-data`, campo `file`, `conversationId` y `kind` opcionales). |
 | `GET` | `/:id` | Metadata del archivo (incluye `url`). |
 | `DELETE` | `/:id` | Borrado lógico (solo quien lo subió). |
 
@@ -27,11 +27,16 @@ curl -X POST http://localhost:4000/api/v1/files \
 
 `conversationId` es opcional y **solo afecta dónde se guarda el archivo en disco** (ver más abajo) — no crea ninguna relación en la base; la única relación real la crea después `messages` (`fileIds`) o `conversations` (`imageFileId`) al referenciar este `id`.
 
-Validaciones, en este orden:
-1. **Tamaño** contra `MAX_UPLOAD_SIZE_MB` (`.env`, default 25 MB) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial).
-2. **Membresía**, solo si mandaste `conversationId`: `403` si no sos miembro de esa conversación. Sin este chequeo, cualquiera podría namespacear archivos bajo una conversación ajena.
+`kind` es opcional (`"file"` default, o `"voice_note"`) — distingue una nota de voz grabada de un adjunto genérico, ya que solo la primera tiene un límite de duración. No se persiste: el archivo se guarda igual sea cual sea el `kind`.
 
-**Sin allowlist de tipo MIME a propósito**: un adjunto de mensaje acepta cualquier tipo de archivo (csv, exe, lo que sea) — a diferencia del avatar/foto de grupo (`auth.route.ts`), que sí exige `image/*` contra [`ALLOWED_MIME_TYPES`](../../constants/allowed-file-types.constant.ts) porque ahí sí tiene sentido restringir el tipo. Ese mismo mapa sigue existiendo solo como respaldo de extensión en `safeExtension()` (ver más abajo) y como gate del avatar — no como filtro de adjuntos.
+Validaciones, en este orden:
+1. **Techo de seguridad fijo** (`ABSOLUTE_MAX_UPLOAD_BYTES`, `file.route.ts`, 500 MB, no editable) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial). Existe solo para no dejar que `multer` bufferee en memoria un body absurdamente grande.
+2. **Membresía**, solo si mandaste `conversationId`: `403` si no sos miembro de esa conversación. Sin este chequeo, cualquiera podría namespacear archivos bajo una conversación ajena.
+3. **Tamaño real** (`file.service.ts`, `uploadFile`) contra `AppSettings.maxUploadSizeMb` — este es el límite editable en runtime por un admin (ver [`settings`](../settings/README.md)); `400` si se excede.
+4. **Tipo de archivo**, solo si `AppSettings.fileTypeRestrictionMode` no es `DISABLED` (default): `ALLOWLIST` rechaza (`400`) cualquier mime type que no esté en `fileTypeList`; `BLOCKLIST` rechaza el que sí esté.
+5. **Duración**, solo si `kind === "voice_note"`: exige mime type `audio/*` y calcula la duración real del buffer (`music-metadata`, nunca confiando en un valor que mande el cliente) contra `AppSettings.maxVoiceNoteDurationSeconds`; `400` si se excede.
+
+**Sin allowlist de tipo MIME por defecto**: un adjunto de mensaje acepta cualquier tipo de archivo (csv, exe, lo que sea) salvo que un admin active un allowlist/blocklist — a diferencia del avatar/foto de grupo (`auth.route.ts`), que siempre exige `image/*` contra [`ALLOWED_MIME_TYPES`](../../constants/allowed-file-types.constant.ts). Ese mismo mapa sigue existiendo también como respaldo de extensión en `safeExtension()` (ver más abajo) y como gate del avatar.
 
 Respuesta `201`:
 ```json

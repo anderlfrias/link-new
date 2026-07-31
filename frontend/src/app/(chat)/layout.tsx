@@ -15,7 +15,11 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const { session, status } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  // Rutas donde el panel principal (a la derecha del sidebar) debe ocupar toda
+  // la pantalla en mobile, en vez del listado de conversaciones.
   const isConversationRoute = pathname?.startsWith("/conversations/") ?? false;
+  const isAdminRoute = pathname?.startsWith("/admin") ?? false;
+  const showMainPanelOnMobile = isConversationRoute || isAdminRoute;
 
   const { conversations, status: conversationsStatus } = useConversations();
   useMessageNotifications(conversations, session?.user.internalUserId ?? "");
@@ -51,7 +55,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
       <div
         className={cn(
           "border-black/5 dark:border-white/10 lg:flex lg:w-95 lg:shrink-0 lg:border-r",
-          isConversationRoute ? "hidden" : "flex w-full",
+          showMainPanelOnMobile ? "hidden" : "flex w-full",
         )}
       >
         <div className="hidden h-full w-full lg:block">
@@ -72,7 +76,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
       {/* Panel principal — en desktop siempre visible (empty state o conversación); en mobile
           solo cuando hay una conversación abierta, ocupando toda la pantalla. */}
-      <div className={cn("h-full flex-1 flex-col min-h-0", isConversationRoute ? "flex" : "hidden lg:flex")}>
+      <div className={cn("h-full flex-1 flex-col min-h-0", showMainPanelOnMobile ? "flex" : "hidden lg:flex")}>
         {children}
       </div>
     </div>

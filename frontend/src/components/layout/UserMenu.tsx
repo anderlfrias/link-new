@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { IconLogout, IconUserEdit } from "@tabler/icons-react";
+import Link from "next/link";
+import { IconLogout, IconSettings, IconUserEdit } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useProfilePicture } from "@/features/auth/hooks/use-profile-picture";
+import { ADMIN_ROLE } from "@/features/admin/constants/admin-role.constant";
 import { Avatar } from "@/components/ui/Avatar";
 
 interface UserMenuProps {
@@ -60,6 +62,16 @@ export function UserMenu({ onOpenProfileSettings }: UserMenuProps) {
             <IconUserEdit size={16} stroke={1.75} />
             Editar perfil
           </button>
+          {session.user.roles.includes(ADMIN_ROLE) && (
+            <Link
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+            >
+              <IconSettings size={16} stroke={1.75} />
+              Panel de administración
+            </Link>
+          )}
           <button
             type="button"
             onClick={logout}

@@ -1,7 +1,9 @@
-import { ChatAuditAction, ConversationType } from "@prisma/client";
+import { ChatAuditAction, ConversationType, GroupPermissionLevel } from "@prisma/client";
+import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { getIO } from "../../socket";
 import { conversationRoomName, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
+import * as SettingsService from "../settings/settings.service";
 import * as ConversationRepository from "./conversation.repository";
 import { CONVERSATION_EVENTS } from "./conversation.socket";
 import {
@@ -75,7 +77,11 @@ export async function assertMembership(conversationId: string, userId: string): 
   return conversation;
 }
 
-export async function createConversation(currentUserId: string, input: CreateConversationInput) {
+export async function createConversation(
+  currentUserId: string,
+  input: CreateConversationInput,
+  userRoles: string[],
+) {
   const otherMemberIds = Array.from(new Set(input.memberIds)).filter((id) => id !== currentUserId);
 
   if (input.type === ConversationType.PRIVATE) {
@@ -88,8 +94,15 @@ export async function createConversation(currentUserId: string, input: CreateCon
       return existing;
     }
   } else {
+    const settings = await SettingsService.getSettings();
+    if (settings.whoCanCreateGroups === GroupPermissionLevel.ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
+      throw new ForbiddenError("Only admins can create group conversations");
+    }
     if (otherMemberIds.length < 2) {
       throw new BadRequestError("A group conversation requires at least two other members");
+    }
+    if (otherMemberIds.length + 1 > settings.maxGroupMembers) {
+      throw new BadRequestError(`A group conversation cannot have more than ${settings.maxGroupMembers} members`);
     }
     if (!input.name?.trim()) {
       throw new BadRequestError("name is required for group conversations");
@@ -210,16 +223,32 @@ export async function updateConversation(
   return updated;
 }
 
-export async function addMembers(currentUserId: string, conversationId: string, userIds: string[]) {
+export async function addMembers(
+  currentUserId: string,
+  conversationId: string,
+  userIds: string[],
+  userRoles: string[],
+) {
   const conversation = await assertMembership(conversationId, currentUserId);
   if (conversation.type !== ConversationType.GROUP) {
     throw new BadRequestError("Only group conversations support adding members");
+  }
+
+  const settings = await SettingsService.getSettings();
+  if (settings.whoCanAddMembers === GroupPermissionLevel.ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
+    throw new ForbiddenError("Only admins can add members to this conversation");
+  }
+  if (settings.whoCanAddMembers === GroupPermissionLevel.CREATOR_ONLY && conversation.createdById !== currentUserId) {
+    throw new ForbiddenError("Only the conversation creator can add members");
   }
 
   const existingMemberIds = new Set(conversation.members.map((member) => member.userId));
   const newUserIds = Array.from(new Set(userIds)).filter((id) => !existingMemberIds.has(id));
   if (newUserIds.length === 0) {
     throw new BadRequestError("No new members to add");
+  }
+  if (existingMemberIds.size + newUserIds.length > settings.maxGroupMembers) {
+    throw new BadRequestError(`A group conversation cannot have more than ${settings.maxGroupMembers} members`);
   }
 
   const existingUsers = await ConversationRepository.countExistingUsers(newUserIds);
@@ -253,15 +282,32 @@ export async function addMembers(currentUserId: string, conversationId: string, 
   return updated;
 }
 
-export async function removeMember(currentUserId: string, conversationId: string, targetUserId: string) {
+export async function removeMember(
+  currentUserId: string,
+  conversationId: string,
+  targetUserId: string,
+  userRoles: string[],
+) {
   const conversation = await assertMembership(conversationId, currentUserId);
   if (conversation.type !== ConversationType.GROUP) {
     throw new BadRequestError("Members cannot be removed from a private conversation");
   }
 
+  // Salir de la conversación (auto-remoción) siempre está permitido, sin
+  // importar `whoCanRemoveMembers` — esa configuración solo gobierna remover
+  // a OTRO miembro.
   const isSelf = targetUserId === currentUserId;
-  if (!isSelf && conversation.createdById !== currentUserId) {
-    throw new ForbiddenError("Only the conversation creator can remove other members");
+  if (!isSelf) {
+    const settings = await SettingsService.getSettings();
+    if (settings.whoCanRemoveMembers === GroupPermissionLevel.ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
+      throw new ForbiddenError("Only admins can remove other members");
+    }
+    if (
+      settings.whoCanRemoveMembers === GroupPermissionLevel.CREATOR_ONLY &&
+      conversation.createdById !== currentUserId
+    ) {
+      throw new ForbiddenError("Only the conversation creator can remove other members");
+    }
   }
   if (!conversation.members.some((member) => member.userId === targetUserId)) {
     throw new NotFoundError("That user is not a member of this conversation");

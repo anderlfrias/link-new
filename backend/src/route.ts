@@ -3,6 +3,7 @@ import authRoutes from "./modules/auth/auth.route";
 import conversationRoutes from "./modules/conversations/conversation.route";
 import fileRoutes from "./modules/files/file.route";
 import messageRoutes from "./modules/messages/message.route";
+import { adminSettingsRouter, publicSettingsRouter } from "./modules/settings/settings.route";
 import userRoutes from "./modules/users/user.route";
 
 const router = Router();
@@ -21,5 +22,8 @@ router.use("/v1/files", fileRoutes);
 // Directorio de usuarios (para elegir con quién iniciar una conversación nueva).
 // authenticate + attachInternalUser se aplican dentro de user.route.ts.
 router.use("/v1/users", userRoutes);
+// Configuración global de la instalación — ver settings/README.md.
+router.use("/v1/admin/settings", adminSettingsRouter);
+router.use("/v1/settings/public", publicSettingsRouter);
 
 export default router;

@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from "crypto";
 import path from "path";
-import { StoredFile } from "@prisma/client";
+import { parseBuffer } from "music-metadata";
+import { FileTypeRestrictionMode, StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { storage } from "../../storage";
-import { ForbiddenError, NotFoundError } from "../../utils/errors";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import { isConversationMember } from "../conversations/conversation.repository";
+import * as SettingsService from "../settings/settings.service";
 import * as FileRepository from "./file.repository";
-import { StoredFileResponse, UploadedFile } from "./file.types";
+import { StoredFileResponse, UploadedFile, UploadKind } from "./file.types";
 
 /// Con `conversationId`, namespacea el archivo bajo esa conversación y el
 /// año/mes actual (`chat/<conversationId>/<yyyy>/<mm>/...`), para no acumular
@@ -48,18 +50,53 @@ export function toStoredFileResponse(file: StoredFile): StoredFileResponse {
   };
 }
 
-/// Sin allowlist de tipo MIME a propósito: adjuntos de mensaje aceptan
+/// Sin allowlist de tipo MIME por defecto: adjuntos de mensaje aceptan
 /// cualquier tipo de archivo (csv, exe, lo que sea), a diferencia del avatar
 /// (`auth.route.ts`, que sí exige `image/*` — ese es un caso distinto, no un
-/// adjunto). Sigue habiendo un límite de tamaño (`MAX_UPLOAD_SIZE_MB`, en el
-/// `multer` de `file.route.ts`) — eso no cambió.
+/// adjunto). Un admin puede activar un allowlist/blocklist en runtime (ver
+/// `AppSettings.fileTypeRestrictionMode`, ../settings/README.md).
+///
+/// El límite de tamaño real y editable en runtime es `AppSettings.maxUploadSizeMb`
+/// — se valida acá, no en el `multer` de `file.route.ts` (ese solo aplica un
+/// techo de seguridad fijo, no editable). Cuando `kind === "voice_note"`,
+/// también se valida `AppSettings.maxVoiceNoteDurationSeconds` contra la
+/// duración real del audio (calculada acá, nunca confiada del cliente).
 export async function uploadFile(
   currentUserId: string,
   upload: UploadedFile,
   conversationId?: string,
+  kind: UploadKind = "file",
 ): Promise<StoredFileResponse> {
   if (conversationId && !(await isConversationMember(conversationId, currentUserId))) {
     throw new ForbiddenError("You are not a member of this conversation");
+  }
+
+  const settings = await SettingsService.getSettings();
+
+  if (upload.buffer.length > settings.maxUploadSizeMb * 1024 * 1024) {
+    throw new BadRequestError(`File exceeds the maximum allowed size of ${settings.maxUploadSizeMb}MB`);
+  }
+
+  if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.ALLOWLIST) {
+    if (!settings.fileTypeList.includes(upload.mimetype)) {
+      throw new BadRequestError(`File type "${upload.mimetype}" is not allowed`);
+    }
+  } else if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.BLOCKLIST) {
+    if (settings.fileTypeList.includes(upload.mimetype)) {
+      throw new BadRequestError(`File type "${upload.mimetype}" is blocked`);
+    }
+  }
+
+  if (kind === "voice_note") {
+    if (!upload.mimetype.startsWith("audio/")) {
+      throw new BadRequestError('Voice notes must have an "audio/*" mime type');
+    }
+    const { format } = await parseBuffer(upload.buffer, upload.mimetype);
+    if (format.duration && format.duration > settings.maxVoiceNoteDurationSeconds) {
+      throw new BadRequestError(
+        `Voice note exceeds the maximum allowed duration of ${settings.maxVoiceNoteDurationSeconds}s`,
+      );
+    }
   }
 
   const extension = safeExtension(upload.originalname, upload.mimetype);

@@ -94,6 +94,18 @@ export function softDelete(messageId: string, deletedById: string) {
   });
 }
 
+/// Usado por el worker de retención (`src/workers/message-retention.worker.ts`)
+/// para el borrado automático por `AppSettings.messageRetentionDays`. A
+/// diferencia de `softDelete`, no tiene `deletedById` (no lo borró un
+/// usuario) y opera en lote — devuelve cuántos mensajes marcó, para logging.
+export async function softDeleteOlderThan(cutoffDate: Date): Promise<number> {
+  const result = await prisma.message.updateMany({
+    where: { createdAt: { lt: cutoffDate }, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+  return result.count;
+}
+
 export function logAudit(params: {
   userId: string;
   action: ChatAuditAction;

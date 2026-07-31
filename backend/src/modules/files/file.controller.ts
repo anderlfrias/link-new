@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { BadRequestError } from "../../utils/errors";
 import * as FileService from "./file.service";
+import { UploadKind } from "./file.types";
 
 function currentUserId(req: Request): string {
   return req.user!.internalUserId!;
@@ -11,10 +12,11 @@ export async function upload(req: Request, res: Response, next: NextFunction) {
     if (!req.file) {
       throw new BadRequestError('Missing file (expected multipart/form-data field "file")');
     }
-    // Campo de texto opcional dentro del mismo multipart/form-data, no JSON —
-    // por eso se lee crudo de req.body en vez de pasar por validateBody.
+    // Campos de texto opcionales dentro del mismo multipart/form-data, no
+    // JSON — por eso se leen crudos de req.body en vez de pasar por validateBody.
     const conversationId = typeof req.body?.conversationId === "string" ? req.body.conversationId : undefined;
-    const file = await FileService.uploadFile(currentUserId(req), req.file, conversationId);
+    const kind: UploadKind = req.body?.kind === "voice_note" ? "voice_note" : "file";
+    const file = await FileService.uploadFile(currentUserId(req), req.file, conversationId, kind);
     res.status(201).json(file);
   } catch (error) {
     next(error);

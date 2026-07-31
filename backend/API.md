@@ -244,7 +244,7 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 
 - `memberIds`: ids **internos** de los demás participantes (no incluyas tu propio id, se agrega solo).
 - `PRIVATE`: exactamente 1 id en `memberIds`. Si ya existe una conversación privada activa entre ambos, la devuelve tal cual en vez de crear otra (podés llamarlo sin chequear antes "¿ya existe un chat con este usuario?").
-- `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total). `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6).
+- `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total), sin superar el máximo configurado por un admin (`AppSettings.maxGroupMembers`, ver sección 12) — `400` si se excede. Si un admin configuró `whoCanCreateGroups: "ADMINS_ONLY"`, solo un usuario con rol `"admin"` puede crear un `GROUP` (`403` en caso contrario) — ver 4.8. `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6).
 
 → `201` con la conversación completa.
 
@@ -291,12 +291,12 @@ Al menos uno de los dos campos. Solo `GROUP` (`400` en `PRIVATE`). `imageFileId:
 { "userIds": ["<userId1>", "<userId2>"] }
 ```
 
-Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningún id nuevo, `400`. Emite `conversation:member_added` `{ conversationId, userIds }` a la room, y `conversation:created` (conversación completa) a la room personal de cada miembro nuevo.
+Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningún id nuevo, `400`; si el total resultante supera `AppSettings.maxGroupMembers`, `400`. Sujeto a `AppSettings.whoCanAddMembers` (ver 4.8) — `403` si no tenés permiso. Emite `conversation:member_added` `{ conversationId, userIds }` a la room, y `conversation:created` (conversación completa) a la room personal de cada miembro nuevo.
 
 ### 4.6 `DELETE /:id/members/:userId` — Quitar miembro / salir
 
-- `:userId` = tu propio id → salir de la conversación, cualquier miembro puede.
-- `:userId` = otro usuario → solo el creador de la conversación puede (`403` si no).
+- `:userId` = tu propio id → salir de la conversación, siempre permitido a cualquier miembro, sin importar la configuración.
+- `:userId` = otro usuario → sujeto a `AppSettings.whoCanRemoveMembers` (ver 4.8) — `403` si no tenés permiso.
 - No aplica a `PRIVATE` (`400` siempre).
 
 → `200` `{ "conversationId": "...", "userId": "..." }`. Emite `conversation:member_removed` a la room.
@@ -307,14 +307,23 @@ Borrado lógico, solo el creador (`403` para cualquier otro miembro), sin import
 
 ### 4.8 Quién puede hacer qué
 
-No hay roles por miembro en el modelo de datos — la única distinción es `createdById`:
+No hay roles por miembro en el modelo de datos — la distinción propia del modelo sigue siendo `createdById`:
 
 | Acción | Cualquier miembro | Solo el creador |
 |---|:---:|:---:|
-| Ver, renombrar, cambiar imagen, agregar miembros, marcar leído | ✅ | |
+| Ver, renombrar, cambiar imagen, marcar leído | ✅ | |
 | Salir (quitarse a sí mismo) | ✅ | |
-| Quitar a **otro** miembro | | ✅ |
 | Borrar la conversación | | ✅ |
+
+Crear un `GROUP`, agregar miembros y quitar a **otro** miembro ya no son fijos: un admin los configura en runtime vía `AppSettings` (sección 12, `GroupPermissionLevel`: `ALL_MEMBERS` | `ADMINS_ONLY` | `CREATOR_ONLY`):
+
+| Acción | Campo | Default | `ALL_MEMBERS` | `ADMINS_ONLY` | `CREATOR_ONLY` |
+|---|---|---|---|---|---|
+| Crear grupo | `whoCanCreateGroups` | `ALL_MEMBERS` | cualquier usuario | solo rol `"admin"` | (no aplica) |
+| Agregar miembros | `whoCanAddMembers` | `ALL_MEMBERS` | cualquier miembro | solo rol `"admin"` | solo el creador |
+| Quitar a otro miembro | `whoCanRemoveMembers` | `CREATOR_ONLY` | cualquier miembro | solo rol `"admin"` | solo el creador |
+
+El default de `whoCanRemoveMembers` (`CREATOR_ONLY`) reproduce el comportamiento histórico de este endpoint. Ver [`conversations/README.md`](./src/modules/conversations/README.md#autorización) y [`settings/README.md`](./src/modules/settings/README.md).
 
 ---
 
@@ -501,12 +510,13 @@ Base HTTP: `/api/v1/files`.
 
 ### 9.1 `POST /` — Subir
 
-`multipart/form-data`, campo `file` obligatorio y `conversationId` opcional:
+`multipart/form-data`, campo `file` obligatorio, `conversationId` y `kind` opcionales:
 
 ```js
 const form = new FormData();
 form.append("file", fileBlob);
 form.append("conversationId", conversationId); // opcional — ver más abajo
+form.append("kind", "voice_note"); // opcional — "file" (default) o "voice_note", ver más abajo
 await fetch("http://localhost:4000/api/v1/files", {
   method: "POST",
   headers: { Authorization: `Bearer ${token}` }, // NO seteés Content-Type manualmente, el browser arma el boundary
@@ -514,7 +524,9 @@ await fetch("http://localhost:4000/api/v1/files", {
 });
 ```
 
-Sin restricción de tipo de archivo (subís lo que sea — csv, exe, lo que haga falta). Sí hay límite de tamaño (`MAX_UPLOAD_SIZE_MB`, default **25 MB**) — `400` si lo excede. Si mandás `conversationId`, además valida que seas miembro de esa conversación — `403` si no lo sos.
+Sin restricción de tipo de archivo por defecto (subís lo que sea — csv, exe, lo que haga falta), salvo que un admin haya activado un allowlist/blocklist (`AppSettings.fileTypeRestrictionMode`, sección 12) — `400` si el tipo no está permitido. El límite de tamaño (`AppSettings.maxUploadSizeMb`, default **25 MB**, editable por un admin sin redeploy) también da `400` si se excede. Si mandás `conversationId`, además valida que seas miembro de esa conversación — `403` si no lo sos.
+
+`kind: "voice_note"` distingue una nota de voz grabada de un adjunto genérico: exige mime type `audio/*` (`400` si no) y valida la duración real del audio contra `AppSettings.maxVoiceNoteDurationSeconds` (`400` si se excede) — la duración se calcula en el backend a partir del archivo, nunca se confía en un valor mandado por el cliente. No se persiste ningún campo `kind` en la respuesta — el archivo se guarda igual sea cual sea.
 
 `conversationId` **no crea ninguna relación**: solo le dice al backend bajo qué conversación organizar el archivo en disco (`chat/<conversationId>/<yyyy>/<mm>/<uuid>.<ext>`, en vez de todo suelto bajo `chat/`). La relación real la creás después mandando el `id` que te devuelve esto en `fileIds` (mensajes) o `imageFileId` (conversaciones). Si no lo mandás, se guarda igual bajo `chat/<yyyy>/<mm>/<uuid>.<ext>`.
 
@@ -553,6 +565,8 @@ Borrado lógico, solo quien lo subió (`403` para cualquier otro). → `200` `{ 
 | `MessageType` | `TEXT`, `SYSTEM` | `Message.type` |
 | `UserStatus` | `ACTIVE`, `INACTIVE` | `ConversationMember.user.status` |
 | `MessageReceiptStatus` (no es un enum de Prisma, es propio del API) | `sent`, `delivered`, `read` | `receipts[].status`, `lastMessageStatus` |
+| `GroupPermissionLevel` | `ALL_MEMBERS`, `ADMINS_ONLY`, `CREATOR_ONLY` | `AppSettings.whoCanCreateGroups`/`whoCanAddMembers`/`whoCanRemoveMembers` |
+| `FileTypeRestrictionMode` | `DISABLED`, `ALLOWLIST`, `BLOCKLIST` | `AppSettings.fileTypeRestrictionMode` |
 
 ---
 
@@ -564,6 +578,40 @@ npm install
 npm run dev   # ts-node, puerto 4000 por default
 ```
 
-Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`. Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 25).
+Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`. Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 25 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
 
-Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`socket`](./src/socket/README.md).
+Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`settings`](./src/modules/settings/README.md), [`socket`](./src/socket/README.md).
+
+---
+
+## 12. Configuración global (admin)
+
+Base HTTP: `/api/v1`. Configuración de la instalación, editable en runtime — nada de esto requiere redeploy. Ver [`settings/README.md`](./src/modules/settings/README.md) para el detalle completo.
+
+### 12.1 `GET /admin/settings` / `PATCH /admin/settings` — admin
+
+Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `GET` devuelve la configuración completa:
+
+```json
+{
+  "maxUploadSizeMb": 25,
+  "fileTypeRestrictionMode": "DISABLED",
+  "fileTypeList": [],
+  "maxVoiceNoteDurationSeconds": 300,
+  "maxGroupMembers": 256,
+  "whoCanCreateGroups": "ALL_MEMBERS",
+  "whoCanAddMembers": "ALL_MEMBERS",
+  "whoCanRemoveMembers": "CREATOR_ONLY",
+  "messageRetentionDays": null
+}
+```
+
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa (ver [`settings/README.md`](./src/modules/settings/README.md)).
+
+### 12.2 `GET /settings/public` — cualquier autenticado
+
+Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesita para validar antes de subir un archivo, grabar una nota de voz o crear un grupo:
+
+```json
+{ "maxUploadSizeMb": 25, "maxVoiceNoteDurationSeconds": 300, "maxGroupMembers": 256 }
+```
