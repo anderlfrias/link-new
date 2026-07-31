@@ -15,6 +15,7 @@ import {
   getOtherMembers,
 } from "@/utils/conversation-display";
 import { buildStoredFileUrl, buildUploadedFileUrl } from "@/utils/file-url";
+import { downloadFile } from "@/utils/download-file";
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
 import type { Conversation } from "@/features/conversations/types/conversation.types";
 
@@ -278,12 +279,11 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
                 }
 
                 return (
-                  <a
+                  <button
                     key={file.id}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                    type="button"
+                    onClick={() => downloadFile(url, file.originalName)}
+                    className="flex items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5"
                   >
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-black/5 dark:bg-white/10">
                       <FileTypeIcon mimeType={file.mimeType} size={20} />
@@ -294,7 +294,7 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
                       </p>
                       <p className="text-xs text-neutral-400">{formatFileSize(file.size)}</p>
                     </div>
-                  </a>
+                  </button>
                 );
               })}
               {hasMore && (

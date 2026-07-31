@@ -4,6 +4,7 @@ import { IconDownload } from "@tabler/icons-react";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
 import { buildStoredFileUrl } from "@/utils/file-url";
+import { downloadFile } from "@/utils/download-file";
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
 import { cn } from "@/utils/cn";
 import type { MessageFile } from "@/features/messages/types/message.types";
@@ -40,13 +41,12 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
         }
 
         return (
-          <a
+          <button
             key={id}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
+            type="button"
+            onClick={() => downloadFile(url, file.originalName)}
             className={cn(
-              "flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors",
+              "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
               isOwn
                 ? "border-white/25 hover:bg-white/10"
                 : "border-black/10 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10",
@@ -60,7 +60,7 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
               </p>
             </div>
             <IconDownload size={16} className="shrink-0 opacity-70" />
-          </a>
+          </button>
         );
       })}
     </div>
