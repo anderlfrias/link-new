@@ -14,6 +14,11 @@ interface AuthContextValue {
   status: AuthStatus;
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => void;
+  /** Actualiza campos de `session.user` en memoria + localStorage (ej. tras
+   * cambiar el propio nombre) — sin esto, el cambio no se vería hasta el
+   * próximo login, porque `session.user` viene del JWT decodificado en ese
+   * momento, no de un fetch en vivo a la base. */
+  updateSessionUser: (patch: Partial<Session["user"]>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -54,9 +59,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("unauthenticated");
   }, []);
 
+  const updateSessionUser = useCallback((patch: Partial<Session["user"]>) => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, user: { ...prev.user, ...patch } };
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ session, status, login, logout }),
-    [session, status, login, logout],
+    () => ({ session, status, login, logout, updateSessionUser }),
+    [session, status, login, logout, updateSessionUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

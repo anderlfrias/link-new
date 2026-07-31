@@ -117,6 +117,16 @@ model User {
   avatarFileId String?     @map("avatar_file_id")
   avatarFile   StoredFile? @relation("UserAvatarFile", fields: [avatarFileId], references: [id])
 
+  /// Si es true (default), el login — y la sincronización de contactos vía
+  /// `/apps/users/by-codes` (ver `auth.service.ts`, `syncAppUsers`) — sigue
+  /// actualizando `name`/avatar desde el proveedor de identidad externo
+  /// configurado (hoy EXTERNAL_AUTH, pero el mecanismo es genérico: podría ser
+  /// cualquier otro). Pasa a false la primera vez que este usuario cambia su
+  /// nombre o su foto acá (`auth.service.ts`, `setLocalName`/`setLocalAvatar`)
+  /// — desde ese momento esos dos campos viven únicamente en esta base y
+  /// nunca más se sobreescriben desde afuera.
+  syncProfileWithIntegration Boolean @default(true) @map("sync_profile_with_integration")
+
   status UserStatus @default(ACTIVE)
 
   createdAt DateTime @default(now()) @map("created_at")

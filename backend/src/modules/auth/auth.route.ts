@@ -2,16 +2,27 @@ import { Router } from "express";
 import multer from "multer";
 import { authenticate } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
+import { validateBody } from "../../middlewares/validate.middleware";
 import { loginRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { BadRequestError } from "../../utils/errors";
-import { deleteProfilePicture, getProfilePicture, login, updateProfilePicture } from "./auth.controller";
+import {
+  deleteProfilePicture,
+  getProfilePicture,
+  login,
+  updateProfile,
+  updateProfilePicture,
+} from "./auth.controller";
+import { updateProfileSchema } from "./auth.validator";
 
 const router = Router();
 
 router.post("/login", loginRateLimiter, login);
-// GET no hace falta attachInternalUser: solo proxea EXTERNAL_AUTH, no toca la base local.
-router.get("/profile/picture", authenticate, getProfilePicture);
+// GET ahora sí necesita attachInternalUser: lee la foto ya cacheada en la
+// base local (`getOwnProfilePictureUrl`), ya no proxea a ningún proveedor externo.
+router.get("/profile/picture", authenticate, attachInternalUser, getProfilePicture);
+
+router.patch("/profile", authenticate, attachInternalUser, validateBody(updateProfileSchema), updateProfile);
 
 // Límite propio, más chico que `MAX_UPLOAD_SIZE_MB` (adjuntos): EXTERNAL_AUTH guarda
 // esto como data URI en un campo de texto de su base, no en storage de

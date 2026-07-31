@@ -8,7 +8,14 @@ import {
   UnauthorizedError,
 } from "../../utils/errors";
 import * as FileService from "../files/file.service";
-import { updateAvatarFileId, upsertUserFromExternalUser } from "./auth.repository";
+import { storage } from "../../storage";
+import {
+  findAvatarPath,
+  setLocalAvatar,
+  setLocalName,
+  updateAvatarFileId,
+  upsertUserFromExternalUser,
+} from "./auth.repository";
 import { MappedUser, ExternalUserLoginResponse } from "./auth.types";
 import { buildFullName } from "./jwt";
 
@@ -188,10 +195,19 @@ async function syncAvatar(
   }
 }
 
-/// Cachea la foto de perfil de EXTERNAL_AUTH. Se llama en cada login (fire-and-forget,
-/// nunca bloquea ni rompe el login): compara checksum contra la ya guardada
-/// para no escribir un archivo nuevo en cada login si la foto no cambió.
-export function syncProfilePicture(userId: string, currentAvatarFileId: string | null, token: string): Promise<void> {
+/// Cachea la foto de perfil del proveedor externo. Se llama en cada login
+/// (fire-and-forget, nunca bloquea ni rompe el login): compara checksum
+/// contra la ya guardada para no escribir un archivo nuevo si no cambió.
+/// `enabled` es `User.syncProfileWithIntegration` — si ese usuario ya editó
+/// su foto acá, esto ni siquiera pega contra el proveedor externo (respetar
+/// su elección local es más importante que tener la foto "más fresca").
+export function syncProfilePicture(
+  userId: string,
+  currentAvatarFileId: string | null,
+  token: string,
+  enabled: boolean,
+): Promise<void> {
+  if (!enabled) return Promise.resolve();
   return syncAvatar(userId, currentAvatarFileId, () => getProfilePicture(token), "own");
 }
 
@@ -212,88 +228,43 @@ export function syncContactAvatar(
   );
 }
 
-/// PUT /v1/profile/picture de EXTERNAL_AUTH: mismo formato que devuelve GET (data URI
-/// completo en el campo `profilePicture` del body JSON) — EXTERNAL_AUTH lo guarda tal
-/// cual, sin transformarlo, así que se manda simétrico a como se recibe.
-async function putExternalUserProfilePicture(token: string, dataUri: string): Promise<void> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), EXTERNAL_AUTH_REQUEST_TIMEOUT_MS);
-
-  let response: Response;
-  try {
-    response = await fetch(`${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture`, {
-      method: "PUT",
-      headers: { Authorization: token, "Content-Type": "application/json" },
-      body: JSON.stringify({ profilePicture: dataUri }),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    console.error("EXTERNAL_AUTH profile picture update failed:", error instanceof Error ? error.message : error);
-    throw new ServiceUnavailableError("User service unavailable");
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  if (!response.ok) {
-    const code = parseExternalUserErrorCode(await response.text().catch(() => ""));
-    if (code === "USER_NOT_FOUND") {
-      throw new NotFoundError("User not found");
-    }
-    console.error(
-      `EXTERNAL_AUTH profile picture update returned unexpected status ${response.status}${code ? ` (${code})` : ""}`,
-    );
-    throw new ServiceUnavailableError("User service unavailable");
-  }
+/// Foto de perfil propia: 100% local a partir de acá — a diferencia de
+/// `cacheAvatarLocally` (usada al sincronizar DESDE el proveedor externo),
+/// esto NUNCA pega contra ningún proveedor externo y siempre apaga
+/// `syncProfileWithIntegration` (`setLocalAvatar`, auth.repository.ts). Una
+/// vez que el usuario elige su propia foto acá, esta base es la única fuente
+/// de verdad para ella — el login deja de pisarla.
+export async function setProfilePicture(userId: string, buffer: Buffer, contentType: string) {
+  const stored = await FileService.storeAvatar(userId, buffer, contentType);
+  await setLocalAvatar(userId, stored.id);
+  return stored;
 }
 
-/// DELETE /v1/profile/picture de EXTERNAL_AUTH. Todavía más nuevo que GET/PUT (se
-/// agregó siguiendo la misma estructura), así que el mapeo de errores usa el
-/// mismo criterio conservador: cualquier `code` no reconocido cae a 503.
-async function deleteExternalUserProfilePicture(token: string): Promise<void> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), EXTERNAL_AUTH_REQUEST_TIMEOUT_MS);
-
-  let response: Response;
-  try {
-    response = await fetch(`${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture`, {
-      method: "DELETE",
-      headers: { Authorization: token },
-      signal: controller.signal,
-    });
-  } catch (error) {
-    console.error("EXTERNAL_AUTH profile picture delete failed:", error instanceof Error ? error.message : error);
-    throw new ServiceUnavailableError("User service unavailable");
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  if (!response.ok) {
-    const code = parseExternalUserErrorCode(await response.text().catch(() => ""));
-    if (code === "USER_NOT_FOUND") {
-      throw new NotFoundError("User not found");
-    }
-    console.error(
-      `EXTERNAL_AUTH profile picture delete returned unexpected status ${response.status}${code ? ` (${code})` : ""}`,
-    );
-    throw new ServiceUnavailableError("User service unavailable");
-  }
+/// Quitar la propia foto (volver a mostrar iniciales) es, para este sistema,
+/// una elección local tan explícita como subir una — también apaga
+/// `syncProfileWithIntegration`, si no el próximo login traería de vuelta la
+/// foto del proveedor externo pisando la decisión de sacarla.
+export function removeProfilePicture(userId: string): Promise<User> {
+  return setLocalAvatar(userId, null);
 }
 
-/// Sube una foto nueva (subida manual, o un avatar de Boring Avatars ya
-/// rasterizado a PNG en el frontend): primero a EXTERNAL_AUTH (fuente de verdad para
-/// el resto de las apps que lean de ahí), y solo si eso funciona la cachea
-/// localmente para que el resto de los usuarios de este chat la vean sin
-/// depender de EXTERNAL_AUTH.
-export async function setProfilePicture(userId: string, token: string, buffer: Buffer, contentType: string) {
-  const dataUri = `data:${contentType};base64,${buffer.toString("base64")}`;
-  await putExternalUserProfilePicture(token, dataUri);
-  return cacheAvatarLocally(userId, buffer, contentType);
+/// Cambiar el propio nombre: mismo criterio que la foto — 100% local, nunca
+/// toca el proveedor externo, y apaga `syncProfileWithIntegration`.
+export function updateOwnName(userId: string, name: string): Promise<User> {
+  return setLocalName(userId, name);
 }
 
-/// Borra la foto de perfil en EXTERNAL_AUTH y limpia la caché local (`avatarFileId`).
-export async function removeProfilePicture(userId: string, token: string): Promise<void> {
-  await deleteExternalUserProfilePicture(token);
-  await updateAvatarFileId(userId, null);
+/// URL pública (relativa, `/uploads/...`) de mi propia foto ya cacheada
+/// localmente — ya no proxea al proveedor externo (ver README del módulo):
+/// una vez que esta base tiene la foto (sincronizada en el login, o subida
+/// acá), servirla es un `StoredFile` más, igual que la de cualquier otro
+/// usuario. `404` si todavía no tengo ninguna.
+export async function getOwnProfilePictureUrl(userId: string): Promise<string> {
+  const path = await findAvatarPath(userId);
+  if (!path) {
+    throw new NotFoundError("Profile picture not found");
+  }
+  return storage.getPublicUrl(path);
 }
 
 export interface ExternalUserAppUser {
@@ -408,7 +379,7 @@ export async function syncAppUsers(token: string): Promise<void> {
     appUsers.map(async (appUser) => {
       try {
         const user = await upsertUserFromExternalUser(appUser);
-        if (!user.avatarFileId) {
+        if (!user.avatarFileId && user.syncProfileWithIntegration) {
           await syncContactAvatar(user.id, user.avatarFileId, appUser.username, token);
         }
       } catch (error) {

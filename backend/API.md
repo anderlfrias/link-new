@@ -98,53 +98,53 @@ Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token
 
 Después del login, todo el resto del API (HTTP y socket) usa el mismo `token` — no hay un endpoint de logout ni de refresh; "cerrar sesión" en el frontend es simplemente descartar el token guardado y desconectar el socket.
 
-### `GET /api/v1/auth/profile/picture`
+**`user.fullName` sale de la base local, no del JWT de EXTERNAL_AUTH tal cual.** Nombre y foto de perfil son locales a partir de que el usuario los edita acá (ver "Perfil: nombre y foto" abajo) — `User.syncProfileWithIntegration` (default `true`) controla si el login todavía los sincroniza desde EXTERNAL_AUTH; se apaga solo la primera vez que el usuario cambia cualquiera de los dos. Mientras esté apagado, `fullName` en esta respuesta es siempre el nombre guardado acá, aunque el JWT de EXTERNAL_AUTH diga otra cosa.
 
-Proxea `GET /api/v1/profile/picture` de EXTERNAL_AUTH — requiere `Authorization: Bearer <token>`, igual que el resto del API (a diferencia de `/login`, este endpoint sí necesita sesión).
+### Perfil: nombre y foto
+
+```
+PATCH  /api/v1/auth/profile          { "name": "Nuevo Nombre" }
+GET    /api/v1/auth/profile/picture
+PUT    /api/v1/auth/profile/picture  (multipart/form-data, campo "file")
+DELETE /api/v1/auth/profile/picture
+```
+
+Los cuatro requieren `Authorization: Bearer <token>`. **Ninguno se relaciona con EXTERNAL_AUTH (ni con ningún otro proveedor de identidad) — son 100% locales.** `PATCH`/`PUT`/`DELETE` apagan `User.syncProfileWithIntegration` para ese usuario (una sola vez alcanza; no hace falta repetirlo en cada edición). A partir de ahí, ni el login ni la sincronización de contactos vuelven a pisar ese nombre/foto.
 
 ```js
+// Cambiar el nombre
+await fetch("http://localhost:4000/api/v1/auth/profile", {
+  method: "PATCH",
+  headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "Nuevo Nombre" }),
+}); // 200 { "name": "Nuevo Nombre" }
+
+// Ver mi propia foto
 const response = await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
   headers: { Authorization: `Bearer ${token}` },
 });
-const blob = await response.blob();
-const url = URL.createObjectURL(blob); // usar como <img src={url}> y hacer URL.revokeObjectURL(url) después
-```
+const blob = await response.blob(); // fetch sigue el 302 solo — ver nota abajo
+const url = URL.createObjectURL(blob);
 
-→ `200` con la imagen ya como bytes + `Content-Type` correcto (ej. `image/jpeg`), no JSON. `Cache-Control: private, max-age=300` + `Vary: Authorization` para no repetir el proxy en cada render de `<Avatar>` **sin** que la caché HTTP del navegador mezcle la foto de un usuario con la de otro si cierran sesión y entra alguien distinto en la misma pestaña dentro de esos 300s (la caché por URL sola no distingue por token; con `Vary: Authorization` sí).
-
-**Nota interna**: hacia EXTERNAL_AUTH el backend manda `Authorization: <token>` sin `Bearer ` (su controller decodifica el header tal cual con `jwt-decode`, sin recortar prefijo), y EXTERNAL_AUTH responde con el data URI completo en base64 (`"data:image/jpeg;base64,..."`), no bytes crudos — `auth.service.ts` lo parsea y decodifica antes de reenviarlo. Esto solo importa si se está debugueando la llamada al proxy; el cliente de este backend sigue mandando `Bearer <token>` normal.
-
-**EXTERNAL_AUTH identifica al usuario únicamente por el token** (no recibe ningún id) — por eso este endpoint solo puede traer la foto de **quien está autenticado**, nunca la de otro usuario de una conversación. Este backend resuelve eso por otro lado, no llamando de nuevo a EXTERNAL_AUTH: cada usuario cachea su propia foto (como `StoredFile`, en `User.avatarFileId`) la primera vez que **él mismo** inicia sesión, y desde ahí se sirve a cualquiera vía `user.avatarFile` embebido en conversaciones/directorio (ver sección 4 y 9) — nunca pidiéndosela a EXTERNAL_AUTH por un tercero.
-
-Errores: `404` (EXTERNAL_AUTH respondió `USER_NOT_FOUND` o `PROFILE_PICTURE_NOT_FOUND`), `503` (EXTERNAL_AUTH caído, no responde en 5s, o devolvió algo inesperado — incluye el caso de un token inválido, que en EXTERNAL_AUTH rompe el decode y cae a su error genérico).
-
-### `PUT /api/v1/auth/profile/picture` — Cambiar mi foto de perfil
-
-`multipart/form-data` con un único campo `file` (imagen — jpeg/png/gif/webp, máx. 5 MB, más chico que el límite de adjuntos porque EXTERNAL_AUTH la guarda como data URI en un campo de texto, no en storage de archivos).
-
-```js
+// Cambiar mi foto
 const form = new FormData();
-form.append("file", fileOrBlob); // File de un <input type="file"> o un Blob (ej. un avatar generado, ya rasterizado a PNG)
-
-const response = await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
+form.append("file", fileOrBlob); // File de un <input type="file"> o un Blob (ej. avatar generado, ya rasterizado a PNG)
+await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
   method: "PUT",
   headers: { Authorization: `Bearer ${token}` },
   body: form,
-});
-const stored = await response.json(); // { id, originalName, mimeType, extension, size, url, createdAt }
+}); // 200 { id, originalName, mimeType, extension, size, url, createdAt } — misma forma que POST /api/v1/files (sección 9)
+
+// Quitar mi foto (vuelve a mostrar iniciales)
+await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
+  method: "DELETE",
+  headers: { Authorization: `Bearer ${token}` },
+}); // 204
 ```
 
-→ `200` con la misma forma que devuelve `POST /api/v1/files` (sección 9) — usá `stored.url` para mostrarla de inmediato sin esperar un refetch. Internamente: primero se sube a EXTERNAL_AUTH (`PUT /v1/profile/picture`, fuente de verdad para cualquier otra app que lea de ahí — mismo data URI en base64 que devuelve el `GET`, en el campo `profilePicture` del body JSON), y solo si eso funciona se cachea localmente (mismo mecanismo que ya usa el login, ver nota del `GET` arriba) para que el resto de los usuarios de este chat la vean sin depender de EXTERNAL_AUTH.
+`GET` responde `302` a `/uploads/<path del StoredFile>` (mismo archivo estático que sirve el avatar de cualquier otro usuario) — `fetch()` lo sigue solo, así que `.blob()` sigue funcionando igual que antes. `404` si todavía no hay ninguna foto cacheada (nunca inició sesión con una, o ya la sacó).
 
-No importa si la imagen viene de un archivo real subido por el usuario o de un avatar generado (ej. Boring Avatars, ver `frontend/src/features/profile`) rasterizado a PNG del lado del cliente — para este endpoint son exactamente lo mismo, un archivo de imagen.
-
-Errores: `400` (falta el archivo, o el tipo de imagen no está permitido), `404`/`503` con el mismo criterio que `GET` de arriba.
-
-### `DELETE /api/v1/auth/profile/picture` — Quitar mi foto de perfil
-
-Sin body. Borra la foto en EXTERNAL_AUTH (`DELETE /v1/profile/picture`) y limpia `User.avatarFileId` localmente — vuelve a mostrar las iniciales por defecto en todos lados.
-
-→ `204` sin body. Errores: `404`/`503` con el mismo criterio que `GET`/`PUT` de arriba.
+`name`: 1-120 caracteres, requerido. No importa si la imagen del `PUT` viene de un archivo real o de un avatar generado (ej. Boring Avatars, ver `frontend/src/features/profile`) rasterizado a PNG del lado del cliente — para este endpoint son lo mismo. Errores: `400` (falta el archivo en `PUT`, tipo de imagen no permitido, o `name` vacío/demasiado largo en `PATCH`).
 
 ---
 

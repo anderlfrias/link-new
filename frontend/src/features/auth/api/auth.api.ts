@@ -9,19 +9,25 @@ export function login(credentials: LoginCredentials): Promise<LoginResponse> {
   });
 }
 
-/** Proxea GET /api/v1/profile/picture de EXTERNAL_AUTH — solo puede traer la foto de quien es dueño del token. */
+/** Mi foto de perfil ya cacheada localmente (redirige a /uploads/..., ver backend/API.md sección 2). */
 export function getProfilePicture(token: string): Promise<Blob> {
   return apiRequest<Blob>("/v1/auth/profile/picture", { token, responseType: "blob" });
 }
 
-/** Sube (o reemplaza) mi foto de perfil — se manda a EXTERNAL_AUTH y se cachea localmente. */
+/** Sube (o reemplaza) mi foto de perfil — 100% local, nunca se relaciona con el proveedor externo de identidad. */
 export function updateProfilePicture(token: string, image: Blob, filename = "avatar.png"): Promise<UploadedFile> {
   const form = new FormData();
   form.append("file", image, filename);
   return apiRequest<UploadedFile>("/v1/auth/profile/picture", { method: "PUT", token, body: form });
 }
 
-/** Borra mi foto de perfil (en EXTERNAL_AUTH y en la caché local) — vuelve a mostrar las iniciales. */
+/** Borra mi foto de perfil (local, ver backend/API.md sección 2) — vuelve a mostrar las iniciales. */
 export function deleteProfilePicture(token: string): Promise<void> {
   return apiRequest<void>("/v1/auth/profile/picture", { method: "DELETE", token });
+}
+
+/** Cambia mi propio nombre — 100% local, nunca se relaciona con el proveedor
+ * externo de identidad (ver backend/API.md sección 2). */
+export function updateProfile(token: string, name: string): Promise<{ name: string }> {
+  return apiRequest<{ name: string }>("/v1/auth/profile", { method: "PATCH", token, body: { name } });
 }

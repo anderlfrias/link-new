@@ -80,6 +80,8 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 
 `internalUserId` es el `id` interno del perfil recién creado/actualizado en la base local (por `upsert` en `email`); es lo que hay que usar para relacionar conversaciones/mensajes, nunca `user.id` (ese es el externo de EXTERNAL_AUTH).
 
+**`user.fullName` sale de la base local (`internalUser.name`), no del JWT tal cual.** Si este usuario ya cambió su nombre acá (ver "Endpoint: cambiar mi nombre" abajo), `User.syncProfileWithIntegration` es `false` y `upsertUsuario()` no lo pisa con lo que diga EXTERNAL_AUTH — pero el JWT de EXTERNAL_AUTH sigue teniendo el nombre viejo. El controller arma la respuesta con `{ ...mappedUser, fullName: internalUser.name, ... }` para que el propio cliente vea siempre el nombre real (el de esta base), nunca el de EXTERNAL_AUTH cuando difieren.
+
 ### Errores posibles
 
 | Status | Causa |
@@ -90,29 +92,29 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 | `429` | Más de 10 intentos de login en 15 minutos desde la misma IP (`rate-limit.middleware.ts`) |
 | `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) o devolvió un status inesperado (5xx u otro distinto de `200`/`401`/`403`) |
 
+## Desacoplar el perfil del proveedor externo (`syncProfileWithIntegration`)
+
+`User.syncProfileWithIntegration` (`schema.prisma`, default `true`) decide si el login (y la sincronización de contactos vía `syncAppUsers`, ver más abajo) sigue actualizando `name`/avatar desde el proveedor de identidad externo configurado — hoy EXTERNAL_AUTH, pero el mecanismo no asume cuál; podría ser cualquier otro mañana sin tocar este flag. Pasa a `false` automáticamente la primera vez que el usuario cambia su nombre o su foto **acá** (`auth.service.ts`: `updateOwnName`/`setProfilePicture`/`removeProfilePicture`, todas vía `setLocalName`/`setLocalAvatar` en `auth.repository.ts`) — desde ese momento esos dos campos viven únicamente en esta base: ni el login ni `syncAppUsers` vuelven a pisarlos con lo que diga el proveedor externo, sin importar cuántas veces ese usuario inicie sesión.
+
+`upsertUserFromExternalUser()` (`auth.repository.ts`) es quien aplica esto: no es un `upsert` directo porque la condición ("¿sigo sincronizando?") depende de la fila ya existente — primero busca por `email`, y solo incluye `name` en el `update` si `syncProfileWithIntegration` seguía en `true`. `username`/`externalId` no son campos de "perfil" (no los edita el usuario) y siempre se actualizan, sync esté prendido o no.
+
 ## Endpoint: foto de perfil
 
 ```
 GET /api/v1/auth/profile/picture
 ```
 
-A diferencia de `/login`, este sí requiere `Authorization: Bearer <token>` de parte del cliente — es el único endpoint de este módulo detrás de `authenticate`. Proxea `GET /api/v1/profile/picture` de EXTERNAL_AUTH (`auth.service.ts`, `getProfilePicture()`) y devuelve la imagen ya como bytes + `Content-Type`, no JSON.
+Requiere `Authorization: Bearer <token>` + `attachInternalUser`. Ya **no** proxea a ningún proveedor externo: lee `avatarFile.path` de la base local (`AuthService.getOwnProfilePictureUrl()`) y responde `302` a `/uploads/<path>` (mismo archivo estático que sirve el avatar de cualquier otro usuario). `404` si todavía no tiene ninguna foto cacheada.
 
 ```bash
-curl http://localhost:4000/api/v1/auth/profile/picture \
+curl -L http://localhost:4000/api/v1/auth/profile/picture \
   -H "Authorization: Bearer <token>" \
   --output foto.jpg
 ```
 
-**Detalle importante al reenviar el token a EXTERNAL_AUTH**: a EXTERNAL_AUTH *no* se le manda el prefijo `Bearer `. Su controller decodifica el header tal cual con `jwt-decode` (`const token = req.headers.authorization; jwtDecode(token)`), sin recortar ningún prefijo — si se le manda `Bearer <jwt>`, el decode falla y EXTERNAL_AUTH cae a su bloque `catch` (`500 ERROR_FETCHING_PROFILE_PICTURE`), que este proxy traduce como `503`. Por eso `getProfilePicture()` reenvía `Authorization: <token>` a secas (solo hacia EXTERNAL_AUTH; el cliente sigue mandando `Bearer <token>` a este backend como siempre).
+Al ser un redirect a una URL propia por usuario (`avatars/<userId>/<uuid>.<ext>`), ya no hace falta el `Vary: Authorization` que este endpoint necesitaba cuando servía bytes directamente desde una URL literal única para todos — un problema de este diseño más simple, no algo que haya que replicar.
 
-**Detalle importante sobre la respuesta de EXTERNAL_AUTH**: tampoco devuelve bytes crudos con un `Content-Type` de imagen — su `res.ok(user.profilePicture)` manda el data URI completo como body (`"data:image/jpeg;base64,/9j/4AAQ..."`, a veces envuelto en comillas de JSON según negotiation). `getProfilePicture()` parsea ese data URI con una regex, separa el `contentType` real y decodifica el base64 a `Buffer` antes de devolverlo — así el controller sí puede responder con bytes + `Content-Type` correctos hacia el cliente.
-
-**Mapeo de errores de EXTERNAL_AUTH**: no hay un `401` explícito — `USER_ID_REQUIRED`, `USER_NOT_FOUND` y `PROFILE_PICTURE_NOT_FOUND` llegan todos como `400` (`res.badRequest`) con un `code` distinto en el body; un token realmente inválido rompe el `jwtDecode` y cae en el `catch` genérico (`500`). `getProfilePicture()` lee el `code` del body: `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND` → `404` local; cualquier otro no-`ok` → `503`.
-
-**Por qué manda `Vary: Authorization`**: la respuesta también trae `Cache-Control: private, max-age=300` para no repetir el proxy en cada render de `<Avatar>` — pero la caché HTTP del navegador solo distingue entradas por URL, no por el valor de `Authorization`, a menos que el header `Vary` lo indique. Sin `Vary: Authorization`, si un usuario cierra sesión y otro inicia sesión en la misma pestaña dentro de esos 300s, un fetch a esta misma URL con OTRO token puede devolver de caché los bytes de la foto del usuario anterior (bug real, reportado y corregido). Con `Vary: Authorization`, el navegador guarda una entrada de caché distinta por token, así que el cacheo sigue funcionando para el mismo usuario pero nunca se filtra entre usuarios distintos.
-
-**Por qué este proxy solo trae "mi" foto y no la de otro usuario**: `GET /v1/profile/picture` de EXTERNAL_AUTH identifica a quién pertenece la foto exclusivamente por el token — no acepta un id/username como parámetro. Este proxy (usado por `UserMenu`) hereda esa misma limitación a propósito. EXTERNAL_AUTH sí expone un endpoint aparte para terceros — ver más abajo —, pero no está detrás de este proxy porque nada del backend necesita pedirle a EXTERNAL_AUTH la foto de otro usuario en tiempo real: en vez de eso, se cachea localmente de antemano (`syncProfilePicture` para la propia al iniciar sesión, `syncContactAvatar` para contactos vía `syncAppUsers` — ambas en `auth.service.ts`, ver `modules/files/README.md`), y de ahí en adelante se sirve desde nuestro propio storage para cualquiera que la necesite, sin volver a tocar EXTERNAL_AUTH.
+Esta foto llega a la base de dos formas, y ambas conviven: (1) sincronizada desde el proveedor externo en cada login o al refrescar el directorio de contactos, mientras `syncProfileWithIntegration` siga en `true` (ver sección arriba); o (2) subida acá mismo vía `PUT` (abajo), que apaga ese sync. Para la foto de **otros** usuarios (no la propia), ver "Endpoint: foto de perfil de un tercero" más abajo — ese sigue siendo el único camino que todavía pega contra el proveedor externo en este módulo.
 
 ## Endpoint: foto de perfil de un tercero (uso interno, sin proxy propio)
 
@@ -128,7 +130,7 @@ A diferencia del anterior, EXTERNAL_AUTH identifica al usuario por `username` en
 GET /v1/apps/users/by-codes?codes=<APP_CODE_EXTERNAL_AUTH>
 ```
 
-Devuelve todos los usuarios de EXTERNAL_AUTH con acceso a esta app (identificada por `APP_CODE_EXTERNAL_AUTH`), hayan iniciado sesión acá alguna vez o no — a diferencia del directorio local (`GET /api/v1/users`), que hasta ahora solo listaba a quien ya se había logueado. `AuthService.getAppUsers()` lo llama y `AuthService.syncAppUsers()` (invocado desde `UserService.listUsers()` en cada `GET /api/v1/users`) upsertea cada uno como `User` local — necesario porque `createConversation` exige que el otro miembro ya exista localmente — y cachea su foto si todavía no tiene una (`syncContactAvatar`, arriba). Si EXTERNAL_AUTH no responde, `syncAppUsers()` no lanza: el directorio simplemente se sirve con lo que ya había en la base local.
+Devuelve todos los usuarios de EXTERNAL_AUTH con acceso a esta app (identificada por `APP_CODE_EXTERNAL_AUTH`), hayan iniciado sesión acá alguna vez o no — a diferencia del directorio local (`GET /api/v1/users`), que hasta ahora solo listaba a quien ya se había logueado. `AuthService.getAppUsers()` lo llama y `AuthService.syncAppUsers()` (invocado desde `UserService.listUsers()` en cada `GET /api/v1/users`) upsertea cada uno como `User` local — necesario porque `createConversation` exige que el otro miembro ya exista localmente — y cachea su foto si todavía no tiene una **y** su `syncProfileWithIntegration` sigue en `true` (si esa persona ya editó su nombre/foto acá, aunque sea desde otra sesión, `upsertUserFromExternalUser` no le pisa el nombre y este paso ni intenta traerle una foto nueva). Si EXTERNAL_AUTH no responde, `syncAppUsers()` no lanza: el directorio simplemente se sirve con lo que ya había en la base local.
 
 No se cachea del lado del backend (cada request vuelve a pedirle a EXTERNAL_AUTH), pero sí manda `Cache-Control: private, max-age=300` para que el navegador no repita el request en cada render de `<Avatar>`.
 
@@ -144,24 +146,29 @@ PUT    /api/v1/auth/profile/picture
 DELETE /api/v1/auth/profile/picture
 ```
 
-A diferencia de `GET` (arriba), estas dos sí necesitan `attachInternalUser` además de `authenticate` (`auth.route.ts`): cachean/limpian la foto como `StoredFile` propio, lo que requiere el `internalUserId`, no solo el token.
+Requieren `attachInternalUser` además de `authenticate` (`auth.route.ts`): cachean/limpian la foto como `StoredFile` propio, lo que necesita el `internalUserId`, no solo el token. **Ninguna de las dos toca el proveedor externo** — son 100% locales, a propósito (ver "Desacoplar el perfil del proveedor externo" arriba). Ambas apagan `syncProfileWithIntegration` para este usuario.
 
-**`PUT`** recibe `multipart/form-data` con un campo `file` (imagen, límite propio de 5 MB — más chico que `MAX_UPLOAD_SIZE_MB` de adjuntos, definido en `auth.route.ts` porque EXTERNAL_AUTH guarda esto como texto, no como archivo). El controller (`updateProfilePicture`) arma un data URI (`data:<mimeType>;base64,<...>`) desde el buffer subido y llama a `AuthService.setProfilePicture(userId, token, buffer, mimeType)`, que:
+**`PUT`** recibe `multipart/form-data` con un campo `file` (imagen, límite propio de 5 MB — más chico que `MAX_UPLOAD_SIZE_MB` de adjuntos, definido en `auth.route.ts`; ese límite quedó de cuando EXTERNAL_AUTH guardaba esto como texto en su base, y sigue siendo razonable para un avatar). El controller (`updateProfilePicture`) llama a `AuthService.setProfilePicture(userId, buffer, mimeType)`, que guarda el buffer como `StoredFile` (`FileService.storeAvatar`) y apunta `User.avatarFileId` ahí vía `setLocalAvatar()` (`auth.repository.ts`) — la misma función que apaga el flag. Devuelve el `StoredFileResponse` resultante (`200`).
 
-1. Manda ese data URI a EXTERNAL_AUTH vía `PUT /v1/profile/picture` (`{ profilePicture: dataUri }` en el body, mismo formato que devuelve `GET` — simétrico, EXTERNAL_AUTH lo guarda tal cual sin transformarlo). Igual que `GET`, el `Authorization` hacia EXTERNAL_AUTH va sin el prefijo `Bearer `.
-2. Solo si eso funciona, cachea el mismo buffer localmente (`FileService.storeAvatar` + `updateAvatarFileId` — la misma función interna, `cacheAvatarLocally()`, que ya usa `syncProfilePicture()` en el login) y devuelve el `StoredFileResponse` resultante (`200`).
-
-Si el `PUT` a EXTERNAL_AUTH falla, no se toca la caché local — nunca queda desincronizada con lo que EXTERNAL_AUTH realmente tiene guardado.
-
-**`DELETE`** no manda body. Llama a `AuthService.removeProfilePicture(userId, token)`: borra la foto en EXTERNAL_AUTH (`DELETE /v1/profile/picture` — endpoint agregado por el equipo de EXTERNAL_AUTH siguiendo la misma estructura que `GET`/`PUT`, con el mismo mapeo de errores conservador) y, si eso funciona, limpia `avatarFileId` a `null` localmente. Responde `204`.
+**`DELETE`** no manda body. Llama a `AuthService.removeProfilePicture(userId)`: limpia `avatarFileId` a `null` localmente (`setLocalAvatar(userId, null)`, mismo apagado de flag — sacarse la foto es una elección tan explícita como subir una nueva). Responde `204`.
 
 No importa si la imagen del `PUT` viene de un archivo real elegido por el usuario o de un avatar de [Boring Avatars](https://boringavatars.com) rasterizado a PNG en el frontend (ver `frontend/src/features/profile`) — el endpoint no distingue entre ambos, siempre es "un archivo de imagen".
 
 | Status | Causa |
 |---|---|
 | `400` | Falta el archivo (`PUT`), o el tipo de imagen no está permitido |
-| `404` | EXTERNAL_AUTH respondió `USER_NOT_FOUND` |
-| `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) o devolvió un `code` inesperado |
+
+## Endpoint: cambiar mi nombre
+
+```
+PATCH /api/v1/auth/profile
+```
+
+```json
+{ "name": "Nuevo Nombre" }
+```
+
+`name`: 1-120 caracteres, requerido (`auth.validator.ts`). Requiere `attachInternalUser` + `authenticate`. Llama a `AuthService.updateOwnName(userId, name)` → `setLocalName()` (`auth.repository.ts`): guarda el nombre y apaga `syncProfileWithIntegration`, igual que la foto — 100% local, nunca toca el proveedor externo. Responde `200` `{ "name": "Nuevo Nombre" }`.
 
 ## Usar el token en rutas protegidas
 
