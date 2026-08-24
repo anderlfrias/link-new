@@ -17,7 +17,7 @@ export function buildFullName(parts: {
 export function mapTokenToUser(payload: ExternalUserTokenPayload): MappedUser {
   const fullName = buildFullName(payload);
 
-  const roles = payload.roles.map((role: ExternalUserRole) => role.name);
+  const roles = payload.roles.map((role: ExternalUserRole) => role.role);
   const permissions = payload.roles.flatMap(
     (role: ExternalUserRole) => role.restrictions?.map((restriction) => restriction.code) ?? [],
   );

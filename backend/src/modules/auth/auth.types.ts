@@ -6,9 +6,11 @@ export interface ExternalUserRestriction {
   [key: string]: unknown;
 }
 
-/// Rol de un usuario, tal como lo expone EXTERNAL_AUTH dentro del JWT.
+/// Rol de un usuario, tal como lo expone EXTERNAL_AUTH dentro del JWT. La clave con
+/// el nombre del rol es `role` (no `name`) — confirmado contra un JWT real
+/// emitido por EXTERNAL_AUTH, ej. `{ "role": "admin", "restrictions": [] }`.
 export interface ExternalUserRole {
-  name: string;
+  role: string;
   restrictions?: ExternalUserRestriction[];
 }
 
