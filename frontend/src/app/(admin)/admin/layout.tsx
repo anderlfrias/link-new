@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { IconLoader2 } from "@tabler/icons-react";
 import { useRequireRole } from "@/features/auth/hooks/use-require-role";
 import { ForbiddenScreen } from "@/features/admin/components/ForbiddenScreen";
+import { AdminShell } from "@/features/admin/components/AdminShell";
 import { ADMIN_ROLE } from "@/features/admin/constants/admin-role.constant";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +20,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (status === "checking" || status === "unauthenticated") {
     return (
-      <div className="flex h-full w-full items-center justify-center">
+      <div className="flex h-screen items-center justify-center">
         <IconLoader2 className="animate-spin text-brand-blue" size={28} />
       </div>
     );
@@ -29,5 +30,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <ForbiddenScreen />;
   }
 
-  return <>{children}</>;
+  return <AdminShell>{children}</AdminShell>;
 }

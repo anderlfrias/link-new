@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { IconAlertCircle, IconArrowLeft, IconLoader2 } from "@tabler/icons-react";
+import { IconAlertCircle, IconLoader2 } from "@tabler/icons-react";
 import { useAdminSettings } from "@/features/admin/hooks/use-admin-settings";
 import { useUpdateAdminSettings } from "@/features/admin/hooks/use-update-admin-settings";
 import type {
@@ -136,19 +135,10 @@ export function AdminSettingsPanel() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-center gap-3 border-b border-black/5 px-4 py-3 dark:border-white/10">
-        <Link
-          href="/"
-          aria-label="Volver"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
-        >
-          <IconArrowLeft size={20} stroke={1.75} />
-        </Link>
-        <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Configuración global</h2>
-      </div>
-
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-lg flex-col gap-8">
+          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Configuración global</h2>
+
           {saveError && (
             <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
               <IconAlertCircle size={16} className="shrink-0" />

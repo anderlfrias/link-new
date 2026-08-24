@@ -18,8 +18,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   // Rutas donde el panel principal (a la derecha del sidebar) debe ocupar toda
   // la pantalla en mobile, en vez del listado de conversaciones.
   const isConversationRoute = pathname?.startsWith("/conversations/") ?? false;
-  const isAdminRoute = pathname?.startsWith("/admin") ?? false;
-  const showMainPanelOnMobile = isConversationRoute || isAdminRoute;
+  const showMainPanelOnMobile = isConversationRoute;
 
   const { conversations, status: conversationsStatus } = useConversations();
   useMessageNotifications(conversations, session?.user.internalUserId ?? "");
