@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconDotsVertical, IconPin } from "@tabler/icons-react";
+import { IconChevronDown, IconPin } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
@@ -22,6 +21,9 @@ interface ConversationListItemProps {
   conversation: ConversationListItemType;
   currentUserId: string;
   pending: boolean;
+  menuOpen: boolean;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
   onTogglePin: (conversationId: string, next: boolean) => void;
   onToggleFavorite: (conversationId: string, next: boolean) => void;
 }
@@ -30,6 +32,9 @@ export function ConversationListItem({
   conversation,
   currentUserId,
   pending,
+  menuOpen,
+  onOpenMenu,
+  onCloseMenu,
   onTogglePin,
   onToggleFavorite,
 }: ConversationListItemProps) {
@@ -39,17 +44,20 @@ export function ConversationListItem({
   const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const secondaryText = getLastMessagePreviewText(conversation, currentUserId);
 
-  const [menuOpen, setMenuOpen] = useState(false);
-  // En desktop el disparador es el botón "⋮" (hover); en mobile, mantener
+  // En desktop el disparador es la flecha (hover); en mobile, mantener
   // presionado — el long-press vive en el wrapper porque el toque puede
   // empezar dentro del <Link> (los eventos de touch burbujean igual).
-  const longPress = useLongPress(() => setMenuOpen(true));
+  const longPress = useLongPress(onOpenMenu);
 
   return (
     <div className="group relative">
       <div {...longPress}>
         <Link
           href={`/conversations/${conversation.id}`}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onOpenMenu();
+          }}
           className={cn(
             "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-black/3 dark:hover:bg-white/5",
             isActive && "bg-black/4 dark:bg-white/10",
@@ -75,27 +83,37 @@ export function ConversationListItem({
                   <MessageStatusTicks status={conversation.lastMessageStatus} />
                 )}
                 <UnreadBadge count={conversation.unreadCount} />
+                {/* Flecha "▾" — mismo lugar que WhatsApp: al lado de los
+                    ticks/badge, solo visible en hover (desktop) con
+                    transición. En mobile no se renderiza — ahí la
+                    interacción es el long-press de arriba. */}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    // Este botón vive adentro del <Link> de la fila para
+                    // poder alinearse en flujo normal junto a los ticks/badge
+                    // (mismo lugar que WhatsApp) — sin esto, el click
+                    // navegaría a la conversación además de abrir el menú.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (menuOpen) onCloseMenu();
+                    else onOpenMenu();
+                  }}
+                  disabled={pending}
+                  aria-label={`Opciones de ${displayName}`}
+                  className="hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 disabled:opacity-60 dark:text-neutral-400 dark:hover:bg-white/10 md:flex"
+                >
+                  <IconChevronDown size={14} stroke={2} />
+                </button>
               </div>
             </div>
           </div>
         </Link>
       </div>
 
-      {/* Botón "⋮" — solo desktop (hover-revealed). En mobile la interacción
-          es el long-press de arriba, sin botón visible. */}
-      <button
-        type="button"
-        onClick={() => setMenuOpen((prev) => !prev)}
-        disabled={pending}
-        aria-label={`Opciones de ${displayName}`}
-        className="absolute right-3 top-3 hidden h-7 w-7 items-center justify-center rounded-full bg-white text-neutral-500 opacity-0 transition-opacity hover:bg-black/5 group-hover:opacity-100 disabled:opacity-60 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/10 md:flex"
-      >
-        <IconDotsVertical size={16} />
-      </button>
-
       <ConversationOptionsMenu
         open={menuOpen}
-        onClose={() => setMenuOpen(false)}
+        onClose={onCloseMenu}
         isPinned={conversation.isPinnedByMe}
         isFavorite={conversation.isFavoritedByMe}
         onTogglePin={() => onTogglePin(conversation.id, !conversation.isPinnedByMe)}

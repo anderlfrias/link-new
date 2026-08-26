@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { IconLoader2, IconMessageCircle2 } from "@tabler/icons-react";
 import { ConversationListItem } from "@/features/conversations/components/ConversationListItem";
 import { useSetConversationPreference } from "@/features/conversations/hooks/use-set-conversation-preference";
@@ -27,6 +27,9 @@ export function ConversationList({
   currentUserId,
 }: ConversationListProps) {
   const { setPinned, setFavorite, pendingId } = useSetConversationPreference();
+  // Un solo menú de opciones abierto a la vez — vive acá (no en cada fila)
+  // para que abrir el de un chat cierre el de cualquier otro automáticamente.
+  const [openMenuConversationId, setOpenMenuConversationId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -78,6 +81,9 @@ export function ConversationList({
           conversation={conversation}
           currentUserId={currentUserId}
           pending={pendingId === conversation.id}
+          menuOpen={openMenuConversationId === conversation.id}
+          onOpenMenu={() => setOpenMenuConversationId(conversation.id)}
+          onCloseMenu={() => setOpenMenuConversationId((prev) => (prev === conversation.id ? null : prev))}
           onTogglePin={setPinned}
           onToggleFavorite={setFavorite}
         />
