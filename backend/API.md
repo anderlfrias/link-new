@@ -221,6 +221,9 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
       "lastReadAt": "...-o-null",
       "lastDeliveredMessageId": "msg-uuid-o-null",
       "lastDeliveredAt": "...-o-null",
+      "isAdmin": false,
+      "isPinned": false,
+      "isFavorite": false,
       "user": { "id": "user-uuid", "name": "Juan", "email": "juan@x.com", "avatarFileId": "file-uuid-o-null", "avatarFile": { "path": "avatars/user-uuid/....jpg" }, "status": "ACTIVE" }
     }
   ]
@@ -252,18 +255,21 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 
 ### 4.2 `GET /` — Listar mis conversaciones
 
-Sin body ni query params. Devuelve un array, cada conversación con tres campos extra:
+Sin body ni query params. Devuelve un array, cada conversación con cinco campos extra:
 
 ```json
 {
   "...": "...(todos los campos de arriba)",
   "unreadCount": 3,
   "lastMessageStatus": "delivered",
-  "lastMessagePreview": "Nos vemos mañana"
+  "lastMessagePreview": "Nos vemos mañana",
+  "isPinnedByMe": false,
+  "isFavoritedByMe": false
 }
 ```
 
-- Ordenadas por `lastMessageAt` descendente (las más recientes primero) — ideal para pintar directo como lista de chats.
+- Ordenadas: **fijadas por vos primero** (`isPinnedByMe`), y dentro de cada grupo (fijadas / no fijadas), por `lastMessageAt` descendente (las más recientes primero) — ideal para pintar directo como lista de chats.
+- `isPinnedByMe`/`isFavoritedByMe`: preferencias personales tuyas sobre esa conversación, no compartidas con el resto de los miembros — ver 4.10/4.11 más abajo.
 - Una `PRIVATE` sin ningún mensaje todavía **no aparece acá** para ninguno de sus dos miembros (ver 4.1) — `GROUP` sí, desde que se crea.
 - `unreadCount`: mensajes de otros posteriores a tu `lastReadAt` en esa conversación.
 - `lastMessageStatus`: `"sent"` | `"delivered"` | `"read"` | `null`. **Solo tiene un valor si el último mensaje lo enviaste vos** (para pintar el check ✓/✓✓/✓✓azul junto a tu propio último mensaje en la lista); es `null` si el último mensaje es de otra persona, o si la conversación no tiene mensajes todavía. Ver sección 7 para el detalle de qué significa cada estado.
@@ -352,6 +358,20 @@ PATCH /:id/settings
 ```
 Solo admins de ese grupo. `403` si el campo enviado no tiene su `allowGroupOverride*` en `true` en `AppSettings`. → misma forma que el `GET`.
 
+### 4.10 `PATCH /:id/pin` — Fijar/desfijar
+
+```json
+{ "isPinned": true }
+```
+**Self-only**: siempre actúa sobre tu propia membresía, nunca la de otro miembro. Preferencia personal — no la ve nadie más (ver 4.11 y sección 5). → `200` con la fila `ConversationMember` actualizada. Emite `conversation:member_preference_changed` **solo a tu propia room personal**.
+
+### 4.11 `PATCH /:id/favorite` — Marcar/desmarcar favorita
+
+```json
+{ "isFavorite": true }
+```
+Mismo criterio que 4.10 (self-only, privado, mismo evento de socket). → `200` con la fila `ConversationMember` actualizada.
+
 ---
 
 ## 5. Recibos y eventos de socket de conversación
@@ -365,6 +385,7 @@ Solo admins de ese grupo. `403` si el campo enviado no tiene su `allowGroupOverr
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | Al agregar miembros |
 | `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | Al quitar/salir un miembro |
 | `conversation:member_admin_changed` | servidor → cliente | `{ conversationId, userId, isAdmin }` | Al promover/degradar a un admin de grupo (ver 4.9) |
+| `conversation:member_preference_changed` | servidor → cliente | `{ conversationId, isPinned, isFavorite }` | Al fijar/favoritear (ver 4.10/4.11) — **solo a tu propia room personal**, nunca a la room de la conversación (es privado, no lo ve el resto de los miembros) |
 | `conversation:deleted` | servidor → cliente | `{ conversationId }` | Al borrarse |
 | `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | Cuando `userId` leyó o recibió mensajes — ver sección 7 |
 

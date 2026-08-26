@@ -181,7 +181,7 @@ export async function listConversations(currentUserId: string) {
   const lastMessages = await ConversationRepository.findLastMessagesByIds(lastMessageIds);
   const lastMessageById = new Map(lastMessages.map((message) => [message.id, message]));
 
-  return Promise.all(
+  const results = await Promise.all(
     conversations.map(async (conversation) => {
       const membership = conversation.members.find((member) => member.userId === currentUserId);
       const unreadCount = await ConversationRepository.countUnread(
@@ -204,9 +204,24 @@ export async function listConversations(currentUserId: string) {
       const lastMessage = conversation.lastMessageId ? lastMessageById.get(conversation.lastMessageId) : undefined;
       const lastMessagePreview = lastMessage ? buildLastMessagePreview(lastMessage) : null;
 
-      return { ...conversation, unreadCount, lastMessageStatus, lastMessagePreview };
+      return {
+        ...conversation,
+        unreadCount,
+        lastMessageStatus,
+        lastMessagePreview,
+        isPinnedByMe: membership?.isPinned ?? false,
+        isFavoritedByMe: membership?.isFavorite ?? false,
+      };
     }),
   );
+
+  // Fijados primero — Prisma no puede ordenar `Conversation.findMany` por un
+  // campo de un solo `ConversationMember` relacionado (el mío), así que el
+  // sort va acá. `.sort()` es estable: preserva el orden de `listForUser`
+  // (lastMessageAt/createdAt desc) como desempate dentro de cada grupo.
+  results.sort((a, b) => Number(b.isPinnedByMe) - Number(a.isPinnedByMe));
+
+  return results;
 }
 
 export function getConversation(currentUserId: string, conversationId: string) {
@@ -499,6 +514,39 @@ export async function updateGroupSettings(
   const overrideAllowed = await SettingsService.getGroupOverrideAllowedFlags();
 
   return { conversationId, effective, overrideAllowed };
+}
+
+/// Preferencia personal, self-only — a diferencia de `setMemberAdminStatus`,
+/// nunca actúa sobre otro miembro. Se emite solo a la room personal de quien
+/// la cambia (`userRoomName`, no `conversationRoomName`): es un dato privado
+/// de organización, filtrarlo a la conversación expondría esta preferencia al
+/// resto de los miembros, que no tienen por qué verla. Sin `logAudit` — mismo
+/// criterio que `markConversationRead`, que tampoco audita: no es una acción
+/// sobre el grupo, es una preferencia personal.
+export async function setConversationPinned(currentUserId: string, conversationId: string, isPinned: boolean) {
+  await assertMembership(conversationId, currentUserId);
+  const membership = await ConversationRepository.setMemberPinned(conversationId, currentUserId, isPinned);
+
+  getIO().to(userRoomName(currentUserId)).emit(CONVERSATION_EVENTS.MEMBER_PREFERENCE_CHANGED, {
+    conversationId,
+    isPinned: membership.isPinned,
+    isFavorite: membership.isFavorite,
+  });
+
+  return membership;
+}
+
+export async function setConversationFavorite(currentUserId: string, conversationId: string, isFavorite: boolean) {
+  await assertMembership(conversationId, currentUserId);
+  const membership = await ConversationRepository.setMemberFavorite(conversationId, currentUserId, isFavorite);
+
+  getIO().to(userRoomName(currentUserId)).emit(CONVERSATION_EVENTS.MEMBER_PREFERENCE_CHANGED, {
+    conversationId,
+    isPinned: membership.isPinned,
+    isFavorite: membership.isFavorite,
+  });
+
+  return membership;
 }
 
 export async function markConversationRead(

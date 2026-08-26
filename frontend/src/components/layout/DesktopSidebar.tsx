@@ -6,11 +6,12 @@ import { UserMenu } from "@/components/layout/UserMenu";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { ConversationFilterBar } from "@/features/conversations/components/ConversationFilterBar";
 import { ConversationList } from "@/features/conversations/components/ConversationList";
 import { NewChatModal } from "@/features/users/components/NewChatModal";
 import { ProfileSettingsPanel } from "@/features/profile/components/ProfileSettingsPanel";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
-import type { ConversationListItem } from "@/features/conversations/types/conversation.types";
+import type { ConversationFilter, ConversationListItem } from "@/features/conversations/types/conversation.types";
 
 interface DesktopSidebarProps {
   conversations: ConversationListItem[];
@@ -20,6 +21,7 @@ interface DesktopSidebarProps {
 
 export function DesktopSidebar({ conversations, status, currentUserId }: DesktopSidebarProps) {
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
   const [view, setView] = useState<"list" | "profileSettings">("list");
   const [showNewChat, setShowNewChat] = useState(false);
 
@@ -43,18 +45,20 @@ export function DesktopSidebar({ conversations, status, currentUserId }: Desktop
           </button>
         </div>
       </div>
-      <div className="px-3 pb-2">
+      <div className="flex flex-col gap-2 px-3 pb-2">
         <Input
           icon={<IconSearch size={16} stroke={1.75} />}
           placeholder="Buscar conversación"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <ConversationFilterBar active={activeFilter} onChange={setActiveFilter} />
       </div>
       <ConversationList
         conversations={conversations}
         status={status}
         searchQuery={search}
+        activeFilter={activeFilter}
         currentUserId={currentUserId}
       />
       <button

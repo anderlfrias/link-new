@@ -34,6 +34,14 @@ export const setMemberAdminSchema = yup.object({
   isAdmin: yup.boolean().required(),
 });
 
+export const setPinnedSchema = yup.object({
+  isPinned: yup.boolean().required(),
+});
+
+export const setFavoriteSchema = yup.object({
+  isFavorite: yup.boolean().required(),
+});
+
 // Solo valida la forma (subconjunto correcto de campos/valores) — si ese
 // campo tiene actualmente permitido un override por grupo depende de
 // AppSettings, y esa autoridad vive en conversation.service.ts

@@ -8,6 +8,7 @@ export const SOCKET_EVENTS = {
     memberAdded: "conversation:member_added",
     memberRemoved: "conversation:member_removed",
     memberAdminChanged: "conversation:member_admin_changed",
+    memberPreferenceChanged: "conversation:member_preference_changed",
     deleted: "conversation:deleted",
     receiptUpdated: "conversation:receipt_updated",
   },

@@ -4,9 +4,9 @@ import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/type
 
 /// Eventos propios de este módulo. `JOIN`/`LEAVE` los emite el cliente;
 /// `CREATED`/`UPDATED`/`MEMBER_ADDED`/`MEMBER_REMOVED`/`MEMBER_ADMIN_CHANGED`/
-/// `DELETED`/`RECEIPT_UPDATED` los emite el servidor (ver
-/// conversation.service.ts) hacia la room de la conversación o la room
-/// personal de cada usuario afectado.
+/// `MEMBER_PREFERENCE_CHANGED`/`DELETED`/`RECEIPT_UPDATED` los emite el
+/// servidor (ver conversation.service.ts) hacia la room de la conversación o
+/// la room personal de cada usuario afectado.
 export const CONVERSATION_EVENTS = {
   JOIN: "conversation:join",
   LEAVE: "conversation:leave",
@@ -19,6 +19,12 @@ export const CONVERSATION_EVENTS = {
   /// acciones puede hacer ese miembro, por eso amerita push inmediato (a
   /// diferencia de los cambios de group-settings, que no lo tienen).
   MEMBER_ADMIN_CHANGED: "conversation:member_admin_changed",
+  /// Fijar/favorito cambiaron — ver `setConversationPinned`/
+  /// `setConversationFavorite`. A diferencia de todos los demás eventos de
+  /// esta tabla, se emite SOLO a la room personal de quien hizo el cambio
+  /// (`userRoomName`), nunca a `conversationRoomName`: es una preferencia
+  /// privada, no algo que el resto de los miembros deba ver.
+  MEMBER_PREFERENCE_CHANGED: "conversation:member_preference_changed",
   DELETED: "conversation:deleted",
   /// Confirmación de entrega/lectura: el `lastRead*`/`lastDelivered*` de un
   /// miembro avanzó. `kind` distingue cuál de los dos cambió — ver

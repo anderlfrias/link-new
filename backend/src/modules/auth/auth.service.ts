@@ -34,6 +34,8 @@ export async function login(user: string, password: string): Promise<string> {
       body: JSON.stringify({ user, password, app: env.APP_CODE_EXTERNAL_AUTH }),
       signal: controller.signal,
     });
+    console.log(`EXTERNAL_AUTH login request returned status ${response.status}`);
+    console.log(`EXTERNAL_AUTH login request body: ${await response.clone().text()}`);
   } catch {
     throw new ServiceUnavailableError("User service unavailable");
   } finally {

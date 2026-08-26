@@ -55,6 +55,7 @@ export function useConversations(): UseConversationsResult {
       SOCKET_EVENTS.conversation.deleted,
       SOCKET_EVENTS.conversation.memberAdded,
       SOCKET_EVENTS.conversation.memberRemoved,
+      SOCKET_EVENTS.conversation.memberPreferenceChanged,
       SOCKET_EVENTS.conversation.receiptUpdated,
       // Evento propio de socket.io (no de nuestro protocolo, por eso no está en
       // SOCKET_EVENTS): si el socket se cortó en silencio por throttling de

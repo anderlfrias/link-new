@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/api-client";
 import type {
   Conversation,
   ConversationListItem,
+  ConversationMember,
   CreateConversationInput,
   UpdateConversationInput,
 } from "@/features/conversations/types/conversation.types";
@@ -99,6 +100,22 @@ export function updateConversationSettings(
     token,
     body: patch,
   });
+}
+
+export function setConversationPinned(
+  token: string,
+  conversationId: string,
+  isPinned: boolean,
+): Promise<ConversationMember> {
+  return apiRequest(`${BASE_PATH}/${conversationId}/pin`, { method: "PATCH", token, body: { isPinned } });
+}
+
+export function setConversationFavorite(
+  token: string,
+  conversationId: string,
+  isFavorite: boolean,
+): Promise<ConversationMember> {
+  return apiRequest(`${BASE_PATH}/${conversationId}/favorite`, { method: "PATCH", token, body: { isFavorite } });
 }
 
 export function markConversationRead(

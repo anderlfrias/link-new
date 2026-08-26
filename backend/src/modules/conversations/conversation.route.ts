@@ -7,7 +7,9 @@ import {
   addMembersSchema,
   createConversationSchema,
   markReadSchema,
+  setFavoriteSchema,
   setMemberAdminSchema,
+  setPinnedSchema,
   updateConversationSchema,
   updateGroupSettingsSchema,
 } from "./conversation.validator";
@@ -30,6 +32,8 @@ router.patch(
 );
 router.get("/:id/settings", ConversationController.getGroupSettings);
 router.patch("/:id/settings", validateBody(updateGroupSettingsSchema), ConversationController.updateGroupSettings);
+router.patch("/:id/pin", validateBody(setPinnedSchema), ConversationController.setPinned);
+router.patch("/:id/favorite", validateBody(setFavoriteSchema), ConversationController.setFavorite);
 router.post("/:id/read", validateBody(markReadSchema), ConversationController.markRead);
 
 export default router;

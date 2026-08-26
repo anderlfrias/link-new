@@ -250,6 +250,13 @@ model ConversationMember {
   /// nunca se lee/escribe ahí).
   isAdmin Boolean @default(false) @map("is_admin")
 
+  /// Preferencias personales de organización de este miembro sobre ESTA
+  /// conversación — nunca globales, cada miembro tiene las suyas propias (ver
+  /// conversation.service.ts, setConversationPinned/setConversationFavorite).
+  /// Un chat fijado por mí no aparece fijado para el resto de los miembros.
+  isPinned   Boolean @default(false) @map("is_pinned")
+  isFavorite Boolean @default(false) @map("is_favorite")
+
   /// Un usuario solo puede tener una membresía por conversación.
   @@unique([conversationId, userId])
   @@map("conversation_members")

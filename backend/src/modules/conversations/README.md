@@ -28,6 +28,8 @@ Base: `/api/v1/conversations`
 | `PATCH` | `/:id/members/:userId/admin` | Promueve/degrada a un miembro como admin de ese grupo (solo `GROUP`). |
 | `GET` | `/:id/settings` | Configuración efectiva de un grupo (global + override). |
 | `PATCH` | `/:id/settings` | Actualiza el override de un grupo (solo admins de ese grupo). |
+| `PATCH` | `/:id/pin` | Fija/desfija la conversación — solo para el usuario que llama. |
+| `PATCH` | `/:id/favorite` | Marca/desmarca como favorita — solo para el usuario que llama. |
 | `POST` | `/:id/read` | Marca la conversación como leída para el usuario actual. |
 
 ### `POST /` — Crear conversación
@@ -48,7 +50,7 @@ Respuesta `201` con la conversación y sus miembros (incluye `user: { id, name, 
 
 ### `GET /` — Listar mis conversaciones
 
-Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas por `lastMessageAt` descendente, cada una con `unreadCount` (mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual — sin agregaciones sobre todo el historial, gracias a `lastReadAt`/`lastMessageAt` denormalizados que documenta el [README del backend](../../../README.md#por-qué-existen-lastreadmessageid-en-conversationmember-y-lastmessageat-en-conversation)) y `lastMessageStatus` (ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura) — `null` si el último mensaje no lo enviaste vos). Excluye las `PRIVATE` con `lastMessageId: null` (ver nota arriba) — `GROUP` aparece siempre, aunque no tenga mensajes.
+Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas por `lastMessageAt` descendente (con las **fijadas por vos primero** — ver [Fijar y favoritos](#fijar-y-favoritos)), cada una con `unreadCount` (mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual — sin agregaciones sobre todo el historial, gracias a `lastReadAt`/`lastMessageAt` denormalizados que documenta el [README del backend](../../../README.md#por-qué-existen-lastreadmessageid-en-conversationmember-y-lastmessageat-en-conversation)) y `lastMessageStatus` (ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura) — `null` si el último mensaje no lo enviaste vos). Excluye las `PRIVATE` con `lastMessageId: null` (ver nota arriba) — `GROUP` aparece siempre, aunque no tenga mensajes.
 
 ### `PATCH /:id` — Renombrar / cambiar imagen
 
@@ -106,6 +108,17 @@ Solo `GROUP`. Accesible a cualquier miembro (transparencia sobre las reglas de s
 
 Solo `GROUP`, solo admins de **ese** grupo (`403` en caso contrario). Body: subconjunto parcial de las 5 dimensiones overrideables. Si algún campo enviado no tiene su `allowGroupOverride*` correspondiente en `true` en `AppSettings`, `403` explícito (aunque el campo sea válido en forma) — la autoridad final vive en el servicio, no en el validador. Respuesta: misma forma que `GET /:id/settings`.
 
+### `PATCH /:id/pin` / `PATCH /:id/favorite`
+
+```json
+{ "isPinned": true }
+```
+```json
+{ "isFavorite": true }
+```
+
+Ver [Fijar y favoritos](#fijar-y-favoritos). Respuesta: la fila `ConversationMember` actualizada del usuario que llama.
+
 ### `POST /:id/read`
 
 ```json
@@ -144,6 +157,12 @@ Cada `ConversationMember` tiene un campo `isAdmin` (default `false`), independie
 * Promover/degradar a alguien que ya tiene ese estado es rechazado (`400`, no-op).
 
 Cada cambio escribe un `ChatAuditLog` (`SET_GROUP_ADMIN`, `metadata: { targetUserId, isAdmin }`) y emite `conversation:member_admin_changed` (ver [Eventos de socket](#eventos-de-socket)).
+
+## Fijar y favoritos
+
+`ConversationMember.isPinned`/`isFavorite` (ambos default `false`) son **preferencias personales de organización**, no propiedades de la conversación — cada miembro tiene las suyas, independientes de las del resto (fijar un chat no lo fija para nadie más). `GET /` (arriba) ordena las fijadas por el usuario que llama primero — el resto del orden (`lastMessageAt`/`createdAt` desc) se preserva sin cambios dentro de cada grupo (fijadas / no fijadas). Nada de esto se audita en `ChatAuditLog` (ver [Auditoría](#auditoría)) — es preferencia personal, no una acción sobre el grupo.
+
+`PATCH /:id/pin`/`PATCH /:id/favorite` (`conversation.service.ts#setConversationPinned`/`setConversationFavorite`) son **self-only**: siempre actúan sobre la propia membresía de quien llama, nunca sobre otro miembro (a diferencia de `setMemberAdminStatus`). Por eso mismo, el evento de socket (`conversation:member_preference_changed`, ver [Eventos de socket](#eventos-de-socket)) se emite **solo a la room personal** de quien hizo el cambio, nunca a la room de la conversación — filtrarlo ahí expondría esta preferencia privada al resto de los miembros.
 
 ## Overrides por grupo
 
@@ -187,6 +206,7 @@ Definidos en `conversation.socket.ts` (`CONVERSATION_EVENTS`). El cliente debe a
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | A la room de la conversación. |
 | `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | A la room de la conversación. |
 | `conversation:member_admin_changed` | servidor → cliente | `{ conversationId, userId, isAdmin }` | A la room de la conversación, cuando `setMemberAdminStatus` promueve/degrada a un miembro — cambia en vivo qué acciones puede hacer, por eso se empuja de inmediato (a diferencia de los cambios de `PATCH /:id/settings`, que no emiten evento). |
+| `conversation:member_preference_changed` | servidor → cliente | `{ conversationId, isPinned, isFavorite }` | **Solo** a la room personal (`user:<internalUserId>`) de quien fijó/favoriteó — nunca a la room de la conversación (ver [Fijar y favoritos](#fijar-y-favoritos)). Sincroniza entre pestañas/dispositivos del mismo usuario. |
 | `conversation:deleted` | servidor → cliente | `{ conversationId }` | A la room de la conversación. |
 | `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | A la room de la conversación, cuando el `lastRead*`/`lastDelivered*` de `userId` avanza (`POST /:id/read`, o `markDelivered` desde `messages`). Solo se emite si el puntero realmente cambió — no en cada fetch que no aporta nada nuevo. |
 

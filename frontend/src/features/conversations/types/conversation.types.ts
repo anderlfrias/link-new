@@ -29,6 +29,10 @@ export interface ConversationMember {
    * backend/src/modules/conversations/README.md#admins-de-grupo. Sin
    * significado para PRIVATE. */
   isAdmin: boolean;
+  /** Preferencias personales de organización — propias de cada miembro, no
+   * compartidas. Ver backend/src/modules/conversations/README.md#fijar-y-favoritos. */
+  isPinned: boolean;
+  isFavorite: boolean;
   user: ConversationMemberUser;
 }
 
@@ -54,7 +58,14 @@ export interface ConversationListItem extends Conversation {
   lastMessageStatus: MessageReceiptStatus | null;
   /** Preview ya resuelto del último mensaje (texto, "Mensaje eliminado", adjunto). `null` sin mensajes. */
   lastMessagePreview: string | null;
+  /** Derivados de tu propia membresía — nunca hay que buscarlos en `members`. */
+  isPinnedByMe: boolean;
+  isFavoritedByMe: boolean;
 }
+
+/** Filtro de la lista de chats — puramente frontend, se aplica sobre la
+ * lista ya traída completa (mismo criterio que la búsqueda por texto). */
+export type ConversationFilter = "all" | "unread" | "groups" | "favorites";
 
 export interface CreatePrivateConversationInput {
   type: "PRIVATE";

@@ -125,6 +125,20 @@ export function setMemberAdmin(conversationId: string, userId: string, isAdmin: 
   });
 }
 
+export function setMemberPinned(conversationId: string, userId: string, isPinned: boolean) {
+  return prisma.conversationMember.update({
+    where: { conversationId_userId: { conversationId, userId } },
+    data: { isPinned },
+  });
+}
+
+export function setMemberFavorite(conversationId: string, userId: string, isFavorite: boolean) {
+  return prisma.conversationMember.update({
+    where: { conversationId_userId: { conversationId, userId } },
+    data: { isFavorite },
+  });
+}
+
 export function findGroupSettings(conversationId: string): Promise<ConversationGroupSettings | null> {
   return prisma.conversationGroupSettings.findUnique({ where: { conversationId } });
 }

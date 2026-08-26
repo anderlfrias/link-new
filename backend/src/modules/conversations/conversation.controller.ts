@@ -129,6 +129,26 @@ export async function removeMember(req: Request, res: Response, next: NextFuncti
   }
 }
 
+export async function setPinned(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { isPinned } = req.body as { isPinned: boolean };
+    const result = await ConversationService.setConversationPinned(currentUserId(req), req.params.id, isPinned);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setFavorite(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { isFavorite } = req.body as { isFavorite: boolean };
+    const result = await ConversationService.setConversationFavorite(currentUserId(req), req.params.id, isFavorite);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function markRead(req: Request, res: Response, next: NextFunction) {
   try {
     const { lastReadMessageId } = req.body as { lastReadMessageId?: string };
