@@ -16,3 +16,21 @@ export async function list(req: Request, res: Response, next: NextFunction) {
     next(error);
   }
 }
+
+export async function listAdmin(req: Request, res: Response, next: NextFunction) {
+  try {
+    const before = typeof req.query.before === "string" ? req.query.before : undefined;
+    const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined;
+    const token = req.headers.authorization!.slice("Bearer ".length);
+
+    const result = await UserService.listUsersForAdmin(
+      token,
+      { search },
+      { beforeId: before, limit: Number.isFinite(limit) ? limit : undefined },
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}

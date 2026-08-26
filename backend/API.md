@@ -608,7 +608,7 @@ npm run dev   # ts-node, puerto 4000 por default
 
 Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`. Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 25 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
 
-Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`settings`](./src/modules/settings/README.md), [`socket`](./src/socket/README.md).
+Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`users`](./src/modules/users/README.md), [`settings`](./src/modules/settings/README.md), [`socket`](./src/socket/README.md).
 
 ---
 
@@ -681,3 +681,32 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 50, m
 ### 13.2 `DELETE /:id` — Borrar físicamente
 
 **Distinto de `DELETE /api/v1/files/:id`** (sección 9.3, borrado lógico): este SÍ borra el archivo del disco, libera espacio real. La fila de `StoredFile` no se borra, solo queda `deletedAt` seteado (mismo criterio que el borrado lógico) — así cualquier mensaje/avatar/foto de grupo que ya lo referenciaba sigue teniendo nombre/tamaño válidos para mostrar un placeholder. Sin chequeo de dueño — el único gate es el rol admin. → `200` `{ "id": "..." }`.
+
+---
+
+## 14. Gestión de usuarios (admin)
+
+Base HTTP: `/api/v1/admin/users`. Requiere rol `"admin"` (ver sección 2) — `403` si no lo tenés. Ver [`users/README.md`, "Gestión de usuarios (admin)"](./src/modules/users/README.md#gestión-de-usuarios-admin) para el detalle completo. A diferencia de `GET /api/v1/users` (el directorio de contactos para iniciar una conversación — no documentado en secciones aparte acá, ver [`users/README.md`](./src/modules/users/README.md)), muestra **todos** los usuarios (incluido el propio admin, sin filtrar `status`) más cuánto almacenamiento usa cada uno y su actividad.
+
+### 14.1 `GET /` — Listar usuarios
+
+Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, máx 100), `search` (busca en `name`/`email`/`username`).
+
+```json
+{
+  "users": [
+    {
+      "id": "user-uuid", "name": "Ana", "email": "ana@x.com", "username": "ana.external-auth",
+      "avatarFileId": "file-uuid", "avatarFile": { "path": "avatars/..." },
+      "status": "ACTIVE", "syncProfileWithIntegration": true, "createdAt": "...",
+      "storage": { "fileCount": 12, "totalSize": 4582001 },
+      "activity": { "conversationCount": 8, "messagesSentCount": 340, "groupsAdministeredCount": 1 }
+    }
+  ],
+  "totalCount": 57
+}
+```
+
+`storage` = archivos activos subidos por ese usuario (bytes + cantidad). `activity.groupsAdministeredCount` = en cuántos `GROUP` es admin de grupo (`ConversationMember.isAdmin`, sección 4.9), no cuántos creó. `syncProfileWithIntegration` = si el perfil sigue sincronizado desde EXTERNAL_AUTH o ya fue editado localmente.
+
+**Esta vista nunca muestra el rol de un usuario** (no hay forma de saberlo salvo para quien está logueado en ese momento — ver `users/README.md` para el porqué). Todo esto es de **solo lectura**: para cambiar nombre, foto o cualquier otro dato de un usuario hay que hacerlo desde EXTERNAL_AUTH, no desde este API.

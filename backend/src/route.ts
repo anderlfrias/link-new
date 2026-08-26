@@ -4,7 +4,7 @@ import conversationRoutes from "./modules/conversations/conversation.route";
 import fileRoutes, { adminFileRouter } from "./modules/files/file.route";
 import messageRoutes from "./modules/messages/message.route";
 import { adminSettingsRouter, publicSettingsRouter } from "./modules/settings/settings.route";
-import userRoutes from "./modules/users/user.route";
+import userRoutes, { adminUserRouter } from "./modules/users/user.route";
 
 const router = Router();
 
@@ -25,6 +25,7 @@ router.use("/v1/users", userRoutes);
 // Configuración global de la instalación — ver settings/README.md.
 router.use("/v1/admin/settings", adminSettingsRouter);
 router.use("/v1/admin/files", adminFileRouter);
+router.use("/v1/admin/users", adminUserRouter);
 router.use("/v1/settings/public", publicSettingsRouter);
 
 export default router;
