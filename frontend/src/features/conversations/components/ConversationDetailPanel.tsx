@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { useConversationFiles } from "@/features/messages/hooks/use-conversation-files";
 import { useUpdateConversation } from "@/features/conversations/hooks/use-update-conversation";
+import { useSetMemberAdmin } from "@/features/conversations/hooks/use-set-member-admin";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { useAuth } from "@/providers/auth-provider";
@@ -14,10 +15,12 @@ import {
   getConversationDisplayName,
   getOtherMembers,
 } from "@/utils/conversation-display";
-import { buildStoredFileUrl, buildUploadedFileUrl } from "@/utils/file-url";
+import { buildUploadedFileUrl } from "@/utils/file-url";
 import { downloadFile } from "@/utils/download-file";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
+import { GroupMemberRow } from "@/features/conversations/components/GroupMemberRow";
+import { GroupSettingsSection } from "@/features/conversations/components/GroupSettingsSection";
 import type { Conversation } from "@/features/conversations/types/conversation.types";
 
 interface ConversationDetailPanelProps {
@@ -27,19 +30,23 @@ interface ConversationDetailPanelProps {
 }
 
 /** Panel de detalle de la conversación, tipo WhatsApp/Telegram: en GROUP
- * muestra los integrantes (y deja renombrar/cambiar la foto — cualquier
- * miembro puede, no hay roles, ver backend/API.md sección 4), en PRIVATE
- * solo a la otra persona — y en ambos casos, los archivos compartidos. */
+ * muestra los integrantes (renombrar/cambiar la foto y gestionar admins de
+ * grupo están sujetos a la configuración del grupo — ver backend/API.md
+ * sección 4.8/4.9), en PRIVATE solo a la otra persona — y en ambos casos,
+ * los archivos compartidos. */
 export function ConversationDetailPanel({ conversation, currentUserId, onClose }: ConversationDetailPanelProps) {
   const { files, status: filesStatus, hasMore, loadingMore, loadMore } = useConversationFiles(conversation.id);
   const { open: openLightbox } = useImageLightbox();
   const { session } = useAuth();
   const { update, pending: updating, error: updateError } = useUpdateConversation(conversation.id);
+  const { setAdmin, pendingUserId: pendingAdminUserId, error: setAdminError } = useSetMemberAdmin(conversation.id);
 
   const isGroup = conversation.type === "GROUP";
   const displayName = getConversationDisplayName(conversation, currentUserId);
   const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const otherMember = getOtherMembers(conversation, currentUserId)[0];
+  const currentMember = conversation.members.find((member) => member.userId === currentUserId);
+  const canManageGroup = currentMember?.isAdmin ?? false;
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(conversation.name ?? "");
@@ -108,6 +115,12 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
           <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
             <IconAlertCircle size={16} className="shrink-0" />
             <span>{updateError}</span>
+          </div>
+        )}
+        {setAdminError && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
+            <IconAlertCircle size={16} className="shrink-0" />
+            <span>{setAdminError}</span>
           </div>
         )}
 
@@ -208,29 +221,21 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
             </h3>
             <div className="flex flex-col">
               {conversation.members.map((member) => (
-                <div key={member.id} className="flex items-center gap-3 px-1 py-2">
-                  <Avatar
-                    name={member.user.name}
-                    imageUrl={member.user.avatarFile ? buildStoredFileUrl(member.user.avatarFile.path) : null}
-                    size="md"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-brand-ink dark:text-white">
-                      {member.user.name}
-                      {member.userId === currentUserId && " (Tú)"}
-                    </p>
-                    <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">{member.user.email}</p>
-                  </div>
-                  {member.userId === conversation.createdById && (
-                    <span className="shrink-0 rounded-full bg-black/5 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
-                      Creador
-                    </span>
-                  )}
-                </div>
+                <GroupMemberRow
+                  key={member.id}
+                  member={member}
+                  currentUserId={currentUserId}
+                  conversationCreatedById={conversation.createdById}
+                  canManageAdmins={canManageGroup}
+                  pending={pendingAdminUserId === member.userId}
+                  onSetAdmin={setAdmin}
+                />
               ))}
             </div>
           </div>
         )}
+
+        {isGroup && canManageGroup && <GroupSettingsSection conversationId={conversation.id} />}
 
         <div className="mt-4">
           <h3 className="mb-1 px-1 text-sm font-medium text-neutral-500 dark:text-neutral-400">

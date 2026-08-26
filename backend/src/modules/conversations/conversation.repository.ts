@@ -1,4 +1,4 @@
-import { ChatAuditAction, ConversationType, Prisma } from "@prisma/client";
+import { ChatAuditAction, ConversationGroupSettings, ConversationType, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 
 const withMembers = {
@@ -55,7 +55,9 @@ export function createConversation(data: {
       name: data.name,
       imageFileId: data.imageFileId,
       createdById: data.createdById,
-      members: { create: data.memberIds.map((userId) => ({ userId })) },
+      members: {
+        create: data.memberIds.map((userId) => ({ userId, isAdmin: userId === data.createdById })),
+      },
     },
     include: withMembers,
   });
@@ -113,6 +115,33 @@ export function addMembers(conversationId: string, userIds: string[]) {
 export function removeMember(conversationId: string, userId: string) {
   return prisma.conversationMember.delete({
     where: { conversationId_userId: { conversationId, userId } },
+  });
+}
+
+export function setMemberAdmin(conversationId: string, userId: string, isAdmin: boolean) {
+  return prisma.conversationMember.update({
+    where: { conversationId_userId: { conversationId, userId } },
+    data: { isAdmin },
+  });
+}
+
+export function findGroupSettings(conversationId: string): Promise<ConversationGroupSettings | null> {
+  return prisma.conversationGroupSettings.findUnique({ where: { conversationId } });
+}
+
+export function upsertGroupSettings(
+  conversationId: string,
+  data: Partial<
+    Pick<
+      ConversationGroupSettings,
+      "whoCanAddMembers" | "whoCanRemoveMembers" | "maxGroupMembers" | "whoCanChangeGroupInfo" | "whoCanDeleteGroup"
+    >
+  >,
+): Promise<ConversationGroupSettings> {
+  return prisma.conversationGroupSettings.upsert({
+    where: { conversationId },
+    create: { conversationId, ...data },
+    update: data,
   });
 }
 

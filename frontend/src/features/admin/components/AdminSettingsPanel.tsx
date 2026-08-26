@@ -10,7 +10,14 @@ import type {
   GroupPermissionLevel,
   UpdateAdminSettingsPayload,
 } from "@/features/admin/types/admin-settings.types";
+import {
+  CREATE_GROUPS_OPTIONS,
+  DELETE_GROUP_OPTIONS,
+  GROUP_PERMISSION_LABELS,
+  MEMBER_ACTION_OPTIONS,
+} from "@/features/admin/constants/group-permission-options.constant";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 
@@ -23,6 +30,13 @@ interface DraftState {
   whoCanCreateGroups: GroupPermissionLevel;
   whoCanAddMembers: GroupPermissionLevel;
   whoCanRemoveMembers: GroupPermissionLevel;
+  whoCanChangeGroupInfo: GroupPermissionLevel;
+  whoCanDeleteGroup: GroupPermissionLevel;
+  allowGroupOverrideAddMembers: boolean;
+  allowGroupOverrideRemoveMembers: boolean;
+  allowGroupOverrideMaxGroupMembers: boolean;
+  allowGroupOverrideChangeGroupInfo: boolean;
+  allowGroupOverrideDeleteGroup: boolean;
   messageRetentionDays: string;
 }
 
@@ -36,6 +50,13 @@ function toDraft(settings: AdminSettings): DraftState {
     whoCanCreateGroups: settings.whoCanCreateGroups,
     whoCanAddMembers: settings.whoCanAddMembers,
     whoCanRemoveMembers: settings.whoCanRemoveMembers,
+    whoCanChangeGroupInfo: settings.whoCanChangeGroupInfo,
+    whoCanDeleteGroup: settings.whoCanDeleteGroup,
+    allowGroupOverrideAddMembers: settings.allowGroupOverrideAddMembers,
+    allowGroupOverrideRemoveMembers: settings.allowGroupOverrideRemoveMembers,
+    allowGroupOverrideMaxGroupMembers: settings.allowGroupOverrideMaxGroupMembers,
+    allowGroupOverrideChangeGroupInfo: settings.allowGroupOverrideChangeGroupInfo,
+    allowGroupOverrideDeleteGroup: settings.allowGroupOverrideDeleteGroup,
     messageRetentionDays: settings.messageRetentionDays == null ? "" : String(settings.messageRetentionDays),
   };
 }
@@ -83,8 +104,54 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     whoCanCreateGroups: draft.whoCanCreateGroups,
     whoCanAddMembers: draft.whoCanAddMembers,
     whoCanRemoveMembers: draft.whoCanRemoveMembers,
+    whoCanChangeGroupInfo: draft.whoCanChangeGroupInfo,
+    whoCanDeleteGroup: draft.whoCanDeleteGroup,
+    allowGroupOverrideAddMembers: draft.allowGroupOverrideAddMembers,
+    allowGroupOverrideRemoveMembers: draft.allowGroupOverrideRemoveMembers,
+    allowGroupOverrideMaxGroupMembers: draft.allowGroupOverrideMaxGroupMembers,
+    allowGroupOverrideChangeGroupInfo: draft.allowGroupOverrideChangeGroupInfo,
+    allowGroupOverrideDeleteGroup: draft.allowGroupOverrideDeleteGroup,
     messageRetentionDays: draft.messageRetentionDays.trim() === "" ? null : Number(draft.messageRetentionDays),
   };
+}
+
+interface GroupPermissionFieldProps {
+  label: string;
+  value: GroupPermissionLevel;
+  options: GroupPermissionLevel[];
+  onChange: (value: GroupPermissionLevel) => void;
+  overrideAllowed?: boolean;
+  onOverrideChange?: (value: boolean) => void;
+}
+
+function GroupPermissionField({
+  label,
+  value,
+  options,
+  onChange,
+  overrideAllowed,
+  onOverrideChange,
+}: GroupPermissionFieldProps) {
+  return (
+    <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+      {label}
+      <Select value={value} onChange={(event) => onChange(event.target.value as GroupPermissionLevel)}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {GROUP_PERMISSION_LABELS[option]}
+          </option>
+        ))}
+      </Select>
+      {onOverrideChange && (
+        <Checkbox
+          className="mt-1"
+          checked={overrideAllowed ?? false}
+          onChange={(event) => onOverrideChange(event.target.checked)}
+          label="El grupo puede cambiar esto"
+        />
+      )}
+    </label>
+  );
 }
 
 export function AdminSettingsPanel() {
@@ -211,39 +278,51 @@ export function AdminSettingsPanel() {
                   onChange={(event) => updateField("maxGroupMembers", event.target.value)}
                   error={errors.maxGroupMembers}
                 />
+                <Checkbox
+                  className="mt-1"
+                  checked={draft.allowGroupOverrideMaxGroupMembers}
+                  onChange={(event) => updateField("allowGroupOverrideMaxGroupMembers", event.target.checked)}
+                  label="El grupo puede cambiar esto"
+                />
               </label>
-              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                ¿Quién puede crear grupos?
-                <Select
-                  value={draft.whoCanCreateGroups}
-                  onChange={(event) => updateField("whoCanCreateGroups", event.target.value as GroupPermissionLevel)}
-                >
-                  <option value="ALL_MEMBERS">Cualquier usuario</option>
-                  <option value="ADMINS_ONLY">Solo administradores</option>
-                </Select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                ¿Quién puede agregar miembros?
-                <Select
-                  value={draft.whoCanAddMembers}
-                  onChange={(event) => updateField("whoCanAddMembers", event.target.value as GroupPermissionLevel)}
-                >
-                  <option value="ALL_MEMBERS">Cualquier miembro</option>
-                  <option value="ADMINS_ONLY">Solo administradores</option>
-                  <option value="CREATOR_ONLY">Solo el creador del grupo</option>
-                </Select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                ¿Quién puede quitar miembros?
-                <Select
-                  value={draft.whoCanRemoveMembers}
-                  onChange={(event) => updateField("whoCanRemoveMembers", event.target.value as GroupPermissionLevel)}
-                >
-                  <option value="ALL_MEMBERS">Cualquier miembro</option>
-                  <option value="ADMINS_ONLY">Solo administradores</option>
-                  <option value="CREATOR_ONLY">Solo el creador del grupo</option>
-                </Select>
-              </label>
+              <GroupPermissionField
+                label="¿Quién puede crear grupos?"
+                value={draft.whoCanCreateGroups}
+                options={CREATE_GROUPS_OPTIONS}
+                onChange={(value) => updateField("whoCanCreateGroups", value)}
+              />
+              <GroupPermissionField
+                label="¿Quién puede agregar miembros?"
+                value={draft.whoCanAddMembers}
+                options={MEMBER_ACTION_OPTIONS}
+                onChange={(value) => updateField("whoCanAddMembers", value)}
+                overrideAllowed={draft.allowGroupOverrideAddMembers}
+                onOverrideChange={(value) => updateField("allowGroupOverrideAddMembers", value)}
+              />
+              <GroupPermissionField
+                label="¿Quién puede quitar miembros?"
+                value={draft.whoCanRemoveMembers}
+                options={MEMBER_ACTION_OPTIONS}
+                onChange={(value) => updateField("whoCanRemoveMembers", value)}
+                overrideAllowed={draft.allowGroupOverrideRemoveMembers}
+                onOverrideChange={(value) => updateField("allowGroupOverrideRemoveMembers", value)}
+              />
+              <GroupPermissionField
+                label="¿Quién puede renombrar o cambiar la foto del grupo?"
+                value={draft.whoCanChangeGroupInfo}
+                options={MEMBER_ACTION_OPTIONS}
+                onChange={(value) => updateField("whoCanChangeGroupInfo", value)}
+                overrideAllowed={draft.allowGroupOverrideChangeGroupInfo}
+                onOverrideChange={(value) => updateField("allowGroupOverrideChangeGroupInfo", value)}
+              />
+              <GroupPermissionField
+                label="¿Quién puede eliminar el grupo?"
+                value={draft.whoCanDeleteGroup}
+                options={DELETE_GROUP_OPTIONS}
+                onChange={(value) => updateField("whoCanDeleteGroup", value)}
+                overrideAllowed={draft.allowGroupOverrideDeleteGroup}
+                onOverrideChange={(value) => updateField("allowGroupOverrideDeleteGroup", value)}
+              />
             </div>
           </section>
 

@@ -22,9 +22,12 @@ Base: `/api/v1/conversations`
 | `GET` | `/` | Lista las conversaciones del usuario actual, con `unreadCount`. |
 | `GET` | `/:id` | Detalle de una conversación (requiere ser miembro). |
 | `PATCH` | `/:id` | Renombra o cambia la imagen (solo `GROUP`). |
-| `DELETE` | `/:id` | Borrado lógico (solo el creador). |
+| `DELETE` | `/:id` | Borrado lógico. |
 | `POST` | `/:id/members` | Agrega miembros (solo `GROUP`). |
 | `DELETE` | `/:id/members/:userId` | Quita un miembro o sale de la conversación. |
+| `PATCH` | `/:id/members/:userId/admin` | Promueve/degrada a un miembro como admin de ese grupo (solo `GROUP`). |
+| `GET` | `/:id/settings` | Configuración efectiva de un grupo (global + override). |
+| `PATCH` | `/:id/settings` | Actualiza el override de un grupo (solo admins de ese grupo). |
 | `POST` | `/:id/read` | Marca la conversación como leída para el usuario actual. |
 
 ### `POST /` — Crear conversación
@@ -37,7 +40,7 @@ Base: `/api/v1/conversations`
 ```
 
 * **`PRIVATE`**: `memberIds` debe traer exactamente **un** id (el otro participante; el creador se agrega solo). Si ya existe una conversación `PRIVATE` activa entre ambos, la devuelve tal cual en vez de crear un duplicado — el endpoint es idempotente para este caso.
-* **`GROUP`**: requiere `name` y al menos **dos** ids además del creador (más de dos participantes en total, como documenta el enum `ConversationType` en el schema), sin superar `AppSettings.maxGroupMembers` (`400` si se excede). Si `AppSettings.whoCanCreateGroups` es `ADMINS_ONLY`, solo un usuario con rol `"admin"` puede crear un grupo (`403` en caso contrario) — ver [Autorización](#autorización). `imageFileId` es opcional (debe ser el `id` de un `StoredFile` ya existente — subido antes vía [`files`](../files/README.md), este módulo no sube archivos).
+* **`GROUP`**: requiere `name` y al menos **dos** ids además del creador (más de dos participantes en total, como documenta el enum `ConversationType` en el schema), sin superar `AppSettings.maxGroupMembers` (`400` si se excede). Si `AppSettings.whoCanCreateGroups` es `APP_ADMINS_ONLY`, solo un usuario con rol `"admin"` puede crear un grupo (`403` en caso contrario) — ver [Autorización](#autorización). `imageFileId` es opcional (debe ser el `id` de un `StoredFile` ya existente — subido antes vía [`files`](../files/README.md), este módulo no sube archivos). El creador queda marcado como **admin de ese grupo** (`ConversationMember.isAdmin = true`) — ver [Admins de grupo](#admins-de-grupo).
 
 Respuesta `201` con la conversación y sus miembros (incluye `user: { id, name, email, avatarFileId, status }` por cada miembro).
 
@@ -53,7 +56,7 @@ Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas
 { "name": "Nuevo nombre" }
 ```
 
-Solo aplica a `GROUP` (`400` en `PRIVATE`). Cualquier miembro puede renombrar o cambiar la imagen — el modelo de datos no tiene roles por miembro, solo `createdById` (ver [Autorización](#autorización)). `imageFileId: null` limpia la imagen del grupo.
+Solo aplica a `GROUP` (`400` en `PRIVATE`). Sujeto a `AppSettings.whoCanChangeGroupInfo` (ver [Autorización](#autorización)). `imageFileId: null` limpia la imagen del grupo.
 
 ### `POST /:id/members` — Agregar miembros
 
@@ -71,7 +74,37 @@ Solo `GROUP`. Ids ya miembros se ignoran silenciosamente (no es error); si no qu
 
 ### `DELETE /:id` — Borrar conversación
 
-Borrado lógico (`deletedAt`), solo el creador (`403` para cualquier otro miembro), sin importar el tipo.
+Borrado lógico (`deletedAt`). En `GROUP`, sujeto a `AppSettings.whoCanDeleteGroup` (ver [Autorización](#autorización)); en `PRIVATE`, solo el creador (`403` para cualquier otro miembro) — regla histórica, no configurable.
+
+### `PATCH /:id/members/:userId/admin` — Promover/degradar admin de grupo
+
+```json
+{ "isAdmin": true }
+```
+
+Solo `GROUP`. Solo un admin **actual** de ese grupo puede promover o degradar a otro miembro (`403` en caso contrario). El creador nunca puede ser degradado (`403` si `isAdmin: false` y `:userId` es el creador). Ver [Admins de grupo](#admins-de-grupo). Respuesta `200 { conversationId, userId, isAdmin }`.
+
+### `GET /:id/settings` — Configuración efectiva del grupo
+
+Solo `GROUP`. Accesible a cualquier miembro (transparencia sobre las reglas de su propio grupo, no solo a sus admins). Respuesta:
+
+```json
+{
+  "conversationId": "<id>",
+  "effective": { "whoCanAddMembers": "...", "whoCanRemoveMembers": "...", "maxGroupMembers": 256, "whoCanChangeGroupInfo": "...", "whoCanDeleteGroup": "..." },
+  "overrideAllowed": { "whoCanAddMembers": false, "whoCanRemoveMembers": false, "maxGroupMembers": false, "whoCanChangeGroupInfo": false, "whoCanDeleteGroup": false }
+}
+```
+
+`effective` ya combina el global de `AppSettings` con el override de este grupo (si tiene uno y está permitido) — ver [Overrides por grupo](#overrides-por-grupo). `overrideAllowed` indica, por dimensión, si `AppSettings` permite hoy que este grupo la sobrescriba.
+
+### `PATCH /:id/settings` — Actualizar el override del grupo
+
+```json
+{ "whoCanAddMembers": "GROUP_ADMINS_ONLY" }
+```
+
+Solo `GROUP`, solo admins de **ese** grupo (`403` en caso contrario). Body: subconjunto parcial de las 5 dimensiones overrideables. Si algún campo enviado no tiene su `allowGroupOverride*` correspondiente en `true` en `AppSettings`, `403` explícito (aunque el campo sea válido en forma) — la autoridad final vive en el servicio, no en el validador. Respuesta: misma forma que `GET /:id/settings`.
 
 ### `POST /:id/read`
 
@@ -83,21 +116,38 @@ Borrado lógico (`deletedAt`), solo el creador (`403` para cualquier otro miembr
 
 ## Autorización
 
-No hay roles por miembro en el modelo de datos (`ConversationMember` no tiene un campo `role`): la única distinción propia del modelo es `Conversation.createdById`. A partir de eso:
+`Conversation.createdById` (el creador) y `ConversationMember.isAdmin` (admin de ESE grupo — ver [Admins de grupo](#admins-de-grupo)) son las dos distinciones propias del modelo. A partir de eso:
 
-* Cualquier miembro puede siempre: ver la conversación, renombrarla/cambiar su imagen, marcarla como leída, y salir de ella (auto-remoción).
-* Solo el creador puede siempre: borrar la conversación (esto no es configurable).
-* Crear un grupo, agregar miembros y quitar a **otro** miembro son configurables en runtime por un admin, vía [`AppSettings`](../settings/README.md) (`GroupPermissionLevel`: `ALL_MEMBERS` / `ADMINS_ONLY` / `CREATOR_ONLY`):
+* Cualquier miembro puede siempre: ver la conversación, marcarla como leída, y salir de ella (auto-remoción).
+* Crear un grupo, agregar/quitar miembros, renombrar/cambiar imagen, y eliminar el grupo son configurables en runtime por un admin de la app, vía [`AppSettings`](../settings/README.md) (`GroupPermissionLevel`: `ALL_MEMBERS` / `GROUP_ADMINS_ONLY` / `APP_ADMINS_ONLY` / `CREATOR_ONLY`):
 
-  | Acción | Campo | Default | `ALL_MEMBERS` | `ADMINS_ONLY` | `CREATOR_ONLY` |
-  |---|---|---|---|---|---|
-  | Crear grupo | `whoCanCreateGroups` | `ALL_MEMBERS` | cualquier usuario | solo rol `"admin"` | (no aplica — no hay creador antes de crear el grupo) |
-  | Agregar miembros | `whoCanAddMembers` | `ALL_MEMBERS` | cualquier miembro | solo rol `"admin"` | solo el creador de la conversación |
-  | Quitar a otro miembro | `whoCanRemoveMembers` | `CREATOR_ONLY` | cualquier miembro | solo rol `"admin"` | solo el creador de la conversación |
+  | Acción | Campo | Default | `ALL_MEMBERS` | `GROUP_ADMINS_ONLY` | `APP_ADMINS_ONLY` | `CREATOR_ONLY` |
+  |---|---|---|---|---|---|---|
+  | Crear grupo | `whoCanCreateGroups` | `ALL_MEMBERS` | cualquier usuario | (no aplica) | solo rol `"admin"` | (no aplica) |
+  | Agregar miembros | `whoCanAddMembers` | `ALL_MEMBERS` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
+  | Quitar a otro miembro | `whoCanRemoveMembers` | `CREATOR_ONLY` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
+  | Renombrar / cambiar imagen | `whoCanChangeGroupInfo` | `ALL_MEMBERS` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
+  | Eliminar el grupo | `whoCanDeleteGroup` | `CREATOR_ONLY` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
 
-  El default de `whoCanRemoveMembers` (`CREATOR_ONLY`) reproduce el comportamiento histórico de este módulo antes de que `AppSettings` existiera.
+  Los defaults de `whoCanRemoveMembers` y `whoCanDeleteGroup` (`CREATOR_ONLY`) y de `whoCanChangeGroupInfo`/`whoCanAddMembers`/`whoCanCreateGroups` (`ALL_MEMBERS`) reproducen el comportamiento histórico de este módulo antes de que cada campo existiera — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite.
+
+  `GROUP_ADMINS_ONLY` y `APP_ADMINS_ONLY` son conceptos **distintos**: el primero depende de `ConversationMember.isAdmin` (admin de ese grupo puntual), el segundo del rol `"admin"` de la app (viene de EXTERNAL_AUTH) — un admin de grupo no obtiene ningún permiso a nivel app, y viceversa.
 
 Toda operación primero verifica membresía activa (`403` si el usuario no pertenece a la conversación, `404` si la conversación no existe o está borrada).
+
+## Admins de grupo
+
+Cada `ConversationMember` tiene un campo `isAdmin` (default `false`), independiente del rol `"admin"` de la app. El creador de un `GROUP` queda marcado `isAdmin: true` al crearse (nunca en `PRIVATE`, donde el campo no tiene significado). Reglas, forzadas en `conversation.service.ts#setMemberAdminStatus`:
+
+* Solo un admin **actual** de ese grupo puede promover o degradar a otro miembro (cualquiera, no solo el creador).
+* El creador **nunca** puede ser degradado — invariante de negocio, no solo de UI.
+* Promover/degradar a alguien que ya tiene ese estado es rechazado (`400`, no-op).
+
+Cada cambio escribe un `ChatAuditLog` (`SET_GROUP_ADMIN`, `metadata: { targetUserId, isAdmin }`) y emite `conversation:member_admin_changed` (ver [Eventos de socket](#eventos-de-socket)).
+
+## Overrides por grupo
+
+Las 5 dimensiones de la tabla de [Autorización](#autorización) (todas salvo `whoCanCreateGroups`, que es puramente global) pueden tener un valor propio por grupo, si el admin de la app lo habilitó globalmente (`AppSettings.allowGroupOverride*`, ver [`settings`](../settings/README.md)). El override vive en `ConversationGroupSettings` (1:1 opcional con `Conversation`, columnas nullable — `null` = "hereda el global"). `settings.service.ts#resolveEffectiveGroupSettings` combina ambos: si el flag global está apagado, el override guardado se **ignora** (no se borra), y el valor global vuelve a regir apenas se apague el flag. Ver `GET`/`PATCH /:id/settings` arriba.
 
 ## Confirmación de entrega y lectura
 
@@ -122,7 +172,7 @@ Es una aproximación por corte de tiempo — la misma que ya usa `countUnread` p
 
 ## Auditoría
 
-Cada operación que cambia el estado de una conversación escribe un `ChatAuditLog` (`CREATE_CONVERSATION`, `ADD_MEMBER`, `REMOVE_MEMBER`, `CHANGE_NAME`, `CHANGE_IMAGE`), con el `userId` de quien la ejecutó. `SEND_MESSAGE`/`EDIT_MESSAGE`/`DELETE_MESSAGE` los escribirá el módulo `messages`, no este.
+Cada operación que cambia el estado de una conversación escribe un `ChatAuditLog` (`CREATE_CONVERSATION`, `ADD_MEMBER`, `REMOVE_MEMBER`, `CHANGE_NAME`, `CHANGE_IMAGE`, `SET_GROUP_ADMIN`), con el `userId` de quien la ejecutó. `SEND_MESSAGE`/`EDIT_MESSAGE`/`DELETE_MESSAGE` los escribirá el módulo `messages`, no este.
 
 ## Eventos de socket
 
@@ -136,6 +186,7 @@ Definidos en `conversation.socket.ts` (`CONVERSATION_EVENTS`). El cliente debe a
 | `conversation:updated` | servidor → cliente | conversación completa (rename/imagen) o `{ conversationId }` (mensaje nuevo/editado/borrado) | Rename/cambio de imagen: a la room de la conversación (`conversation:<id>`). Mensaje nuevo/editado/borrado que sea el último de la conversación: a la room personal de cada miembro (`notifyConversationListChanged` en `messages/message.service.ts`) — así la lista se refresca sola, y es justo lo que revela una `PRIVATE` la primera vez que se manda un mensaje. |
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | A la room de la conversación. |
 | `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | A la room de la conversación. |
+| `conversation:member_admin_changed` | servidor → cliente | `{ conversationId, userId, isAdmin }` | A la room de la conversación, cuando `setMemberAdminStatus` promueve/degrada a un miembro — cambia en vivo qué acciones puede hacer, por eso se empuja de inmediato (a diferencia de los cambios de `PATCH /:id/settings`, que no emiten evento). |
 | `conversation:deleted` | servidor → cliente | `{ conversationId }` | A la room de la conversación. |
 | `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | A la room de la conversación, cuando el `lastRead*`/`lastDelivered*` de `userId` avanza (`POST /:id/read`, o `markDelivered` desde `messages`). Solo se emite si el puntero realmente cambió — no en cada fetch que no aporta nada nuevo. |
 

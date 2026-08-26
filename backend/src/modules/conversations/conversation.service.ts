@@ -4,6 +4,7 @@ import { getIO } from "../../socket";
 import { conversationRoomName, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as SettingsService from "../settings/settings.service";
+import { UpdateGroupSettingsInput } from "../settings/settings.types";
 import * as ConversationRepository from "./conversation.repository";
 import { CONVERSATION_EVENTS } from "./conversation.socket";
 import {
@@ -77,6 +78,32 @@ export async function assertMembership(conversationId: string, userId: string): 
   return conversation;
 }
 
+/// Único punto que interpreta un `GroupPermissionLevel` ya resuelto (ver
+/// `resolveEffectiveGroupSettings`) contra un usuario y una conversación
+/// puntual — usado por `updateConversation`/`addMembers`/`removeMember`/
+/// `deleteConversation` para no repetir las 4 ramas en cada uno.
+function assertGroupPermission(
+  level: GroupPermissionLevel,
+  conversation: ConversationWithMembers,
+  currentUserId: string,
+  userRoles: string[],
+  message: string,
+): void {
+  if (level === GroupPermissionLevel.APP_ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
+    throw new ForbiddenError(message);
+  }
+  if (level === GroupPermissionLevel.CREATOR_ONLY && conversation.createdById !== currentUserId) {
+    throw new ForbiddenError(message);
+  }
+  if (level === GroupPermissionLevel.GROUP_ADMINS_ONLY) {
+    const actingMember = conversation.members.find((member) => member.userId === currentUserId);
+    if (!actingMember?.isAdmin) {
+      throw new ForbiddenError(message);
+    }
+  }
+  // ALL_MEMBERS: no-op, la membresía ya se verificó en assertMembership.
+}
+
 export async function createConversation(
   currentUserId: string,
   input: CreateConversationInput,
@@ -95,7 +122,7 @@ export async function createConversation(
     }
   } else {
     const settings = await SettingsService.getSettings();
-    if (settings.whoCanCreateGroups === GroupPermissionLevel.ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
+    if (settings.whoCanCreateGroups === GroupPermissionLevel.APP_ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
       throw new ForbiddenError("Only admins can create group conversations");
     }
     if (otherMemberIds.length < 2) {
@@ -190,11 +217,22 @@ export async function updateConversation(
   currentUserId: string,
   conversationId: string,
   input: UpdateConversationInput,
+  userRoles: string[],
 ) {
   const conversation = await assertMembership(conversationId, currentUserId);
   if (conversation.type !== ConversationType.GROUP) {
     throw new BadRequestError("Only group conversations can be renamed or have their image changed");
   }
+
+  const override = await ConversationRepository.findGroupSettings(conversationId);
+  const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+  assertGroupPermission(
+    effective.whoCanChangeGroupInfo,
+    conversation,
+    currentUserId,
+    userRoles,
+    "You are not allowed to change this group's name or image",
+  );
 
   const trimmedName = input.name?.trim();
   const updated = await ConversationRepository.updateDetails(conversationId, {
@@ -234,21 +272,23 @@ export async function addMembers(
     throw new BadRequestError("Only group conversations support adding members");
   }
 
-  const settings = await SettingsService.getSettings();
-  if (settings.whoCanAddMembers === GroupPermissionLevel.ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
-    throw new ForbiddenError("Only admins can add members to this conversation");
-  }
-  if (settings.whoCanAddMembers === GroupPermissionLevel.CREATOR_ONLY && conversation.createdById !== currentUserId) {
-    throw new ForbiddenError("Only the conversation creator can add members");
-  }
+  const override = await ConversationRepository.findGroupSettings(conversationId);
+  const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+  assertGroupPermission(
+    effective.whoCanAddMembers,
+    conversation,
+    currentUserId,
+    userRoles,
+    "You are not allowed to add members to this conversation",
+  );
 
   const existingMemberIds = new Set(conversation.members.map((member) => member.userId));
   const newUserIds = Array.from(new Set(userIds)).filter((id) => !existingMemberIds.has(id));
   if (newUserIds.length === 0) {
     throw new BadRequestError("No new members to add");
   }
-  if (existingMemberIds.size + newUserIds.length > settings.maxGroupMembers) {
-    throw new BadRequestError(`A group conversation cannot have more than ${settings.maxGroupMembers} members`);
+  if (existingMemberIds.size + newUserIds.length > effective.maxGroupMembers) {
+    throw new BadRequestError(`A group conversation cannot have more than ${effective.maxGroupMembers} members`);
   }
 
   const existingUsers = await ConversationRepository.countExistingUsers(newUserIds);
@@ -298,16 +338,15 @@ export async function removeMember(
   // a OTRO miembro.
   const isSelf = targetUserId === currentUserId;
   if (!isSelf) {
-    const settings = await SettingsService.getSettings();
-    if (settings.whoCanRemoveMembers === GroupPermissionLevel.ADMINS_ONLY && !userRoles.includes(ADMIN_ROLE)) {
-      throw new ForbiddenError("Only admins can remove other members");
-    }
-    if (
-      settings.whoCanRemoveMembers === GroupPermissionLevel.CREATOR_ONLY &&
-      conversation.createdById !== currentUserId
-    ) {
-      throw new ForbiddenError("Only the conversation creator can remove other members");
-    }
+    const override = await ConversationRepository.findGroupSettings(conversationId);
+    const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+    assertGroupPermission(
+      effective.whoCanRemoveMembers,
+      conversation,
+      currentUserId,
+      userRoles,
+      "You are not allowed to remove other members from this conversation",
+    );
   }
   if (!conversation.members.some((member) => member.userId === targetUserId)) {
     throw new NotFoundError("That user is not a member of this conversation");
@@ -328,9 +367,21 @@ export async function removeMember(
   return { conversationId, userId: targetUserId };
 }
 
-export async function deleteConversation(currentUserId: string, conversationId: string) {
+export async function deleteConversation(currentUserId: string, conversationId: string, userRoles: string[]) {
   const conversation = await assertMembership(conversationId, currentUserId);
-  if (conversation.createdById !== currentUserId) {
+  if (conversation.type === ConversationType.GROUP) {
+    const override = await ConversationRepository.findGroupSettings(conversationId);
+    const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+    assertGroupPermission(
+      effective.whoCanDeleteGroup,
+      conversation,
+      currentUserId,
+      userRoles,
+      "You are not allowed to delete this conversation",
+    );
+  } else if (conversation.createdById !== currentUserId) {
+    // PRIVATE mantiene la regla histórica sin cambios — whoCanDeleteGroup es
+    // gobierno de GROUP únicamente.
     throw new ForbiddenError("Only the conversation creator can delete it");
   }
 
@@ -338,6 +389,116 @@ export async function deleteConversation(currentUserId: string, conversationId: 
   getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.DELETED, { conversationId });
 
   return { conversationId };
+}
+
+/// Exige que quien actúa sea admin ACTUAL de ese grupo. El creador nunca
+/// puede ser degradado — invariante de negocio forzado acá, no solo en la UI.
+export async function setMemberAdminStatus(
+  currentUserId: string,
+  conversationId: string,
+  targetUserId: string,
+  isAdmin: boolean,
+) {
+  const conversation = await assertMembership(conversationId, currentUserId);
+  if (conversation.type !== ConversationType.GROUP) {
+    throw new BadRequestError("Only group conversations have group admins");
+  }
+
+  const actingMember = conversation.members.find((member) => member.userId === currentUserId);
+  if (!actingMember?.isAdmin) {
+    throw new ForbiddenError("Only current group admins can promote or demote other members");
+  }
+
+  const targetMember = conversation.members.find((member) => member.userId === targetUserId);
+  if (!targetMember) {
+    throw new NotFoundError("That user is not a member of this conversation");
+  }
+  if (!isAdmin && targetUserId === conversation.createdById) {
+    throw new ForbiddenError("The conversation creator can never be demoted");
+  }
+  if (targetMember.isAdmin === isAdmin) {
+    throw new BadRequestError(isAdmin ? "That member is already a group admin" : "That member is not a group admin");
+  }
+
+  await ConversationRepository.setMemberAdmin(conversationId, targetUserId, isAdmin);
+  await ConversationRepository.logAudit({
+    userId: currentUserId,
+    action: ChatAuditAction.SET_GROUP_ADMIN,
+    conversationId,
+    metadata: { targetUserId, isAdmin },
+  });
+
+  getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.MEMBER_ADMIN_CHANGED, {
+    conversationId,
+    userId: targetUserId,
+    isAdmin,
+  });
+
+  return { conversationId, userId: targetUserId, isAdmin };
+}
+
+/// Lectura abierta a cualquier miembro del grupo (transparencia sobre las
+/// reglas que rigen su propio grupo), no solo a sus admins.
+export async function getGroupSettings(currentUserId: string, conversationId: string) {
+  const conversation = await assertMembership(conversationId, currentUserId);
+  if (conversation.type !== ConversationType.GROUP) {
+    throw new BadRequestError("Only group conversations have group settings");
+  }
+
+  const override = await ConversationRepository.findGroupSettings(conversationId);
+  const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+  const overrideAllowed = await SettingsService.getGroupOverrideAllowedFlags();
+
+  return { conversationId, effective, overrideAllowed };
+}
+
+/// Escritura: solo admins de ESE grupo. Rechaza cualquier campo cuyo
+/// `allowGroupOverride*` global sea false, incluso si el validador de forma
+/// lo dejó pasar — la autoridad final vive acá, no en el yup schema (que no
+/// puede leer `AppSettings`).
+export async function updateGroupSettings(
+  currentUserId: string,
+  conversationId: string,
+  input: UpdateGroupSettingsInput,
+) {
+  const conversation = await assertMembership(conversationId, currentUserId);
+  if (conversation.type !== ConversationType.GROUP) {
+    throw new BadRequestError("Only group conversations have group settings");
+  }
+
+  const actingMember = conversation.members.find((member) => member.userId === currentUserId);
+  if (!actingMember?.isAdmin) {
+    throw new ForbiddenError("Only group admins can change this group's settings");
+  }
+
+  const settings = await SettingsService.getSettings();
+  const rejected: string[] = [];
+  if (input.whoCanAddMembers !== undefined && !settings.allowGroupOverrideAddMembers) {
+    rejected.push("whoCanAddMembers");
+  }
+  if (input.whoCanRemoveMembers !== undefined && !settings.allowGroupOverrideRemoveMembers) {
+    rejected.push("whoCanRemoveMembers");
+  }
+  if (input.maxGroupMembers !== undefined && !settings.allowGroupOverrideMaxGroupMembers) {
+    rejected.push("maxGroupMembers");
+  }
+  if (input.whoCanChangeGroupInfo !== undefined && !settings.allowGroupOverrideChangeGroupInfo) {
+    rejected.push("whoCanChangeGroupInfo");
+  }
+  if (input.whoCanDeleteGroup !== undefined && !settings.allowGroupOverrideDeleteGroup) {
+    rejected.push("whoCanDeleteGroup");
+  }
+  if (rejected.length > 0) {
+    throw new ForbiddenError(`This installation does not allow per-group overrides for: ${rejected.join(", ")}`);
+  }
+
+  await ConversationRepository.upsertGroupSettings(conversationId, input);
+
+  const override = await ConversationRepository.findGroupSettings(conversationId);
+  const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+  const overrideAllowed = await SettingsService.getGroupOverrideAllowedFlags();
+
+  return { conversationId, effective, overrideAllowed };
 }
 
 export async function markConversationRead(

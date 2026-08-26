@@ -25,6 +25,10 @@ export interface ConversationMember {
   lastReadAt: string | null;
   lastDeliveredMessageId: string | null;
   lastDeliveredAt: string | null;
+  /** Admin de ESTE grupo — concepto distinto del rol "admin" de la app. Ver
+   * backend/src/modules/conversations/README.md#admins-de-grupo. Sin
+   * significado para PRIVATE. */
+  isAdmin: boolean;
   user: ConversationMemberUser;
 }
 

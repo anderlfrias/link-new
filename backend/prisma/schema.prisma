@@ -65,6 +65,7 @@ enum ChatAuditAction {
   DELETE_MESSAGE      @map("delete_message")
   CHANGE_NAME         @map("change_name")
   CHANGE_IMAGE        @map("change_image")
+  SET_GROUP_ADMIN     @map("set_group_admin")
 
   @@map("chat_audit_action")
 }
@@ -79,15 +80,21 @@ enum FileProvider {
   @@map("file_provider")
 }
 
-/// Nivel de permiso para una acción sobre grupos, usado por `AppSettings`.
-/// No todos los valores aplican a todos los campos que lo usan (ver
-/// `settings.validator.ts`): `whoCanCreateGroups` solo admite ALL_MEMBERS/
-/// ADMINS_ONLY (no existe un "creador" antes de que el grupo exista);
-/// `whoCanAddMembers`/`whoCanRemoveMembers` admiten los tres valores.
+/// Nivel de permiso para una acción sobre grupos, usado por `AppSettings` y,
+/// cuando el override correspondiente está habilitado, por
+/// `ConversationGroupSettings` (ver settings.service.ts,
+/// resolveEffectiveGroupSettings). No todos los valores aplican a todos los
+/// campos que lo usan (ver `settings.validator.ts`): `whoCanCreateGroups`
+/// solo admite ALL_MEMBERS/APP_ADMINS_ONLY (no existe grupo ni admin de
+/// grupo antes de que el grupo exista); el resto de los campos admiten los
+/// cuatro valores. GROUP_ADMINS_ONLY y APP_ADMINS_ONLY son conceptos
+/// distintos: el primero depende de `ConversationMember.isAdmin` (admin de
+/// ESE grupo), el segundo del rol "admin" de la app (viene de EXTERNAL_AUTH).
 enum GroupPermissionLevel {
-  ALL_MEMBERS  @map("all_members")
-  ADMINS_ONLY  @map("admins_only")
-  CREATOR_ONLY @map("creator_only")
+  ALL_MEMBERS       @map("all_members")
+  GROUP_ADMINS_ONLY @map("group_admins_only")
+  APP_ADMINS_ONLY   @map("app_admins_only")
+  CREATOR_ONLY      @map("creator_only")
 
   @@map("group_permission_level")
 }
@@ -184,22 +191,26 @@ model Conversation {
 
   /// Puntero denormalizado al último mensaje, para listar conversaciones sin agregaciones costosas.
   /// No es una relación de Prisma para evitar una dependencia circular obligatoria con Message.
-  lastMessageId String?   @map("last_message_id")
+  lastMessageId       String?   @map("last_message_id")
   /// Fecha del último mensaje, usada para ordenar la lista de conversaciones.
-  lastMessageAt DateTime? @map("last_message_at")
+  lastMessageAt       DateTime? @map("last_message_at")
   /// Quién envió `lastMessageId`. Sin esto, mostrar "✓✓ Leído" junto al último
   /// mensaje en la lista de conversaciones (solo tiene sentido si el mensaje es
   /// mío) obligaría a leer `Message` por cada conversación de la lista.
-  lastMessageSenderId String? @map("last_message_sender_id")
+  lastMessageSenderId String?   @map("last_message_sender_id")
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   /// Borrado lógico de la conversación.
   deletedAt DateTime? @map("deleted_at")
 
-  members   ConversationMember[]
-  messages  Message[]
-  auditLogs ChatAuditLog[]
+  members       ConversationMember[]
+  messages      Message[]
+  auditLogs     ChatAuditLog[]
+  /// Overrides por-grupo de las dimensiones marcadas como overrideables en
+  /// `AppSettings`. Ver `ConversationGroupSettings` — no existe fila hasta el
+  /// primer PATCH de settings de este grupo.
+  groupSettings ConversationGroupSettings?
 
   @@index([createdById])
   @@map("conversations")
@@ -229,6 +240,15 @@ model ConversationMember {
   /// (`computeReceipts`) para cómo se combinan en un solo estado por mensaje.
   lastDeliveredMessageId String?   @map("last_delivered_message_id")
   lastDeliveredAt        DateTime? @map("last_delivered_at")
+
+  /// True si este miembro es admin de ESTE grupo (concepto separado del rol
+  /// app-wide "admin" de EXTERNAL_AUTH — ver `GroupPermissionLevel`). El creador de
+  /// la conversación siempre lo tiene en true al crearse (ver
+  /// conversation.repository.ts, createConversation) y nunca puede
+  /// degradarse (invariante forzado en conversation.service.ts,
+  /// setMemberAdminStatus). Sin significado para PRIVATE (siempre false,
+  /// nunca se lee/escribe ahí).
+  isAdmin Boolean @default(false) @map("is_admin")
 
   /// Un usuario solo puede tener una membresía por conversación.
   @@unique([conversationId, userId])
@@ -359,22 +379,40 @@ model AppSettings {
   id String @id @default("singleton")
 
   // Adjuntos
-  maxUploadSizeMb         Int                     @default(25)       @map("max_upload_size_mb")
+  maxUploadSizeMb         Int                     @default(25) @map("max_upload_size_mb")
   fileTypeRestrictionMode FileTypeRestrictionMode @default(DISABLED) @map("file_type_restriction_mode")
   /// Mime types interpretados según `fileTypeRestrictionMode` (allowlist o blocklist).
-  fileTypeList            String[]                @default([])       @map("file_type_list")
+  fileTypeList            String[]                @default([]) @map("file_type_list")
 
   // Notas de voz
   maxVoiceNoteDurationSeconds Int @default(300) @map("max_voice_note_duration_seconds")
 
   // Grupos
-  maxGroupMembers    Int                  @default(256)        @map("max_group_members")
-  whoCanCreateGroups GroupPermissionLevel @default(ALL_MEMBERS) @map("who_can_create_groups")
-  whoCanAddMembers   GroupPermissionLevel @default(ALL_MEMBERS) @map("who_can_add_members")
+  maxGroupMembers       Int                  @default(256) @map("max_group_members")
+  whoCanCreateGroups    GroupPermissionLevel @default(ALL_MEMBERS) @map("who_can_create_groups")
+  whoCanAddMembers      GroupPermissionLevel @default(ALL_MEMBERS) @map("who_can_add_members")
   /// Default CREATOR_ONLY: coincide con la regla hardcodeada histórica en
   /// conversation.service.ts (removeMember), así el primer deploy no cambia
   /// comportamiento hasta que un admin lo edite.
-  whoCanRemoveMembers GroupPermissionLevel @default(CREATOR_ONLY) @map("who_can_remove_members")
+  whoCanRemoveMembers   GroupPermissionLevel @default(CREATOR_ONLY) @map("who_can_remove_members")
+  /// Default ALL_MEMBERS: reproduce el comportamiento histórico (sin gate)
+  /// de `updateConversation` antes de que este campo existiera.
+  whoCanChangeGroupInfo GroupPermissionLevel @default(ALL_MEMBERS) @map("who_can_change_group_info")
+  /// Default CREATOR_ONLY: reproduce el comportamiento hardcodeado histórico
+  /// de `deleteConversation` antes de que este campo existiera.
+  whoCanDeleteGroup     GroupPermissionLevel @default(CREATOR_ONLY) @map("who_can_delete_group")
+
+  // Permiten que los admins de un grupo específico sobrescriban, solo para SU
+  // grupo, el valor global de la dimensión correspondiente (ver
+  // ConversationGroupSettings, settings.service.ts#resolveEffectiveGroupSettings).
+  // Default false en las 5: hasta que un admin de la app lo habilite
+  // explícitamente, el valor global rige siempre para todos los grupos — cero
+  // cambio de comportamiento en el primer deploy de esta feature.
+  allowGroupOverrideAddMembers      Boolean @default(false) @map("allow_group_override_add_members")
+  allowGroupOverrideRemoveMembers   Boolean @default(false) @map("allow_group_override_remove_members")
+  allowGroupOverrideMaxGroupMembers Boolean @default(false) @map("allow_group_override_max_group_members")
+  allowGroupOverrideChangeGroupInfo Boolean @default(false) @map("allow_group_override_change_group_info")
+  allowGroupOverrideDeleteGroup     Boolean @default(false) @map("allow_group_override_delete_group")
 
   // Retención de mensajes
   /// null = deshabilitado (default). Nunca empieza a borrar datos de una
@@ -382,7 +420,30 @@ model AppSettings {
   messageRetentionDays Int? @map("message_retention_days")
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt       @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("app_settings")
+}
+
+/// Overrides por-grupo de las dimensiones marcadas como overrideables en
+/// `AppSettings` (ver los `allowGroupOverride*` ahí). Fila 1:1 opcional con
+/// `Conversation` — no existe fila hasta el primer PATCH de group-settings de
+/// ese grupo (ver conversation.service.ts, updateGroupSettings). Cada
+/// columna null = "este grupo no fijó su propio valor, hereda el global" —
+/// ver settings.service.ts, resolveEffectiveGroupSettings, para cómo se
+/// combina con `AppSettings` y los `allowGroupOverride*`. Sin significado
+/// para PRIVATE (nunca se crea una fila para una PRIVATE).
+model ConversationGroupSettings {
+  conversationId String       @id @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  whoCanAddMembers      GroupPermissionLevel? @map("who_can_add_members")
+  whoCanRemoveMembers   GroupPermissionLevel? @map("who_can_remove_members")
+  maxGroupMembers       Int?                  @map("max_group_members")
+  whoCanChangeGroupInfo GroupPermissionLevel? @map("who_can_change_group_info")
+  whoCanDeleteGroup     GroupPermissionLevel? @map("who_can_delete_group")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("conversation_group_settings")
 }

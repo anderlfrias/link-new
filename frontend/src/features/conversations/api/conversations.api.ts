@@ -5,6 +5,10 @@ import type {
   CreateConversationInput,
   UpdateConversationInput,
 } from "@/features/conversations/types/conversation.types";
+import type {
+  ConversationEffectiveSettings,
+  UpdateConversationSettingsPayload,
+} from "@/features/conversations/types/group-settings.types";
 
 const BASE_PATH = "/v1/conversations";
 
@@ -63,6 +67,38 @@ export function deleteConversation(
   conversationId: string,
 ): Promise<{ conversationId: string }> {
   return apiRequest(`${BASE_PATH}/${conversationId}`, { method: "DELETE", token });
+}
+
+export function setMemberAdmin(
+  token: string,
+  conversationId: string,
+  userId: string,
+  isAdmin: boolean,
+): Promise<{ conversationId: string; userId: string; isAdmin: boolean }> {
+  return apiRequest(`${BASE_PATH}/${conversationId}/members/${userId}/admin`, {
+    method: "PATCH",
+    token,
+    body: { isAdmin },
+  });
+}
+
+export function getConversationSettings(
+  token: string,
+  conversationId: string,
+): Promise<ConversationEffectiveSettings> {
+  return apiRequest(`${BASE_PATH}/${conversationId}/settings`, { token });
+}
+
+export function updateConversationSettings(
+  token: string,
+  conversationId: string,
+  patch: UpdateConversationSettingsPayload,
+): Promise<ConversationEffectiveSettings> {
+  return apiRequest(`${BASE_PATH}/${conversationId}/settings`, {
+    method: "PATCH",
+    token,
+    body: patch,
+  });
 }
 
 export function markConversationRead(

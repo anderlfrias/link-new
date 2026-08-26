@@ -43,5 +43,28 @@ export function useConversation(conversationId: string) {
     };
   }, [socket, conversationId]);
 
+  // A diferencia de `updated` (objeto completo), este evento trae solo lo que
+  // cambió — se aplica como patch local en vez de reemplazar todo el estado.
+  useEffect(() => {
+    if (!socket) return;
+    function handleMemberAdminChanged(payload: { conversationId: string; userId: string; isAdmin: boolean }) {
+      if (payload.conversationId !== conversationId) return;
+      setConversation((prev) =>
+        prev
+          ? {
+              ...prev,
+              members: prev.members.map((member) =>
+                member.userId === payload.userId ? { ...member, isAdmin: payload.isAdmin } : member,
+              ),
+            }
+          : prev,
+      );
+    }
+    socket.on(SOCKET_EVENTS.conversation.memberAdminChanged, handleMemberAdminChanged);
+    return () => {
+      socket.off(SOCKET_EVENTS.conversation.memberAdminChanged, handleMemberAdminChanged);
+    };
+  }, [socket, conversationId]);
+
   return { conversation, status };
 }

@@ -31,8 +31,13 @@ publicSettingsRouter.use(authenticate, attachInternalUser)
 |---|---|
 | `maxUploadSizeMb`, `fileTypeRestrictionMode`, `fileTypeList` | [`files`](../files/README.md), `file.service.ts` (`uploadFile`) |
 | `maxVoiceNoteDurationSeconds` | `files`, `file.service.ts` (`uploadFile`, cuando `kind === "voice_note"`) |
-| `maxGroupMembers`, `whoCanCreateGroups`, `whoCanAddMembers`, `whoCanRemoveMembers` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`createConversation`, `addMembers`, `removeMember`) |
+| `maxGroupMembers`, `whoCanCreateGroups`, `whoCanAddMembers`, `whoCanRemoveMembers`, `whoCanChangeGroupInfo`, `whoCanDeleteGroup` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`createConversation`, `addMembers`, `removeMember`, `updateConversation`, `deleteConversation`, vía `resolveEffectiveGroupSettings`) |
+| `allowGroupOverrideAddMembers`, `allowGroupOverrideRemoveMembers`, `allowGroupOverrideMaxGroupMembers`, `allowGroupOverrideChangeGroupInfo`, `allowGroupOverrideDeleteGroup` | `settings.service.ts` (`resolveEffectiveGroupSettings`, `getGroupOverrideAllowedFlags`), consumidos por `conversations` vía `getGroupSettings`/`updateGroupSettings` |
 | `messageRetentionDays` | `src/workers/message-retention.worker.ts` |
+
+## Overrides por grupo
+
+Además de esta configuración global, cada `GROUP` puede tener su propio valor para 5 dimensiones (todas salvo `whoCanCreateGroups`), guardado en `ConversationGroupSettings` (1:1 opcional con `Conversation`, columnas nullable, dueño de la tabla es el módulo `conversations`) — pero **solo si** el `allowGroupOverride*` correspondiente de esta tabla está en `true`. `resolveEffectiveGroupSettings(override)` (este módulo) es la única función que debe leerse para esas 5 dimensiones: combina el override con el global respetando el flag, y nunca devuelve `null`. Ver [Overrides por grupo en `conversations`](../conversations/README.md#overrides-por-grupo) para el detalle completo y los endpoints.
 
 ## Compatibilidad con `MAX_UPLOAD_SIZE_MB`
 

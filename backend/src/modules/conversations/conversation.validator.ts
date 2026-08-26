@@ -1,4 +1,4 @@
-import { ConversationType } from "@prisma/client";
+import { ConversationType, GroupPermissionLevel } from "@prisma/client";
 import * as yup from "yup";
 
 // Las reglas que dependen del `type` (name requerido para GROUP, cantidad
@@ -29,3 +29,30 @@ export const addMembersSchema = yup.object({
 export const markReadSchema = yup.object({
   lastReadMessageId: yup.string(),
 });
+
+export const setMemberAdminSchema = yup.object({
+  isAdmin: yup.boolean().required(),
+});
+
+// Solo valida la forma (subconjunto correcto de campos/valores) — si ese
+// campo tiene actualmente permitido un override por grupo depende de
+// AppSettings, y esa autoridad vive en conversation.service.ts
+// (updateGroupSettings), no acá.
+export const updateGroupSettingsSchema = yup
+  .object({
+    whoCanAddMembers: yup.string().oneOf(Object.values(GroupPermissionLevel)),
+    whoCanRemoveMembers: yup.string().oneOf(Object.values(GroupPermissionLevel)),
+    maxGroupMembers: yup.number().integer().min(2),
+    whoCanChangeGroupInfo: yup.string().oneOf(Object.values(GroupPermissionLevel)),
+    whoCanDeleteGroup: yup.string().oneOf(Object.values(GroupPermissionLevel)),
+  })
+  .test(
+    "at-least-one-field",
+    "At least one setting is required",
+    (value) =>
+      value.whoCanAddMembers !== undefined ||
+      value.whoCanRemoveMembers !== undefined ||
+      value.maxGroupMembers !== undefined ||
+      value.whoCanChangeGroupInfo !== undefined ||
+      value.whoCanDeleteGroup !== undefined,
+  );

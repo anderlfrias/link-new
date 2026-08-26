@@ -42,7 +42,12 @@ export async function getById(req: Request, res: Response, next: NextFunction) {
 
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    const conversation = await ConversationService.updateConversation(currentUserId(req), req.params.id, req.body);
+    const conversation = await ConversationService.updateConversation(
+      currentUserId(req),
+      req.params.id,
+      req.body,
+      currentUserRoles(req),
+    );
     res.json(conversation);
   } catch (error) {
     next(error);
@@ -51,8 +56,45 @@ export async function update(req: Request, res: Response, next: NextFunction) {
 
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await ConversationService.deleteConversation(currentUserId(req), req.params.id);
+    const result = await ConversationService.deleteConversation(
+      currentUserId(req),
+      req.params.id,
+      currentUserRoles(req),
+    );
     res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setMemberAdminStatus(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { isAdmin } = req.body as { isAdmin: boolean };
+    const result = await ConversationService.setMemberAdminStatus(
+      currentUserId(req),
+      req.params.id,
+      req.params.userId,
+      isAdmin,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getGroupSettings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const settings = await ConversationService.getGroupSettings(currentUserId(req), req.params.id);
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateGroupSettings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const settings = await ConversationService.updateGroupSettings(currentUserId(req), req.params.id, req.body);
+    res.json(settings);
   } catch (error) {
     next(error);
   }
