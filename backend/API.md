@@ -61,7 +61,7 @@ Todas las fechas (`createdAt`, `lastReadAt`, `at` en eventos, etc.) son strings 
 
 ### Paginación
 
-Solo `GET .../messages` pagina, por cursor (ver sección 4.2) — el resto de los listados (conversaciones, miembros) no pagina porque en la práctica son chicos.
+`GET .../messages` (sección 4.2), `GET .../messages/files` (sección 6.4) y `GET /admin/files` (sección 13.1) paginan por cursor — el resto de los listados (conversaciones, miembros) no pagina porque en la práctica son chicos.
 
 ---
 
@@ -402,7 +402,7 @@ Forma de un mensaje:
 
 `type` es `"TEXT"` (lo único que este API genera hoy) o `"SYSTEM"` (reservado para narrar eventos de la conversación — todavía no se genera automáticamente). `receipts` trae un estado por cada miembro que **no** sea el autor — ver sección 7.
 
-Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están en la base (a diferencia de la respuesta de `POST /api/v1/files`, que devuelve `url` ya armada) — para armar la URL de descarga desde acá, prefijá `path` con `/uploads/`, ej. `http://localhost:4000/uploads/chat/....jpg`.
+Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están en la base (a diferencia de la respuesta de `POST /api/v1/files`, que devuelve `url` ya armada) — para armar la URL de descarga desde acá, prefijá `path` con `/uploads/`, ej. `http://localhost:4000/uploads/chat/....jpg`. Si `deletedAt` no es `null`, el archivo fue eliminado (ver sección 13.2) — el contenido ya no existe, pero el resto de los campos (`originalName`, `size`, etc.) siguen siendo válidos para mostrar un placeholder tipo "archivo eliminado" en vez de intentar cargarlo.
 
 ### 6.1 `POST /` — Enviar mensaje
 
@@ -581,7 +581,7 @@ Misma forma que la respuesta de subida. `404` si no existe o está borrado.
 
 ### 9.3 `DELETE /:id`
 
-Borrado lógico, solo quien lo subió (`403` para cualquier otro). → `200` `{ "id": "..." }`. No borra el archivo físico ni valida si sigue en uso por algún mensaje/conversación — si ya lo referenciaste en un mensaje enviado, ese mensaje sigue mostrando el archivo con normalidad aunque borres el `StoredFile` lógicamente (la limpieza real es un job pendiente, no afecta lo ya enviado).
+Borrado lógico, solo quien lo subió (`403` para cualquier otro). → `200` `{ "id": "..." }`. No borra el archivo físico ni valida si sigue en uso por algún mensaje/conversación — si ya lo referenciaste en un mensaje enviado, ese mensaje muestra un placeholder de "archivo eliminado" en vez del contenido (ver `files[].file.deletedAt`, sección 6). Para borrado físico real (libera espacio), ver `DELETE /admin/files/:id`, sección 13.2 — solo admin.
 
 ---
 
@@ -650,3 +650,34 @@ Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesi
 ```json
 { "maxUploadSizeMb": 25, "maxVoiceNoteDurationSeconds": 300, "maxGroupMembers": 256 }
 ```
+
+---
+
+## 13. Gestión de storage (admin)
+
+Base HTTP: `/api/v1/admin/files`. Requieren rol `"admin"` (ver sección 2) — `403` si no lo tenés. Ver [`files/README.md`, "Gestión de storage (admin)"](./src/modules/files/README.md#gestión-de-storage-admin) para el detalle completo. A diferencia de `/api/v1/files` (sección 9), acá se lista y borra **cualquier** `StoredFile` sin importar quién lo subió ni para qué se usa (avatar, foto de grupo, adjunto) — es la vista de "cuánto espacio ocupa la instalación".
+
+### 13.1 `GET /` — Listar archivos
+
+Query params, todos opcionales: `before` (cursor por id), `limit` (default 50, máx 100), `type` (`"image"` \| `"audio"` \| `"other"`), `uploader` (busca nombre/email), `search` (busca `originalName`), `from`/`to` (rango `createdAt`, ISO date).
+
+```json
+{
+  "files": [
+    {
+      "id": "file-uuid", "originalName": "foto.jpg", "mimeType": "image/jpeg", "extension": "jpg",
+      "size": 245678, "url": "/uploads/...", "createdAt": "...",
+      "createdBy": { "id": "user-uuid", "name": "Ana", "email": "ana@x.com" },
+      "usage": { "avatarOfUserCount": 0, "groupImageOfConversationCount": 0, "messageAttachmentCount": 3 }
+    }
+  ],
+  "totalCount": 214,
+  "totalSize": 583200123
+}
+```
+
+`totalCount`/`totalSize` son agregados sobre **todos** los archivos que matchean el filtro, no solo la página actual. `usage` en todo cero = archivo huérfano (nada lo usa).
+
+### 13.2 `DELETE /:id` — Borrar físicamente
+
+**Distinto de `DELETE /api/v1/files/:id`** (sección 9.3, borrado lógico): este SÍ borra el archivo del disco, libera espacio real. La fila de `StoredFile` no se borra, solo queda `deletedAt` seteado (mismo criterio que el borrado lógico) — así cualquier mensaje/avatar/foto de grupo que ya lo referenciaba sigue teniendo nombre/tamaño válidos para mostrar un placeholder. Sin chequeo de dueño — el único gate es el rol admin. → `200` `{ "id": "..." }`.

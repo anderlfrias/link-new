@@ -1,6 +1,6 @@
 "use client";
 
-import { IconDownload } from "@tabler/icons-react";
+import { IconDownload, IconFileOff } from "@tabler/icons-react";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { VoiceNotePlayer } from "@/features/messages/components/VoiceNotePlayer";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
@@ -24,6 +24,32 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
   return (
     <div className="flex flex-col gap-1.5">
       {files.map(({ id, file }) => {
+        // El archivo fue borrado físicamente desde el panel de admin — nunca
+        // intentar renderizar imagen/audio/descarga para un mimetype que ya
+        // no existe en el servidor, mismo criterio visual que "Mensaje
+        // eliminado" en MessageBubble.tsx (itálica, gris apagado).
+        if (file.deletedAt) {
+          return (
+            <div
+              key={id}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left",
+                isOwn ? "border-white/25" : "border-black/10 dark:border-white/10",
+              )}
+            >
+              <IconFileOff size={22} stroke={1.5} className="shrink-0 opacity-50" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium italic text-neutral-400 dark:text-neutral-500">
+                  {file.originalName}
+                </p>
+                <p className="text-[11px] italic text-neutral-400 dark:text-neutral-500">
+                  Este archivo ya no está disponible: fue eliminado.
+                </p>
+              </div>
+            </div>
+          );
+        }
+
         const url = buildStoredFileUrl(file.path);
 
         if (isImageMimeType(file.mimeType)) {

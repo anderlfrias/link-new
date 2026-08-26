@@ -30,6 +30,8 @@ Además de crear el mensaje, actualiza en la misma transacción `Conversation.la
 
 Respuesta `201` con el mensaje, su remitente (`sender: { id, name, email, avatarFileId }`), sus archivos, y `receipts` (ver más abajo). Emite `message:created` (con el mismo `receipts`) a la room de la conversación.
 
+`files[].file` es el `StoredFile` completo (no `toStoredFileResponse`, a diferencia de `GET /files` de abajo) — a propósito **sin** filtrar `deletedAt`, tanto acá como en `GET /` y `message:updated`: si un admin borra el archivo después (ver [`files`, "Gestión de storage"](../files/README.md#gestión-de-storage-admin)), el mensaje debe poder seguir mostrando que hubo un adjunto ahí, solo que ya no está disponible, en vez de que desaparezca o rompa la carga — el cliente es quien decide cómo renderizar eso a partir de `file.deletedAt` (ver `frontend/src/features/messages/components/MessageAttachments.tsx`). Contrastar con `GET /files`, que sí filtra `deletedAt: null` (ese panel es "qué hay disponible para ver ahora", no el historial del chat).
+
 ### `GET /` — Listar mensajes
 
 Query params: `before` (id de mensaje, cursor) y `limit` (1-100, default 50). Paginación por cursor de Prisma (`cursor: { id }, skip: 1`), más reciente primero internamente — la respuesta llega **en orden cronológico ascendente** (el service invierte el arreglo), lista para renderizar directamente en un hilo de chat. Para cargar mensajes más antiguos, repetir la llamada con `before` = id del mensaje más antiguo ya cargado.

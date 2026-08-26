@@ -8,7 +8,14 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/erro
 import { isConversationMember } from "../conversations/conversation.repository";
 import * as SettingsService from "../settings/settings.service";
 import * as FileRepository from "./file.repository";
-import { StoredFileResponse, UploadedFile, UploadKind } from "./file.types";
+import {
+  AdminFileFilters,
+  AdminFileListOptions,
+  AdminFileListResult,
+  StoredFileResponse,
+  UploadedFile,
+  UploadKind,
+} from "./file.types";
 
 /// Con `conversationId`, namespacea el archivo bajo esa conversación y el
 /// año/mes actual (`chat/<conversationId>/<yyyy>/<mm>/...`), para no acumular
@@ -165,6 +172,65 @@ export async function deleteFile(currentUserId: string, fileId: string): Promise
   }
   if (file.createdById !== currentUserId) {
     throw new ForbiddenError("Only the uploader can delete this file");
+  }
+
+  await FileRepository.softDelete(fileId);
+  return { id: fileId };
+}
+
+const ADMIN_FILES_DEFAULT_PAGE_SIZE = 50;
+const ADMIN_FILES_MAX_PAGE_SIZE = 100;
+
+/// Panel de admin de gestión de storage — lista TODO `StoredFile` activo
+/// (avatares, fotos de grupo, adjuntos por igual), con dónde está en uso cada
+/// uno. Ver backend/src/modules/files/README.md, "Gestión de storage (admin)".
+export async function listFilesForAdmin(
+  filters: AdminFileFilters,
+  options: AdminFileListOptions,
+): Promise<AdminFileListResult> {
+  const limit = Math.min(Math.max(options.limit ?? ADMIN_FILES_DEFAULT_PAGE_SIZE, 1), ADMIN_FILES_MAX_PAGE_SIZE);
+
+  const [rows, aggregate] = await Promise.all([
+    FileRepository.listFilesForAdmin(filters, { beforeId: options.beforeId, limit }),
+    FileRepository.aggregateFilesForAdmin(filters),
+  ]);
+
+  const files = rows.map((file) => ({
+    ...toStoredFileResponse(file),
+    createdBy: file.createdBy
+      ? { id: file.createdBy.id, name: file.createdBy.name, email: file.createdBy.email }
+      : null,
+    usage: {
+      avatarOfUserCount: file._count.avatarOfUsers,
+      groupImageOfConversationCount: file._count.imageOfConversations,
+      messageAttachmentCount: file._count.messageFiles,
+    },
+  }));
+
+  return { files, totalCount: aggregate._count, totalSize: aggregate._sum.size ?? 0 };
+}
+
+/// A diferencia de `deleteFile` (borrado lógico, solo el dueño): esta es la
+/// vía admin, sin chequeo de ownership (el único gate es `requireRoles(ADMIN_ROLE)`
+/// en la ruta) y SÍ borra el archivo físico. La fila de `StoredFile` nunca se
+/// borra ni pierde su `id` — solo se marca `deletedAt`, para que cualquier
+/// referencia existente (`avatarFileId`, `imageFileId`, `MessageFile`) siga
+/// apuntando a metadata válida (nombre, tamaño) aunque el contenido ya no exista.
+export async function adminDeleteFile(fileId: string): Promise<{ id: string }> {
+  const file = await FileRepository.findActiveById(fileId);
+  if (!file) {
+    throw new NotFoundError("File not found");
+  }
+
+  // Un archivo físico ya ausente (borrado a mano, inconsistencia del
+  // provider, ...) se trata como ya-efectivamente-borrado: no debe bloquear
+  // la limpieza a nivel de base. `LocalDiskStorage.delete` usa `force: true`
+  // y no lanza por ENOENT, así que este catch es una red de seguridad para
+  // errores reales de IO (permisos, disco no montado, futuro provider remoto).
+  try {
+    await storage.delete(file.path);
+  } catch (error) {
+    console.error(`[files] adminDeleteFile: failed to delete physical file for ${fileId}`, error);
   }
 
   await FileRepository.softDelete(fileId);

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
-import { authenticate } from "../../middlewares/auth.middleware";
+import { ADMIN_ROLE } from "../../constants/roles.constant";
+import { authenticate, requireRoles } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import * as FileController from "./file.controller";
 
@@ -32,3 +33,12 @@ router.get("/:id", FileController.getById);
 router.delete("/:id", FileController.remove);
 
 export default router;
+
+/// Montado en `/v1/admin/files` — gestión de storage, solo rol "admin".
+/// Separado del router público de arriba a propósito: expone TODOS los
+/// `StoredFile` (avatares, imágenes de grupo, adjuntos) y borra físicamente,
+/// algo que un usuario normal nunca puede hacer sobre archivos que no subió.
+export const adminFileRouter = Router();
+adminFileRouter.use(authenticate, attachInternalUser, requireRoles(ADMIN_ROLE));
+adminFileRouter.get("/", FileController.listAdmin);
+adminFileRouter.delete("/:id", FileController.deleteAdmin);

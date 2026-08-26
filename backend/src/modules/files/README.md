@@ -70,6 +70,44 @@ Misma forma que la respuesta de `POST /`. `404` si no existe o está borrado ló
 
 Borrado lógico (`deletedAt`) — igual que `Conversation`/`Message` en el resto del sistema. Solo quien subió el archivo (`403` para cualquier otro). **No borra el archivo físico ni verifica si sigue referenciado** (por un mensaje, una conversación o un usuario) — limpiar archivos huérfanos en disco es trabajo de un job de background (`src/workers`, todavía no existe), no de este endpoint.
 
+## Gestión de storage (admin)
+
+```
+adminFileRouter.use(authenticate, attachInternalUser, requireRoles("admin"))
+```
+
+Base: `/api/v1/admin/files`, requiere rol `"admin"` (ver [`../auth/README.md`](../auth/README.md)). A diferencia de todo lo demás en este módulo, **lista y borra CUALQUIER `StoredFile`** sin importar quién lo subió ni para qué se usa (avatar, foto de grupo, adjunto de mensaje) — es la vista de "cuánto espacio ocupa la instalación", no una vista personal.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/` | Lista archivos activos, paginado y filtrable. |
+| `DELETE` | `/:id` | Borra un archivo **físicamente**, además de marcarlo `deletedAt`. |
+
+### `GET /` — Listar
+
+Query params, todos opcionales: `before` (cursor, id del último archivo de la página anterior), `limit` (default 50, máx 100), `type` (`"image"` \| `"audio"` \| `"other"`, por prefijo de `mimeType`), `uploader` (busca en `createdBy.name`/`createdBy.email`, contains case-insensitive), `search` (busca en `originalName`), `from`/`to` (rango de `createdAt`, ISO date).
+
+Respuesta `200`:
+```json
+{
+  "files": [
+    {
+      "id": "<uuid>", "originalName": "foto.jpg", "mimeType": "image/jpeg", "extension": "jpg",
+      "size": 245678, "url": "/uploads/...", "createdAt": "...",
+      "createdBy": { "id": "<uuid>", "name": "Ana", "email": "ana@x.com" },
+      "usage": { "avatarOfUserCount": 0, "groupImageOfConversationCount": 0, "messageAttachmentCount": 3 }
+    }
+  ],
+  "totalCount": 214,
+  "totalSize": 583200123
+}
+```
+`totalCount`/`totalSize` son agregados sobre **todos** los archivos que matchean el filtro (no solo la página actual, `prisma.storedFile.aggregate`) — para mostrar un resumen de espacio usado sin tener que traer todas las páginas. `usage` cuenta las relaciones inversas que `StoredFile` ya tenía (`avatarOfUsers`, `imageOfConversations`, `messageFiles`) vía `_count`, sin N+1. Todo en cero = archivo huérfano (no lo usa nada), candidato obvio a borrar.
+
+### `DELETE /:id` — Borrar físicamente
+
+**Distinto del `DELETE /:id` de arriba**: este SÍ borra el archivo del disco (`storage.delete(file.path)`, ver [`../../storage`](../../storage)) — libera espacio real, es la razón de ser de esta vista. Sin embargo, la fila de `StoredFile` **nunca se borra**, solo se marca `deletedAt` (igual que el borrado lógico normal): así cualquier referencia existente (`User.avatarFileId`, `Conversation.imageFileId`, `MessageFile`) sigue apuntando a una fila con nombre/tamaño válidos, para poder mostrar un placeholder de "archivo eliminado" donde corresponda (ver [`../messages/README.md`](../messages/README.md)) en vez de romperse. Sin chequeo de ownership — el único gate es el rol admin. Si el borrado físico falla (IO real, no "ya no existe" — `LocalDiskStorage.delete` usa `force: true`), se loguea pero no bloquea el `deletedAt`: un archivo físico ya ausente no debe impedir marcarlo eliminado en la base.
+
 ## Por qué la extensión nunca sale del nombre original tal cual
 
 `safeExtension()` (`file.service.ts`) intenta usar la extensión del nombre original **solo si** es alfanumérica simple (`^[a-z0-9]{1,10}$`); si no, cae al mapeo por tipo MIME en `ALLOWED_MIME_TYPES`, y si tampoco hay match, a `"bin"`. El nombre físico (`storedName`) siempre es un UUID generado acá, nunca el nombre que mandó el cliente — por eso no hay riesgo de path traversal ni de colisión, sin necesidad de sanitizar rutas en `src/storage`.
