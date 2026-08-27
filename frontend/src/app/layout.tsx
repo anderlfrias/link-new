@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Baloo_2, Inter } from "next/font/google";
 import Script from "next/script";
 import { AppProviders } from "@/providers/app-providers";
@@ -28,6 +28,14 @@ const baloo = Baloo_2({
 export const metadata: Metadata = {
   title: "Link — Chat Interno",
   description: "Chat interno de la organización",
+  appleWebApp: {
+    title: "Link",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0068d8",
 };
 
 export default function RootLayout({
