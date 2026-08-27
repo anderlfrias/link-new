@@ -95,7 +95,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   return (
     <ImageLightboxProvider>
       <div
-        className="relative flex h-[100dvh] lg:h-full flex-1 flex-col min-h-0"
+        className="relative flex h-[100dvh] lg:h-full flex-1 flex-col min-h-0 min-w-0"
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}

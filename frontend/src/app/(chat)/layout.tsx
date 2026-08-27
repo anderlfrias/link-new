@@ -75,7 +75,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
       {/* Panel principal — en desktop siempre visible (empty state o conversación); en mobile
           solo cuando hay una conversación abierta, ocupando toda la pantalla. */}
-      <div className={cn("h-full flex-1 flex-col min-h-0", showMainPanelOnMobile ? "flex" : "hidden lg:flex")}>
+      <div className={cn("h-full min-w-0 flex-1 flex-col min-h-0", showMainPanelOnMobile ? "flex" : "hidden lg:flex")}>
         {children}
       </div>
     </div>

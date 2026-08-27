@@ -93,7 +93,7 @@ export function MessageList({
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 space-y-2 overflow-y-auto bg-neutral-50 px-4 py-4 dark:bg-white/2"
+      className="min-w-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50 px-4 py-4 dark:bg-white/2"
     >
       {loadingMore && (
         <div className="flex justify-center py-2">

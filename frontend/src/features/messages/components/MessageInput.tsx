@@ -152,9 +152,9 @@ export function MessageInput({
   const showMicButton = !value.trim() && attachments.length === 0;
 
   return (
-    <div className="border-t border-black/5 dark:border-white/10">
+    <div className="min-w-0 border-t border-black/5 dark:border-white/10">
       {attachments.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pl-3 pr-5 pt-2.5">
+        <div className="flex min-w-0 gap-2 overflow-x-auto pl-3 pr-5 pt-2.5">
           {attachments.map((attachment) => (
             <AttachmentPreviewChip
               key={attachment.localId}
