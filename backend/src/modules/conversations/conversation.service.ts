@@ -549,15 +549,41 @@ export async function setConversationFavorite(currentUserId: string, conversatio
   return membership;
 }
 
+/// Emite a la room de la conversación Y a la room personal de cada miembro,
+/// en una sola llamada — socket.io deduplica por socket cuando se encadenan
+/// varias rooms en un mismo `.to()`, así que un cliente con la conversación
+/// abierta (room de conversación) no recibe el evento dos veces aunque
+/// también esté en su room personal. Sin esto, un remitente que NO tiene el
+/// hilo abierto (viendo la lista de conversaciones, u otro chat) nunca se
+/// entera de que le leyeron/entregaron el mensaje en tiempo real — se quedaba
+/// con la palomita vieja hasta el próximo fetch.
+function emitReceiptUpdated(
+  members: ConversationMemberWithUser[],
+  payload: {
+    conversationId: string;
+    userId: string;
+    kind: "read" | "delivered";
+    messageId: string | null;
+    at: Date | null;
+  },
+): void {
+  const io = getIO();
+  const target = members.reduce(
+    (acc, member) => acc.to(userRoomName(member.userId)),
+    io.to(conversationRoomName(payload.conversationId)),
+  );
+  target.emit(CONVERSATION_EVENTS.RECEIPT_UPDATED, payload);
+}
+
 export async function markConversationRead(
   currentUserId: string,
   conversationId: string,
   lastReadMessageId?: string,
 ) {
-  await assertMembership(conversationId, currentUserId);
+  const conversation = await assertMembership(conversationId, currentUserId);
   const membership = await ConversationRepository.markRead(conversationId, currentUserId, lastReadMessageId);
 
-  getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.RECEIPT_UPDATED, {
+  emitReceiptUpdated(conversation.members, {
     conversationId,
     userId: currentUserId,
     kind: "read",
@@ -572,19 +598,22 @@ export async function markConversationRead(
 /// o al servir el historial vía `GET /messages`) — nunca por HTTP directo, no
 /// es algo que un cliente pida explícitamente como sí lo es "marcar como
 /// leído". Solo emite si el puntero realmente avanzó, para no spamear el
-/// evento en fetches repetidos que no aportan nada nuevo.
+/// evento en fetches repetidos que no aportan nada nuevo. `members` lo pasa
+/// el caller (ya lo tiene cargado de `assertMembership`) para no pagar una
+/// query extra solo para saber a quién avisar en su room personal.
 export async function markDelivered(
   conversationId: string,
   userId: string,
   messageId: string,
   deliveredThrough: Date,
+  members: ConversationMemberWithUser[],
 ): Promise<void> {
   const advanced = await ConversationRepository.markDelivered(conversationId, userId, messageId, deliveredThrough);
   if (!advanced) {
     return;
   }
 
-  getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.RECEIPT_UPDATED, {
+  emitReceiptUpdated(members, {
     conversationId,
     userId,
     kind: "delivered",

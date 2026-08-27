@@ -7,10 +7,45 @@ import { listMessages, sendMessage as sendMessageRequest } from "@/features/mess
 import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { SOCKET_EVENTS } from "@/constants/socket-events";
 import type { Message } from "@/features/messages/types/message.types";
+import type { MessageReceiptStatus } from "@/features/conversations/types/conversation.types";
 
 export type MessagesStatus = "idle" | "loading" | "ready" | "error";
 
 const PAGE_SIZE = 50;
+
+interface ReceiptUpdatedPayload {
+  conversationId: string;
+  userId: string;
+  kind: "read" | "delivered";
+  messageId: string | null;
+  at: string | null;
+}
+
+const RECEIPT_RANK: Record<MessageReceiptStatus, number> = { sent: 0, delivered: 1, read: 2 };
+
+// Avanza el recibo de `userId` en un mensaje al recibir `conversation:receipt_updated`
+// (ver backend/API.md sección 7). El watermark es "leído/entregado hasta la fecha X",
+// así que cubre TODOS los mensajes con createdAt <= at, no solo el último — y nunca
+// retrocede un recibo ya en "read" a "delivered" si llega un evento viejo desordenado.
+function advanceReceipt(message: Message, payload: ReceiptUpdatedPayload): Message {
+  if (!payload.at || message.senderId === payload.userId || message.createdAt > payload.at) {
+    return message;
+  }
+
+  const nextStatus: MessageReceiptStatus = payload.kind;
+  const existing = message.receipts.find((receipt) => receipt.userId === payload.userId);
+  if (existing) {
+    if (RECEIPT_RANK[existing.status] >= RECEIPT_RANK[nextStatus]) return message;
+    return {
+      ...message,
+      receipts: message.receipts.map((receipt) =>
+        receipt.userId === payload.userId ? { ...receipt, status: nextStatus } : receipt,
+      ),
+    };
+  }
+
+  return { ...message, receipts: [...message.receipts, { userId: payload.userId, status: nextStatus }] };
+}
 
 export function useMessages(conversationId: string) {
   const { session } = useAuth();
@@ -96,13 +131,20 @@ export function useMessages(conversationId: string) {
       setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
     }
 
+    function handleReceiptUpdated(payload: ReceiptUpdatedPayload) {
+      if (payload.conversationId !== conversationId) return;
+      setMessages((prev) => prev.map((message) => advanceReceipt(message, payload)));
+    }
+
     socket.on(SOCKET_EVENTS.message.created, handleCreated);
     socket.on(SOCKET_EVENTS.message.updated, handleUpdated);
     socket.on(SOCKET_EVENTS.message.deleted, handleDeleted);
+    socket.on(SOCKET_EVENTS.conversation.receiptUpdated, handleReceiptUpdated);
     return () => {
       socket.off(SOCKET_EVENTS.message.created, handleCreated);
       socket.off(SOCKET_EVENTS.message.updated, handleUpdated);
       socket.off(SOCKET_EVENTS.message.deleted, handleDeleted);
+      socket.off(SOCKET_EVENTS.conversation.receiptUpdated, handleReceiptUpdated);
     };
   }, [socket, conversationId, token]);
 

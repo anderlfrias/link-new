@@ -77,7 +77,9 @@ export async function sendMessage(
   const connectedUserIds = await getConnectedUserIds(io, conversationId);
   const deliveredNow = new Set(connectedUserIds.filter((userId) => userId !== currentUserId));
   await Promise.all(
-    Array.from(deliveredNow).map((userId) => markDelivered(conversationId, userId, message.id, message.createdAt)),
+    Array.from(deliveredNow).map((userId) =>
+      markDelivered(conversationId, userId, message.id, message.createdAt, conversation.members),
+    ),
   );
 
   const receipts: MessageReceipt[] = conversation.members
@@ -109,7 +111,7 @@ export async function listMessages(
   // (markDelivered ya se encarga de no retroceder si ya estaba más adelante).
   const newest = ordered[ordered.length - 1];
   if (newest) {
-    await markDelivered(conversationId, currentUserId, newest.id, newest.createdAt);
+    await markDelivered(conversationId, currentUserId, newest.id, newest.createdAt, conversation.members);
   }
 
   return ordered.map((message) => ({

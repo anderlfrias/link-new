@@ -516,7 +516,7 @@ Es una aproximación por corte de tiempo (¿el mensaje es anterior a mi último 
 ### Flujo sugerido para el frontend
 
 1. Al abrir una conversación: `conversation:join`, cargar mensajes (`GET .../messages`), y llamar `POST /:id/read` (sin `lastReadMessageId` para simplemente marcar "leído hasta ahora", o con el id del último mensaje visible).
-2. Escuchar `conversation:receipt_updated` mientras la conversación está abierta, para actualizar en vivo los checks de tus propios mensajes enviados (`kind: "read"` o `"delivered"`, con `userId` de quién cambió y `messageId` hasta dónde).
+2. Escuchar `conversation:receipt_updated` para actualizar en vivo los checks de tus propios mensajes enviados (`kind: "read"` o `"delivered"`, con `userId` de quién cambió, `messageId` hasta dónde y `at` como corte de fecha — aplica a todo mensaje con `createdAt <= at`, no solo a `messageId`). Se emite tanto a la room de la conversación como a la room personal (`user:<id>`) de cada miembro, así que llega en vivo aunque esa conversación no esté abierta en ese momento (ej. para refrescar `lastMessageStatus` en la lista).
 3. En la lista de conversaciones (`GET /api/v1/conversations`), usar `lastMessageStatus` para el check junto al último mensaje, sin necesitar los `receipts` detallados de cada mensaje.
 
 En una conversación grupal, `receipts` trae un estado por cada miembro — el frontend decide cómo agregarlo (ej. "✓✓ azul" un mensaje solo cuando **todos** lo leyeron, que es exactamente el criterio que ya usa `lastMessageStatus` en el listado).
