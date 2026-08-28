@@ -7,6 +7,7 @@ import {
   IconHeadphones,
   IconLoader2,
   IconMicrophone,
+  IconMoodSmile,
   IconPaperclip,
   IconPhoto,
   IconSend2,
@@ -15,6 +16,7 @@ import {
   type TablerIcon,
 } from "@tabler/icons-react";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
+import { EmojiPicker } from "@/features/messages/components/EmojiPicker";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
 import { useVoiceRecorder } from "@/features/messages/hooks/use-voice-recorder";
 import { useAuth } from "@/providers/auth-provider";
@@ -51,10 +53,12 @@ export function MessageInput({
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [sendingVoiceNote, setSendingVoiceNote] = useState(false);
   const [voiceNoteError, setVoiceNoteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { session } = useAuth();
   const recorder = useVoiceRecorder();
@@ -75,6 +79,17 @@ export function MessageInput({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setEmojiPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [emojiPickerOpen]);
 
   const canSend = (Boolean(value.trim()) || fileIds.length > 0) && !sending && !isUploading;
 
@@ -124,6 +139,23 @@ export function MessageInput({
     }
     setAttachMenuOpen(false);
     input?.click();
+  }
+
+  // Inserta en la posición del cursor (no solo al final) y se lo devuelve al
+  // usuario ahí mismo, para poder seguir escribiendo o encadenar más emojis
+  // sin tener que volver a clickear el textarea — igual que WhatsApp/Telegram.
+  function insertEmoji(emoji: string) {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? value.length;
+    const end = textarea?.selectionEnd ?? value.length;
+    setValue(value.slice(0, start) + emoji + value.slice(end));
+    onTyping();
+
+    const cursor = start + emoji.length;
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(cursor, cursor);
+    });
   }
 
   async function handleStartRecording() {
@@ -197,51 +229,78 @@ export function MessageInput({
       ) : (
         <form onSubmit={handleSubmit} className="flex items-end gap-2 pl-3 pr-5 py-2.5">
           <input ref={fileInputRef} type="file" multiple onChange={handleFilesSelected} className="hidden" />
-          <div className="relative" ref={attachMenuRef}>
-            {attachMenuOpen && (
-              <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
-                {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon }) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => openPicker(accept)}
-                    className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
-                  >
-                    <OptionIcon size={18} stroke={1.75} />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setAttachMenuOpen((prev) => !prev)}
-              aria-label="Adjuntar"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
-            >
-              <IconPaperclip size={20} stroke={1.75} />
-            </button>
+          <div className="flex min-w-0 flex-1 items-end gap-0.5 rounded-2xl border border-black/10 bg-white py-1 pl-1 pr-1.5 focus-within:border-brand-blue dark:border-white/10 dark:bg-white/5">
+            <div className="relative shrink-0" ref={attachMenuRef}>
+              {attachMenuOpen && (
+                <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
+                  {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => openPicker(accept)}
+                      className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+                    >
+                      <OptionIcon size={18} stroke={1.75} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmojiPickerOpen(false);
+                  setAttachMenuOpen((prev) => !prev);
+                }}
+                aria-label="Adjuntar"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+              >
+                <IconPaperclip size={20} stroke={1.75} />
+              </button>
+            </div>
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={value}
+              onChange={(event) => {
+                setValue(event.target.value);
+                onTyping();
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
+              className="max-h-32 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm text-brand-ink outline-none dark:text-white"
+            />
+            <div className="relative shrink-0" ref={emojiPickerRef}>
+              {emojiPickerOpen && (
+                <div className="absolute bottom-full right-0 mb-2">
+                  <EmojiPicker
+                    onSelect={(emoji) => {
+                      insertEmoji(emoji);
+                    }}
+                  />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setAttachMenuOpen(false);
+                  setEmojiPickerOpen((prev) => !prev);
+                }}
+                aria-label="Emojis"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+              >
+                <IconMoodSmile size={20} stroke={1.75} />
+              </button>
+            </div>
           </div>
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={value}
-            onChange={(event) => {
-              setValue(event.target.value);
-              onTyping();
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
-            className="max-h-32 flex-1 min-w-0 resize-none rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm text-brand-ink outline-none focus:border-brand-blue dark:border-white/10 dark:bg-white/5 dark:text-white"
-          />
           {showMicButton ? (
             <button
               type="button"
               onClick={() => void handleStartRecording()}
               aria-label="Grabar nota de voz"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity"
             >
-              <IconMicrophone size={20} stroke={1.75} />
+              <IconMicrophone size={18} stroke={1.75} />
             </button>
           ) : (
             <button
