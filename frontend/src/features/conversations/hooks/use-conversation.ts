@@ -66,5 +66,26 @@ export function useConversation(conversationId: string) {
     };
   }, [socket, conversationId]);
 
+  // A diferencia de `updated`/`memberAdminChanged`, este evento solo trae
+  // `{conversationId, userIds}` (ver conversation.service.ts `addMembers`) —
+  // no alcanza para parchear `members` localmente (falta el `ConversationMember`
+  // completo de cada uno, con su `user` embebido), así que volvemos a pedir la
+  // conversación entera. Corre para todos los que la tienen abierta, incluido
+  // quien agregó (su propio socket también está en la room).
+  useEffect(() => {
+    if (!socket || !session) return;
+    const token = session.token;
+    function handleMemberAdded(payload: { conversationId: string }) {
+      if (payload.conversationId !== conversationId) return;
+      getConversation(token, conversationId)
+        .then(setConversation)
+        .catch(() => {});
+    }
+    socket.on(SOCKET_EVENTS.conversation.memberAdded, handleMemberAdded);
+    return () => {
+      socket.off(SOCKET_EVENTS.conversation.memberAdded, handleMemberAdded);
+    };
+  }, [socket, session, conversationId]);
+
   return { conversation, status };
 }

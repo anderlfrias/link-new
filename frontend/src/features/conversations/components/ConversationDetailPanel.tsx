@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
-import { IconAlertCircle, IconCamera, IconCheck, IconLoader2, IconPencil, IconX } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconCamera,
+  IconCheck,
+  IconLoader2,
+  IconPencil,
+  IconUserPlus,
+  IconX,
+} from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { Modal } from "@/components/ui/Modal";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { useConversationFiles } from "@/features/messages/hooks/use-conversation-files";
+import { useConversationSettings } from "@/features/conversations/hooks/use-conversation-settings";
 import { useUpdateConversation } from "@/features/conversations/hooks/use-update-conversation";
 import { useSetMemberAdmin } from "@/features/conversations/hooks/use-set-member-admin";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
@@ -19,6 +29,8 @@ import { buildUploadedFileUrl } from "@/utils/file-url";
 import { downloadFile } from "@/utils/download-file";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
+import { canPerformGroupAction } from "@/utils/group-permissions";
+import { AddMembersModal } from "@/features/conversations/components/AddMembersModal";
 import { GroupMemberRow } from "@/features/conversations/components/GroupMemberRow";
 import { GroupSettingsSection } from "@/features/conversations/components/GroupSettingsSection";
 import type { Conversation } from "@/features/conversations/types/conversation.types";
@@ -42,15 +54,26 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
   const { setAdmin, pendingUserId: pendingAdminUserId, error: setAdminError } = useSetMemberAdmin(conversation.id);
 
   const isGroup = conversation.type === "GROUP";
+  const { settings: groupSettings } = useConversationSettings(conversation.id, isGroup);
   const displayName = getConversationDisplayName(conversation, currentUserId);
   const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const otherMember = getOtherMembers(conversation, currentUserId)[0];
   const currentMember = conversation.members.find((member) => member.userId === currentUserId);
   const canManageGroup = currentMember?.isAdmin ?? false;
+  // Deliberadamente `false` mientras `groupSettings` todavía no cargó — mostrar
+  // el botón antes de tiempo (con el default global ALL_MEMBERS) y esconderlo
+  // después si el grupo tiene un override más restrictivo sería un parpadeo
+  // confuso. Mismo criterio que `assertGroupPermission` en
+  // backend/src/modules/conversations/conversation.service.ts.
+  const canAddMembers =
+    isGroup && groupSettings
+      ? canPerformGroupAction(groupSettings.effective.whoCanAddMembers, conversation, currentUserId, session?.user.roles ?? [])
+      : false;
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(conversation.name ?? "");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showAddMembers, setShowAddMembers] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // El nombre puede cambiar por socket (otro miembro lo editó) mientras no
@@ -220,6 +243,18 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
               Participantes ({conversation.members.length})
             </h3>
             <div className="flex flex-col">
+              {canAddMembers && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddMembers(true)}
+                  className="flex w-full items-center gap-3 px-1 py-2 text-left transition-colors hover:bg-black/3 dark:hover:bg-white/5"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue dark:bg-brand-blue/20">
+                    <IconUserPlus size={20} stroke={1.75} />
+                  </span>
+                  <p className="font-medium text-brand-ink dark:text-white">Agregar participantes</p>
+                </button>
+              )}
               {conversation.members.map((member) => (
                 <GroupMemberRow
                   key={member.id}
@@ -318,6 +353,12 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
           )}
         </div>
       </div>
+
+      {showAddMembers && (
+        <Modal onClose={() => setShowAddMembers(false)} aria-label="Agregar participantes">
+          <AddMembersModal conversation={conversation} onClose={() => setShowAddMembers(false)} />
+        </Modal>
+      )}
     </div>
   );
 }

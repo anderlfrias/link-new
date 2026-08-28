@@ -7,7 +7,11 @@ import type { ConversationEffectiveSettings } from "@/features/conversations/typ
 
 export type ConversationSettingsStatus = "idle" | "loading" | "ready" | "error";
 
-export function useConversationSettings(conversationId: string) {
+/** `enabled` evita el fetch cuando todavía no corresponde llamarlo — el
+ * backend rechaza `GET .../settings` para conversaciones PRIVATE (solo GROUP
+ * tiene configuración de grupo), así que cualquier caller que no sepa de
+ * antemano si la conversación es GROUP debe pasar `enabled: isGroup`. */
+export function useConversationSettings(conversationId: string, enabled: boolean = true) {
   const { session } = useAuth();
   const [settings, setSettings] = useState<ConversationEffectiveSettings | null>(null);
   const [status, setStatus] = useState<ConversationSettingsStatus>("idle");
@@ -15,7 +19,7 @@ export function useConversationSettings(conversationId: string) {
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || !enabled) return;
     setStatus("loading");
     setError(null);
     getConversationSettings(session.token, conversationId)
@@ -27,7 +31,7 @@ export function useConversationSettings(conversationId: string) {
         setError(err instanceof Error ? err.message : "No se pudo cargar la configuración del grupo.");
         setStatus("error");
       });
-  }, [session, conversationId, reloadToken]);
+  }, [session, conversationId, enabled, reloadToken]);
 
   const refetch = useCallback(() => setReloadToken((token) => token + 1), []);
 
