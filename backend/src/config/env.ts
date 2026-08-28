@@ -11,6 +11,9 @@ const schema = yup.object({
   VAPID_PUBLIC_KEY: yup.string().required(),
   VAPID_PRIVATE_KEY: yup.string().required(),
   VAPID_SUBJECT: yup.string().required(),
+  // Opcional a propósito: sin definir, la API y el socket quedan abiertos a
+  // cualquier origen (cómodo en dev/LAN). Ver config/cors-origins.ts.
+  CORS_ORIGIN: yup.string().optional(),
 });
 
 let env: yup.InferType<typeof schema>;

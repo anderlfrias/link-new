@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from "http";
 import { Server } from "socket.io";
+import { corsOrigin } from "../config/cors-origins";
 import { AppServer } from "./types";
 
 /// Crea la instancia de Socket.IO a partir de un servidor HTTP ya existente.
@@ -12,6 +13,6 @@ import { AppServer } from "./types";
 /// tocar el resto de la infraestructura.
 export function createSocketGateway(httpServer: HttpServer): AppServer {
   return new Server(httpServer, {
-    cors: { origin: true },
+    cors: { origin: corsOrigin },
   });
 }

@@ -4,13 +4,14 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import path from "path";
+import { corsOrigin } from "./config/cors-origins";
 import { errorHandler } from "./middlewares/error.middleware";
 import routes from "./route";
 
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: corsOrigin }));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
