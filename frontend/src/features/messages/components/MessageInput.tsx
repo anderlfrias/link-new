@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconCheck,
   IconFileText,
@@ -43,6 +43,11 @@ const ATTACHMENT_OPTIONS: { label: string; accept?: string; icon: TablerIcon }[]
   { label: "Documento", icon: IconFileText },
 ];
 
+// Tope de altura para que el textarea crezca con mensajes largos sin comerse
+// el resto del chat — debe coincidir con `max-h-32` en su className, ya que
+// el cálculo de `scrollHeight` de acá abajo no lee ese valor del CSS.
+const TEXTAREA_MAX_HEIGHT_PX = 128;
+
 export function MessageInput({
   conversationId,
   onSend,
@@ -68,6 +73,19 @@ export function MessageInput({
   useEffect(() => {
     textareaRef.current?.focus();
   }, [conversationId]);
+
+  // Autogrow: por default un <textarea rows={1}> no crece con el contenido —
+  // un mensaje de varias líneas queda "escondido" scrolleando dentro de una
+  // caja de una sola línea. Recalculamos la altura en cada cambio de texto:
+  // "auto" primero para que scrollHeight refleje el contenido actual (si no,
+  // solo puede crecer y nunca se achica al borrar texto), después el mínimo
+  // entre eso y el tope — pasado el tope, el textarea scrollea internamente.
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`;
+  }, [value]);
 
   useEffect(() => {
     if (!attachMenuOpen) return;
@@ -268,7 +286,7 @@ export function MessageInput({
               }}
               onKeyDown={handleKeyDown}
               placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
-              className="max-h-32 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm text-brand-ink outline-none dark:text-white"
+              className="max-h-32 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-sm text-brand-ink outline-none dark:text-white"
             />
             <div className="relative shrink-0" ref={emojiPickerRef}>
               {emojiPickerOpen && (
