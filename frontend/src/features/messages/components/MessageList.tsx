@@ -23,6 +23,15 @@ interface MessageListProps {
 const STICK_TO_BOTTOM_THRESHOLD = 120;
 const LOAD_MORE_THRESHOLD = 80;
 
+/** Fondo del hilo — patrón propio de Link (ver globals.css / public/chat-pattern-*.svg),
+ * mismo espíritu que el wallpaper de WhatsApp/Telegram. Vía CSS vars (no clases Tailwind)
+ * porque el modo oscuro acá es manual (clase `.dark`), no `prefers-color-scheme`. */
+const chatBackgroundStyle = {
+  backgroundImage: "var(--chat-pattern-image)",
+  backgroundColor: "var(--chat-pattern-bg)",
+  backgroundRepeat: "repeat",
+} as const;
+
 export function MessageList({
   messages,
   status,
@@ -73,7 +82,7 @@ export function MessageList({
 
   if (status === "loading" || status === "idle") {
     return (
-      <div className="flex flex-1 items-center justify-center">
+      <div className="flex flex-1 items-center justify-center" style={chatBackgroundStyle}>
         <IconLoader2 className="animate-spin text-brand-blue" size={24} />
       </div>
     );
@@ -81,7 +90,10 @@ export function MessageList({
 
   if (status === "error") {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
+      <div
+        className="flex flex-1 items-center justify-center px-6 text-center text-sm text-neutral-500 dark:text-neutral-400"
+        style={chatBackgroundStyle}
+      >
         No se pudieron cargar los mensajes.
       </div>
     );
@@ -93,7 +105,8 @@ export function MessageList({
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="min-w-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50 px-4 py-4 dark:bg-white/2"
+      className="min-w-0 flex-1 space-y-2 overflow-y-auto px-4 py-4"
+      style={chatBackgroundStyle}
     >
       {loadingMore && (
         <div className="flex justify-center py-2">

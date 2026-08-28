@@ -6,11 +6,18 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Fondo del hilo de chat — mismo espíritu que WhatsApp/Telegram (patrón
+     tenue y repetido), pero con los motivos propios de Link (burbuja de
+     chat + ícono de link, ver public/chat-pattern-*.svg) en vez de genéricos. */
+  --chat-pattern-bg: #f3f6fa;
+  --chat-pattern-image: url("/chat-pattern-light.svg");
 }
 
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  --chat-pattern-bg: #0a1420;
+  --chat-pattern-image: url("/chat-pattern-dark.svg");
 }
 
 @theme inline {

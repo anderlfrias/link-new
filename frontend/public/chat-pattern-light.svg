@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0F6FC"/>
+      <stop offset="1" stop-color="#EDF8F6"/>
+    </linearGradient>
+
+    <!-- Isotipo de Link, trazado directo desde el ícono real (frontend/src/app/icon.png,
+         mismo pixel art que public/brand/logo-mark.png) — burbuja de chat entrelazada con
+         un aro de "link", no una aproximación con formas genéricas. -->
+    <symbol id="mark" viewBox="0 0 20 20">
+      <path d="M 12.15,16.15 L 11.29,16.07 L 10.74,15.88 L 10.16,15.53 L 9.67,15.00 L 11.05,13.57 L 11.68,14.08 L 12.11,14.12 L 12.62,13.96 L 16.23,10.31 L 16.70,9.45 L 16.82,8.87 L 16.74,7.81 L 16.31,6.95 L 15.78,6.43 L 15.12,6.07 L 14.53,5.96 L 13.59,6.07 L 12.85,6.50 L 8.59,10.84 L 7.97,11.00 L 7.50,10.80 L 7.13,10.31 L 7.09,9.69 L 7.32,9.22 L 11.72,4.71 L 12.38,4.28 L 13.48,3.89 L 15.20,3.89 L 16.21,4.24 L 16.88,4.63 L 17.79,5.51 L 18.26,6.17 L 18.61,6.91 L 18.85,7.93 L 18.89,8.55 L 18.77,9.61 L 18.42,10.62 L 17.83,11.52 L 14.02,15.45 L 13.36,15.88 L 12.81,16.07 L 12.15,16.15 Z" class="mark-teal"/>
+      <path d="M 2.62,16.11 L 2.23,16.07 L 2.05,15.82 L 2.25,13.20 L 1.50,11.95 L 1.19,10.98 L 1.07,10.08 L 1.15,8.59 L 1.39,7.73 L 1.74,6.91 L 2.32,6.02 L 3.12,5.18 L 3.95,4.59 L 5.16,4.08 L 6.25,3.89 L 7.15,3.93 L 7.93,4.08 L 8.95,4.51 L 9.61,4.94 L 10.10,5.43 L 8.75,6.82 L 8.05,6.35 L 7.34,6.07 L 6.76,6.00 L 5.78,6.07 L 4.88,6.43 L 4.34,6.82 L 3.57,7.73 L 3.14,8.71 L 3.03,9.34 L 3.03,10.12 L 3.34,11.29 L 3.73,11.99 L 4.04,12.34 L 3.85,13.79 L 5.04,13.11 L 5.82,13.30 L 6.56,13.34 L 7.50,13.11 L 8.09,12.79 L 11.91,8.93 L 12.19,8.77 L 12.77,8.73 L 13.30,9.06 L 13.50,9.45 L 13.50,9.96 L 13.34,10.31 L 9.69,14.08 L 8.75,14.75 L 7.66,15.18 L 6.68,15.33 L 5.74,15.29 L 4.96,15.14 L 2.62,16.11 Z" class="mark-blue"/>
+    </symbol>
+
+    <!-- Motivos secundarios: no doodles genéricos (elefantes, guitarras) sino gestos que
+         son literalmente funciones de este chat — adjuntar, favoritos, doble palomita de
+         leído, nota de voz — variedad al estilo WhatsApp/Telegram pero con identidad propia. -->
+    <symbol id="clip" viewBox="0 0 12 18">
+      <path d="M9 2.6 a3 3 0 0 0-6 0 v9.4 a2 2 0 0 0 4 0 v-7.4 a1 1 0 0 0-2 0 v6.2" fill="none" stroke-width="1.2"/>
+    </symbol>
+    <symbol id="star" viewBox="-7 -7 14 14">
+      <path d="M0,-6 L1.76,-1.85 L6,-1.85 L2.62,1.06 L3.7,5.7 L0,3 L-3.7,5.7 L-2.62,1.06 L-6,-1.85 L-1.76,-1.85 Z" fill="none" stroke-width="1"/>
+    </symbol>
+    <symbol id="ticks" viewBox="0 0 20 12">
+      <path d="M1 6.5 L4.5 10 L10 2.5" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M7 6.5 L10.5 10 L16 2.5" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="mic" viewBox="0 0 12 18">
+      <rect x="3.5" y="0.5" width="5" height="9" rx="2.5" fill="none" stroke-width="1.2"/>
+      <path d="M1 8.5 a5 5 0 0 0 10 0" fill="none" stroke-width="1.2"/>
+      <line x1="6" y1="13.5" x2="6" y2="17" stroke-width="1.2"/>
+      <line x1="3" y1="17" x2="9" y2="17" stroke-width="1.2"/>
+    </symbol>
+  </defs>
+
+  <rect width="200" height="200" fill="url(#bg)"/>
+
+  <g opacity="0.14">
+    <g transform="translate(12 10) rotate(-6) scale(1.05)"><use href="#mark" width="20" height="20"/></g>
+    <g transform="translate(150 6) rotate(9) scale(0.85)"><use href="#mark" width="20" height="20"/></g>
+    <g transform="translate(88 78) rotate(-11) scale(1.15)"><use href="#mark" width="20" height="20"/></g>
+    <g transform="translate(8 128) rotate(6) scale(0.9)"><use href="#mark" width="20" height="20"/></g>
+    <g transform="translate(150 152) rotate(-8) scale(0.95)"><use href="#mark" width="20" height="20"/></g>
+  </g>
+
+  <g opacity="0.16" fill="none">
+    <g class="icon-clip" transform="translate(64 16) rotate(14)"><use href="#clip" width="12" height="18"/></g>
+    <g class="icon-clip" transform="translate(175 96) rotate(-18)"><use href="#clip" width="12" height="18"/></g>
+
+    <g class="icon-star" transform="translate(40 96) rotate(4)"><use href="#star" width="14" height="14"/></g>
+    <g class="icon-star" transform="translate(128 148) rotate(-10)"><use href="#star" width="14" height="14"/></g>
+
+    <g class="icon-ticks" transform="translate(104 30) rotate(-4) scale(0.85)"><use href="#ticks" width="20" height="12"/></g>
+    <g class="icon-ticks" transform="translate(26 170) rotate(8) scale(0.85)"><use href="#ticks" width="20" height="12"/></g>
+
+    <g class="icon-mic" transform="translate(168 44) rotate(12)"><use href="#mic" width="12" height="18"/></g>
+    <g class="icon-mic" transform="translate(74 178) rotate(-8)"><use href="#mic" width="12" height="18"/></g>
+  </g>
+
+  <g fill="#0068D8" fill-opacity="0.10">
+    <circle cx="55" cy="55" r="1.6"/>
+    <circle cx="135" cy="46" r="1.6"/>
+    <circle cx="20" cy="76" r="1.6"/>
+    <circle cx="182" cy="20" r="1.6"/>
+    <circle cx="95" cy="118" r="1.6"/>
+    <circle cx="10" cy="42" r="1.6"/>
+    <circle cx="188" cy="128" r="1.6"/>
+    <circle cx="58" cy="150" r="1.6"/>
+    <circle cx="130" cy="184" r="1.6"/>
+    <circle cx="178" cy="176" r="1.6"/>
+  </g>
+
+  <style>
+    .mark-teal { fill: #00A8A8; }
+    .mark-blue { fill: #0068D8; }
+    .icon-clip { stroke: #0068D8; }
+    .icon-star { stroke: #00A8A8; }
+    .icon-ticks { stroke: #0068D8; }
+    .icon-mic { stroke: #00A8A8; }
+  </style>
+</svg>
