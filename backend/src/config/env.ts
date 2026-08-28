@@ -8,6 +8,9 @@ const schema = yup.object({
   APP_CODE_EXTERNAL_AUTH: yup.string().required(),
   EXTERNAL_AUTH_JWT_SECRET: yup.string().required(),
   MAX_UPLOAD_SIZE_MB: yup.number().default(25),
+  VAPID_PUBLIC_KEY: yup.string().required(),
+  VAPID_PRIVATE_KEY: yup.string().required(),
+  VAPID_SUBJECT: yup.string().required(),
 });
 
 let env: yup.InferType<typeof schema>;

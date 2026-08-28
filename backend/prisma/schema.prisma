@@ -170,6 +170,7 @@ model User {
   auditLogs               ChatAuditLog[]
   /// Archivos que este usuario subió (`StoredFile.createdBy`).
   uploadedFiles           StoredFile[]         @relation("StoredFileCreatedBy")
+  pushSubscriptions       PushSubscription[]
 
   @@map("users")
 }
@@ -453,4 +454,25 @@ model ConversationGroupSettings {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("conversation_group_settings")
+}
+
+/// Una entrada por dispositivo/navegador suscripto a Web Push (no por usuario:
+/// la misma persona puede tener el celular y la notebook suscriptos a la vez).
+/// `endpoint` identifica de forma única al service worker de ESE navegador en
+/// ESE dispositivo — es la clave natural, no `userId`. Ver push/README.md.
+model PushSubscription {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String @unique
+  /// Claves públicas del suscriptor (`PushSubscriptionJSON.keys`), necesarias
+  /// para cifrar el payload — ver `web-push`, RFC 8291.
+  p256dh   String
+  auth     String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

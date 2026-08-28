@@ -3,6 +3,7 @@ import authRoutes from "./modules/auth/auth.route";
 import conversationRoutes from "./modules/conversations/conversation.route";
 import fileRoutes, { adminFileRouter } from "./modules/files/file.route";
 import messageRoutes from "./modules/messages/message.route";
+import pushRoutes from "./modules/push/push.route";
 import { adminSettingsRouter, publicSettingsRouter } from "./modules/settings/settings.route";
 import userRoutes, { adminUserRouter } from "./modules/users/user.route";
 
@@ -22,6 +23,8 @@ router.use("/v1/files", fileRoutes);
 // Directorio de usuarios (para elegir con quién iniciar una conversación nueva).
 // authenticate + attachInternalUser se aplican dentro de user.route.ts.
 router.use("/v1/users", userRoutes);
+// Suscripciones de Web Push (notificaciones con la app/pestaña cerrada).
+router.use("/v1/push", pushRoutes);
 // Configuración global de la instalación — ver settings/README.md.
 router.use("/v1/admin/settings", adminSettingsRouter);
 router.use("/v1/admin/files", adminFileRouter);

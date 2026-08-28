@@ -1,8 +1,14 @@
-import { ChatAuditAction, MessageType } from "@prisma/client";
-import { assertMembership, computeReceipts, markDelivered } from "../conversations/conversation.service";
+import { ChatAuditAction, ConversationType, MessageType } from "@prisma/client";
+import {
+  assertMembership,
+  buildLastMessagePreview,
+  computeReceipts,
+  markDelivered,
+} from "../conversations/conversation.service";
 import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
 import { ConversationMemberWithUser, MessageReceipt } from "../conversations/conversation.types";
 import { toStoredFileResponse } from "../files/file.service";
+import * as PushService from "../push/push.service";
 import { getIO } from "../../socket";
 import { conversationRoomName, getConnectedUserIds, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
@@ -92,6 +98,29 @@ export async function sendMessage(
   const messageWithReceipts: MessageWithReceipts = { ...message, receipts };
   io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
   notifyConversationListChanged(conversation.members, conversationId);
+
+  // Web Push para quien no tiene ESTA conversación abierta ahora mismo —
+  // reutiliza `deliveredNow` (arriba) en vez de recalcular "quién está
+  // conectado", porque es exactamente la misma pregunta. A diferencia de la
+  // room de socket, un push llega aunque la pestaña esté cerrada o el
+  // navegador entero cerrado (ver push/README.md) — por eso vale la pena
+  // mandarlo incluso a quien tiene la app abierta pero en OTRA conversación.
+  // No se espera (`void`): un push lento o caído nunca debe demorar ni tumbar
+  // la respuesta de este POST.
+  const offlineMemberIds = conversation.members
+    .map((member) => member.userId)
+    .filter((userId) => userId !== currentUserId && !deliveredNow.has(userId));
+  if (offlineMemberIds.length > 0) {
+    const preview = buildLastMessagePreview(message);
+    const isGroup = conversation.type === ConversationType.GROUP;
+    void PushService.notifyUsers(offlineMemberIds, {
+      title: isGroup ? (conversation.name ?? "Grupo") : message.sender.name,
+      body: isGroup ? `${message.sender.name}: ${preview}` : preview,
+      url: `/conversations/${conversationId}`,
+      tag: conversationId,
+    });
+  }
+
   return messageWithReceipts;
 }
 
