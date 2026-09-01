@@ -15,11 +15,13 @@ import {
   IconVideo,
   type TablerIcon,
 } from "@tabler/icons-react";
+import { AttachmentErrorModal } from "@/features/messages/components/AttachmentErrorModal";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { EmojiPicker } from "@/features/messages/components/EmojiPicker";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
 import { useVoiceRecorder } from "@/features/messages/hooks/use-voice-recorder";
 import { useAuth } from "@/providers/auth-provider";
+import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { formatDuration } from "@/utils/format-duration";
 
@@ -66,9 +68,19 @@ export function MessageInput({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { session } = useAuth();
+  const publicSettings = usePublicSettings();
   const recorder = useVoiceRecorder();
-  const { attachments, addFiles, removeAttachment, reset: resetAttachments, isUploading, fileIds } =
-    attachmentsState;
+  const {
+    attachments,
+    addFiles,
+    removeAttachment,
+    reset: resetAttachments,
+    isUploading,
+    fileIds,
+    validationErrors,
+    dismissValidationError,
+  } = attachmentsState;
+  const currentValidationError = validationErrors[0];
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -331,6 +343,15 @@ export function MessageInput({
             </button>
           )}
         </form>
+      )}
+
+      {currentValidationError && (
+        <AttachmentErrorModal
+          fileName={currentValidationError.fileName}
+          reason={currentValidationError.reason}
+          maxUploadSizeMb={publicSettings?.maxUploadSizeMb}
+          onAccept={() => dismissValidationError(currentValidationError.localId)}
+        />
       )}
     </div>
   );
