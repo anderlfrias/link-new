@@ -9,6 +9,7 @@ import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
 import { ConversationMemberWithUser, MessageReceipt } from "../conversations/conversation.types";
 import { toStoredFileResponse } from "../files/file.service";
 import * as PushService from "../push/push.service";
+import * as SettingsService from "../settings/settings.service";
 import { getIO } from "../../socket";
 import { conversationRoomName, getConnectedUserIds, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
@@ -45,6 +46,17 @@ async function assertOwnedMessage(conversationId: string, messageId: string): Pr
     throw new NotFoundError("Message not found");
   }
   return message;
+}
+
+/// Ventanas de tiempo configurables (ver AppSettings, allowMessageEdit/
+/// allowMessageDeleteForEveryone y sus *TimeLimitMinutes en
+/// settings/README.md) — `limitMinutes` null significa sin límite.
+function assertWithinTimeLimit(sentAt: Date, limitMinutes: number | null, action: string): void {
+  if (limitMinutes == null) return;
+  const elapsedMinutes = (Date.now() - sentAt.getTime()) / 60_000;
+  if (elapsedMinutes > limitMinutes) {
+    throw new ForbiddenError(`The time window to ${action} this message has expired`);
+  }
 }
 
 export async function sendMessage(
@@ -184,6 +196,12 @@ export async function editMessage(
     throw new BadRequestError("Only text messages can be edited");
   }
 
+  const settings = await SettingsService.getSettings();
+  if (!settings.allowMessageEdit) {
+    throw new ForbiddenError("Message editing is disabled");
+  }
+  assertWithinTimeLimit(message.createdAt, settings.messageEditTimeLimitMinutes, "edit");
+
   const updated = await MessageRepository.updateContent(messageId, input.content.trim());
   await MessageRepository.logAudit({
     userId: currentUserId,
@@ -213,6 +231,18 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
   const isOwnMessage = message.senderId === currentUserId;
   if (!isOwnMessage && conversation.createdById !== currentUserId) {
     throw new ForbiddenError("Only the message author or the conversation creator can delete this message");
+  }
+
+  // Las reglas de allowMessageDeleteForEveryone/tiempo límite solo gobiernan
+  // que el propio autor borre SU mensaje — el creador de la conversación
+  // borrando un mensaje ajeno es moderación (mismo criterio que expulsar un
+  // miembro) y nunca debe depender de esta configuración de autoservicio.
+  if (isOwnMessage) {
+    const settings = await SettingsService.getSettings();
+    if (!settings.allowMessageDeleteForEveryone) {
+      throw new ForbiddenError("Deleting messages for everyone is disabled");
+    }
+    assertWithinTimeLimit(message.createdAt, settings.messageDeleteForEveryoneTimeLimitMinutes, "delete");
   }
 
   await MessageRepository.softDelete(messageId, currentUserId);

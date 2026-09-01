@@ -34,6 +34,10 @@ publicSettingsRouter.use(authenticate, attachInternalUser)
 | `maxGroupMembers`, `whoCanCreateGroups`, `whoCanAddMembers`, `whoCanRemoveMembers`, `whoCanChangeGroupInfo`, `whoCanDeleteGroup` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`createConversation`, `addMembers`, `removeMember`, `updateConversation`, `deleteConversation`, vía `resolveEffectiveGroupSettings`) |
 | `allowGroupOverrideAddMembers`, `allowGroupOverrideRemoveMembers`, `allowGroupOverrideMaxGroupMembers`, `allowGroupOverrideChangeGroupInfo`, `allowGroupOverrideDeleteGroup` | `settings.service.ts` (`resolveEffectiveGroupSettings`, `getGroupOverrideAllowedFlags`), consumidos por `conversations` vía `getGroupSettings`/`updateGroupSettings` |
 | `messageRetentionDays` | `src/workers/message-retention.worker.ts` |
+| `allowMessageEdit`, `messageEditTimeLimitMinutes` | [`messages`](../messages/README.md), `message.service.ts` (`editMessage`) |
+| `allowMessageDeleteForEveryone`, `messageDeleteForEveryoneTimeLimitMinutes` | [`messages`](../messages/README.md), `message.service.ts` (`deleteMessage`) — solo cuando el propio autor borra su mensaje, nunca cuando el creador de la conversación borra uno ajeno (moderación) |
+
+Las 4 quedan también en `PublicAppSettingsDTO` (`GET /api/v1/settings/public`), a diferencia del resto de la configuración administrativa: el cliente las necesita para decidir si mostrar las acciones de editar/borrar sobre los propios mensajes de quien esté logueado, aunque no sea admin — la autoridad real sigue siendo `message.service.ts`, que las vuelve a chequear en cada `PATCH`/`DELETE`.
 
 ## Overrides por grupo
 

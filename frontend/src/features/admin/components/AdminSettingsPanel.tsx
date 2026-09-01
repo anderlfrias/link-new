@@ -38,6 +38,10 @@ interface DraftState {
   allowGroupOverrideChangeGroupInfo: boolean;
   allowGroupOverrideDeleteGroup: boolean;
   messageRetentionDays: string;
+  allowMessageEdit: boolean;
+  messageEditTimeLimitMinutes: string;
+  allowMessageDeleteForEveryone: boolean;
+  messageDeleteForEveryoneTimeLimitMinutes: string;
 }
 
 function toDraft(settings: AdminSettings): DraftState {
@@ -58,6 +62,14 @@ function toDraft(settings: AdminSettings): DraftState {
     allowGroupOverrideChangeGroupInfo: settings.allowGroupOverrideChangeGroupInfo,
     allowGroupOverrideDeleteGroup: settings.allowGroupOverrideDeleteGroup,
     messageRetentionDays: settings.messageRetentionDays == null ? "" : String(settings.messageRetentionDays),
+    allowMessageEdit: settings.allowMessageEdit,
+    messageEditTimeLimitMinutes:
+      settings.messageEditTimeLimitMinutes == null ? "" : String(settings.messageEditTimeLimitMinutes),
+    allowMessageDeleteForEveryone: settings.allowMessageDeleteForEveryone,
+    messageDeleteForEveryoneTimeLimitMinutes:
+      settings.messageDeleteForEveryoneTimeLimitMinutes == null
+        ? ""
+        : String(settings.messageDeleteForEveryoneTimeLimitMinutes),
   };
 }
 
@@ -88,6 +100,20 @@ function validate(draft: DraftState): FieldErrors {
     }
   }
 
+  if (draft.messageEditTimeLimitMinutes.trim() !== "") {
+    const limit = Number(draft.messageEditTimeLimitMinutes);
+    if (!Number.isInteger(limit) || limit < 1) {
+      errors.messageEditTimeLimitMinutes = "Debe ser un número entero mayor a 0, o vacío para sin límite.";
+    }
+  }
+
+  if (draft.messageDeleteForEveryoneTimeLimitMinutes.trim() !== "") {
+    const limit = Number(draft.messageDeleteForEveryoneTimeLimitMinutes);
+    if (!Number.isInteger(limit) || limit < 1) {
+      errors.messageDeleteForEveryoneTimeLimitMinutes = "Debe ser un número entero mayor a 0, o vacío para sin límite.";
+    }
+  }
+
   return errors;
 }
 
@@ -112,6 +138,14 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     allowGroupOverrideChangeGroupInfo: draft.allowGroupOverrideChangeGroupInfo,
     allowGroupOverrideDeleteGroup: draft.allowGroupOverrideDeleteGroup,
     messageRetentionDays: draft.messageRetentionDays.trim() === "" ? null : Number(draft.messageRetentionDays),
+    allowMessageEdit: draft.allowMessageEdit,
+    messageEditTimeLimitMinutes:
+      draft.messageEditTimeLimitMinutes.trim() === "" ? null : Number(draft.messageEditTimeLimitMinutes),
+    allowMessageDeleteForEveryone: draft.allowMessageDeleteForEveryone,
+    messageDeleteForEveryoneTimeLimitMinutes:
+      draft.messageDeleteForEveryoneTimeLimitMinutes.trim() === ""
+        ? null
+        : Number(draft.messageDeleteForEveryoneTimeLimitMinutes),
   };
 }
 
@@ -338,6 +372,52 @@ export function AdminSettingsPanel() {
                 error={errors.messageRetentionDays}
               />
             </label>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Edición y borrado de mensajes</h3>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <Checkbox
+                  checked={draft.allowMessageEdit}
+                  onChange={(event) => updateField("allowMessageEdit", event.target.checked)}
+                  label="Los usuarios pueden editar sus propios mensajes"
+                />
+                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  Tiempo límite para editar, en minutos (vacío = sin límite)
+                  <Input
+                    type="number"
+                    min={1}
+                    disabled={!draft.allowMessageEdit}
+                    value={draft.messageEditTimeLimitMinutes}
+                    onChange={(event) => updateField("messageEditTimeLimitMinutes", event.target.value)}
+                    error={errors.messageEditTimeLimitMinutes}
+                  />
+                </label>
+              </div>
+              <div className="flex flex-col gap-1">
+                <Checkbox
+                  checked={draft.allowMessageDeleteForEveryone}
+                  onChange={(event) => updateField("allowMessageDeleteForEveryone", event.target.checked)}
+                  label="Los usuarios pueden eliminar sus propios mensajes para todos"
+                />
+                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  Tiempo límite para eliminar para todos, en minutos (vacío = sin límite)
+                  <Input
+                    type="number"
+                    min={1}
+                    disabled={!draft.allowMessageDeleteForEveryone}
+                    value={draft.messageDeleteForEveryoneTimeLimitMinutes}
+                    onChange={(event) => updateField("messageDeleteForEveryoneTimeLimitMinutes", event.target.value)}
+                    error={errors.messageDeleteForEveryoneTimeLimitMinutes}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                El creador de la conversación siempre puede eliminar mensajes ajenos como moderador, sin importar
+                esta configuración.
+              </p>
+            </div>
           </section>
         </div>
       </div>

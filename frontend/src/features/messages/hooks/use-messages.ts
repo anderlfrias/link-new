@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useSocket } from "@/providers/socket-provider";
-import { listMessages, sendMessage as sendMessageRequest } from "@/features/messages/api/messages.api";
+import {
+  deleteMessage as deleteMessageRequest,
+  editMessage as editMessageRequest,
+  listMessages,
+  sendMessage as sendMessageRequest,
+} from "@/features/messages/api/messages.api";
 import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { SOCKET_EVENTS } from "@/constants/socket-events";
 import type { Message } from "@/features/messages/types/message.types";
@@ -168,5 +173,27 @@ export function useMessages(conversationId: string) {
     [token, conversationId],
   );
 
-  return { messages, status, hasMore, loadingMore, loadMore, send };
+  // El propio socket que emitió el PATCH/DELETE también recibe message:updated/
+  // deleted de vuelta por estar en la room de la conversación (ver
+  // handleUpdated/handleDeleted arriba) — actualizar acá igual no duplica nada
+  // porque ambos caminos son idempotentes (reemplazar por id / filtrar por id).
+  const edit = useCallback(
+    async (messageId: string, content: string) => {
+      if (!token) return;
+      const updated = await editMessageRequest(token, conversationId, messageId, { content });
+      setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    },
+    [token, conversationId],
+  );
+
+  const remove = useCallback(
+    async (messageId: string) => {
+      if (!token) return;
+      await deleteMessageRequest(token, conversationId, messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    },
+    [token, conversationId],
+  );
+
+  return { messages, status, hasMore, loadingMore, loadMore, send, edit, remove };
 }

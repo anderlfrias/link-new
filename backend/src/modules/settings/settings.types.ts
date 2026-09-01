@@ -19,6 +19,10 @@ export type UpdateSettingsInput = Partial<
     | "allowGroupOverrideChangeGroupInfo"
     | "allowGroupOverrideDeleteGroup"
     | "messageRetentionDays"
+    | "allowMessageEdit"
+    | "messageEditTimeLimitMinutes"
+    | "allowMessageDeleteForEveryone"
+    | "messageDeleteForEveryoneTimeLimitMinutes"
   >
 >;
 
@@ -30,6 +34,14 @@ export interface PublicAppSettingsDTO {
   maxUploadSizeMb: number;
   maxVoiceNoteDurationSeconds: number;
   maxGroupMembers: number;
+  /// Expuestos a cualquier autenticado (no solo admin) porque el cliente los
+  /// necesita para mostrar/ocultar las acciones de editar/borrar sobre sus
+  /// propios mensajes — ver message.service.ts (editMessage/deleteMessage),
+  /// que es quien realmente hace cumplir estas reglas.
+  allowMessageEdit: boolean;
+  messageEditTimeLimitMinutes: number | null;
+  allowMessageDeleteForEveryone: boolean;
+  messageDeleteForEveryoneTimeLimitMinutes: number | null;
 }
 
 /// Las 5 dimensiones de gobierno de grupo que pueden tener un override por

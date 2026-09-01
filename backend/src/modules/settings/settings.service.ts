@@ -28,6 +28,10 @@ export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
     maxUploadSizeMb: settings.maxUploadSizeMb,
     maxVoiceNoteDurationSeconds: settings.maxVoiceNoteDurationSeconds,
     maxGroupMembers: settings.maxGroupMembers,
+    allowMessageEdit: settings.allowMessageEdit,
+    messageEditTimeLimitMinutes: settings.messageEditTimeLimitMinutes,
+    allowMessageDeleteForEveryone: settings.allowMessageDeleteForEveryone,
+    messageDeleteForEveryoneTimeLimitMinutes: settings.messageDeleteForEveryoneTimeLimitMinutes,
   };
 }
 

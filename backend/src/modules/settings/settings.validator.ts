@@ -26,6 +26,10 @@ export const updateSettingsSchema = yup
     allowGroupOverrideChangeGroupInfo: yup.boolean(),
     allowGroupOverrideDeleteGroup: yup.boolean(),
     messageRetentionDays: yup.number().integer().min(0).nullable(),
+    allowMessageEdit: yup.boolean(),
+    messageEditTimeLimitMinutes: yup.number().integer().min(1).nullable(),
+    allowMessageDeleteForEveryone: yup.boolean(),
+    messageDeleteForEveryoneTimeLimitMinutes: yup.number().integer().min(1).nullable(),
   })
   .test(
     "at-least-one-field",
@@ -46,5 +50,9 @@ export const updateSettingsSchema = yup
       value.allowGroupOverrideMaxGroupMembers !== undefined ||
       value.allowGroupOverrideChangeGroupInfo !== undefined ||
       value.allowGroupOverrideDeleteGroup !== undefined ||
-      value.messageRetentionDays !== undefined,
+      value.messageRetentionDays !== undefined ||
+      value.allowMessageEdit !== undefined ||
+      value.messageEditTimeLimitMinutes !== undefined ||
+      value.allowMessageDeleteForEveryone !== undefined ||
+      value.messageDeleteForEveryoneTimeLimitMinutes !== undefined,
   );

@@ -24,7 +24,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const currentUserId = session?.user.internalUserId ?? "";
 
   const { conversation, status: conversationStatus } = useConversation(conversationId);
-  const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send } =
+  const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send, edit, remove } =
     useMessages(conversationId);
   const { typingUserIds, notifyTyping, notifyStopped } = useTyping(conversationId);
   const attachmentsState = useMessageAttachments(conversationId);
@@ -116,6 +116,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           loadingMore={loadingMore}
           onLoadMore={loadMore}
           isTyping={typingNames.length > 0}
+          onEditMessage={edit}
+          onDeleteMessage={remove}
         />
         <MessageInput
           conversationId={conversationId}

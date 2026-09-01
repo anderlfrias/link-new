@@ -44,11 +44,11 @@ Query params: `before` (id de la entrada `MessageFile`, cursor) y `limit` (1-100
 
 ### `PATCH /:id` — Editar
 
-Solo el propio autor (`403` para cualquier otro, incluido el creador de la conversación) y solo mensajes `TEXT` (`400` para `SYSTEM`). Actualiza `editedAt`. Emite `message:updated` (con `receipts` recalculado).
+Solo el propio autor (`403` para cualquier otro, incluido el creador de la conversación) y solo mensajes `TEXT` (`400` para `SYSTEM`). Además, requiere `AppSettings.allowMessageEdit` (`403` si está en `false`) y, si `messageEditTimeLimitMinutes` no es `null`, que no hayan pasado más de esos minutos desde `createdAt` (`403` si venció) — ver [`settings`](../settings/README.md#consumidores). Actualiza `editedAt`. Emite `message:updated` (con `receipts` recalculado).
 
 ### `DELETE /:id` — Borrar
 
-Borrado lógico (`deletedAt`, `deletedById`). Permitido para el propio autor **o** el creador de la conversación (mismo criterio que usa `conversations` para expulsar miembros). Emite `message:deleted` con `{ conversationId, messageId }` — el cliente decide cómo representarlo (ej. "mensaje eliminado"), este módulo no reescribe el contenido.
+Borrado lógico (`deletedAt`, `deletedById`). Permitido para el propio autor **o** el creador de la conversación (mismo criterio que usa `conversations` para expulsar miembros). Cuando quien borra es el propio autor, además requiere `AppSettings.allowMessageDeleteForEveryone` y, si `messageDeleteForEveryoneTimeLimitMinutes` no es `null`, estar dentro de esa ventana desde `createdAt` (mismo mecanismo que editar, ver [`settings`](../settings/README.md#consumidores)) — **el creador de la conversación borrando un mensaje ajeno nunca pasa por estas dos reglas**, es moderación, no autoservicio. Emite `message:deleted` con `{ conversationId, messageId }` — el cliente decide cómo representarlo (ej. "mensaje eliminado"), este módulo no reescribe el contenido.
 
 ## Confirmación de entrega y lectura
 

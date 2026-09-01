@@ -18,6 +18,8 @@ interface MessageListProps {
   loadingMore: boolean;
   onLoadMore: () => void;
   isTyping: boolean;
+  onEditMessage: (messageId: string, content: string) => Promise<void>;
+  onDeleteMessage: (messageId: string) => Promise<void>;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
@@ -41,6 +43,8 @@ export function MessageList({
   loadingMore,
   onLoadMore,
   isTyping,
+  onEditMessage,
+  onDeleteMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
@@ -141,7 +145,13 @@ export function MessageList({
                 </span>
               </div>
             )}
-            <MessageBubble message={message} isOwn={isOwn} showSender={showSender} />
+            <MessageBubble
+              message={message}
+              isOwn={isOwn}
+              showSender={showSender}
+              onEdit={onEditMessage}
+              onDelete={onDeleteMessage}
+            />
           </div>
         );
       })}

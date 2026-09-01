@@ -427,6 +427,20 @@ model AppSettings {
   /// instalación existente sin que un admin lo prenda explícitamente.
   messageRetentionDays Int? @map("message_retention_days")
 
+  // Edición y borrado de mensajes propios (ver messages/README.md, editMessage/deleteMessage).
+  // Defaults true/null: reproducen el comportamiento histórico (editar/borrar
+  // sin restricción) hasta que un admin los ajuste explícitamente.
+  /// Si el propio autor puede editar el contenido de un mensaje TEXT ya enviado.
+  allowMessageEdit Boolean @default(true) @map("allow_message_edit")
+  /// Minutos desde el envío durante los que un mensaje puede editarse. null = sin límite.
+  messageEditTimeLimitMinutes Int? @map("message_edit_time_limit_minutes")
+  /// Si el propio autor puede borrar (para todos) un mensaje ya enviado. No
+  /// afecta el borrado que hace el creador de la conversación sobre mensajes
+  /// ajenos (moderación) — esa vía nunca depende de esta configuración.
+  allowMessageDeleteForEveryone Boolean @default(true) @map("allow_message_delete_for_everyone")
+  /// Minutos desde el envío durante los que un mensaje puede borrarse para todos. null = sin límite.
+  messageDeleteForEveryoneTimeLimitMinutes Int? @map("message_delete_for_everyone_time_limit_minutes")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

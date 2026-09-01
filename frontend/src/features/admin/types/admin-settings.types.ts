@@ -25,6 +25,15 @@ export interface AdminSettings {
   allowGroupOverrideDeleteGroup: boolean;
   /** `null` = deshabilitado. */
   messageRetentionDays: number | null;
+  /** Si el propio autor puede editar el contenido de un mensaje TEXT ya enviado. */
+  allowMessageEdit: boolean;
+  /** Minutos desde el envío durante los que un mensaje puede editarse. `null` = sin límite. */
+  messageEditTimeLimitMinutes: number | null;
+  /** Si el propio autor puede borrar (para todos) un mensaje ya enviado. No afecta el borrado
+   * que hace el creador de la conversación sobre mensajes ajenos (moderación). */
+  allowMessageDeleteForEveryone: boolean;
+  /** Minutos desde el envío durante los que un mensaje puede borrarse para todos. `null` = sin límite. */
+  messageDeleteForEveryoneTimeLimitMinutes: number | null;
 }
 
 export type UpdateAdminSettingsPayload = Partial<AdminSettings>;

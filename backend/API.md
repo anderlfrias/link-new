@@ -451,7 +451,7 @@ Pedir el historial también marca como **entregados** (no leídos) para vos todo
 { "content": "Texto corregido" }
 ```
 
-Solo tu propio mensaje (`403` para cualquier otro, incluido el creador de la conversación), y solo `type: "TEXT"` (`400` para `SYSTEM`). Actualiza `editedAt`. Emite `message:updated`, y además `conversation:updated` (sección 5) a cada miembro **solo si** este era el último mensaje de la conversación — así `lastMessagePreview` se refresca en la lista sin recargar la conversación entera al editar un mensaje viejo.
+Solo tu propio mensaje (`403` para cualquier otro, incluido el creador de la conversación), y solo `type: "TEXT"` (`400` para `SYSTEM`). También requiere `AppSettings.allowMessageEdit` y, si `messageEditTimeLimitMinutes` no es `null`, estar dentro de esa cantidad de minutos desde `createdAt` — `403` en ambos casos (ver sección 12). Actualiza `editedAt`. Emite `message:updated`, y además `conversation:updated` (sección 5) a cada miembro **solo si** este era el último mensaje de la conversación — así `lastMessagePreview` se refresca en la lista sin recargar la conversación entera al editar un mensaje viejo.
 
 ### 6.4 `GET /files` — Archivos compartidos
 
@@ -479,7 +479,7 @@ Misma forma que devuelve `POST /api/v1/files` (sección 9) más `messageId`/`sen
 
 ### 6.5 `DELETE /:id` — Borrar
 
-Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado). Igual que en 6.3, emite `conversation:updated` a cada miembro solo si el mensaje borrado era el último de la conversación.
+Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. Si quien borra es el propio autor, además requiere `AppSettings.allowMessageDeleteForEveryone` y, si `messageDeleteForEveryoneTimeLimitMinutes` no es `null`, estar dentro de esa ventana desde `createdAt` (`403` si alguna falla, ver sección 12) — **el creador de la conversación borrando un mensaje ajeno nunca pasa por estas dos reglas**, es moderación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado). Igual que en 6.3, emite `conversation:updated` a cada miembro solo si el mensaje borrado era el último de la conversación.
 
 ### 6.6 Eventos de socket de mensajes
 
@@ -658,18 +658,30 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
   "allowGroupOverrideMaxGroupMembers": false,
   "allowGroupOverrideChangeGroupInfo": false,
   "allowGroupOverrideDeleteGroup": false,
-  "messageRetentionDays": null
+  "messageRetentionDays": null,
+  "allowMessageEdit": true,
+  "messageEditTimeLimitMinutes": null,
+  "allowMessageDeleteForEveryone": true,
+  "messageDeleteForEveryoneTimeLimitMinutes": null
 }
 ```
 
-`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md).
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)).
 
 ### 12.2 `GET /settings/public` — cualquier autenticado
 
-Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesita para validar antes de subir un archivo, grabar una nota de voz o crear un grupo:
+Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesita para validar antes de subir un archivo, grabar una nota de voz, crear un grupo, o mostrar las acciones de editar/borrar sobre sus propios mensajes:
 
 ```json
-{ "maxUploadSizeMb": 25, "maxVoiceNoteDurationSeconds": 300, "maxGroupMembers": 256 }
+{
+  "maxUploadSizeMb": 25,
+  "maxVoiceNoteDurationSeconds": 300,
+  "maxGroupMembers": 256,
+  "allowMessageEdit": true,
+  "messageEditTimeLimitMinutes": null,
+  "allowMessageDeleteForEveryone": true,
+  "messageDeleteForEveryoneTimeLimitMinutes": null
+}
 ```
 
 ---
