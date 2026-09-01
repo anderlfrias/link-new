@@ -9,6 +9,8 @@ export interface AdminSettings {
   maxUploadSizeMb: number;
   fileTypeRestrictionMode: FileTypeRestrictionMode;
   fileTypeList: string[];
+  /** Máximo de archivos que puede llevar un solo mensaje. `null` = sin límite. */
+  maxFilesPerMessage: number | null;
   maxVoiceNoteDurationSeconds: number;
   maxGroupMembers: number;
   /** Solo admite "ALL_MEMBERS" | "APP_ADMINS_ONLY" — no hay grupo ni admin de grupo antes de que el grupo exista. */

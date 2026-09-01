@@ -28,6 +28,7 @@ export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
     maxUploadSizeMb: settings.maxUploadSizeMb,
     maxVoiceNoteDurationSeconds: settings.maxVoiceNoteDurationSeconds,
     maxGroupMembers: settings.maxGroupMembers,
+    maxFilesPerMessage: settings.maxFilesPerMessage,
     allowMessageEdit: settings.allowMessageEdit,
     messageEditTimeLimitMinutes: settings.messageEditTimeLimitMinutes,
     allowMessageDeleteForEveryone: settings.allowMessageDeleteForEveryone,

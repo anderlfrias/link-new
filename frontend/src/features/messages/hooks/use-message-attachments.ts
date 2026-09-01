@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
+import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 import type { UploadedFile } from "@/features/files/types/file.types";
@@ -16,14 +17,23 @@ export interface PendingAttachment {
   error?: string;
 }
 
-/** Los dos rechazos de `uploadFile` (`file.service.ts`) que ameritan interrumpir al usuario con
- * un modal en vez de dejarlo solo en el chip — son configuración del admin (tipo de archivo,
- * tamaño máximo), no un error de red o del servidor, así que vale la pena explicarlos. */
-export type AttachmentFailureReason = { kind: "unsupported-type"; mimeType: string } | { kind: "size-limit" };
+/** Los tres rechazos que ameritan interrumpir al usuario con un modal en vez de dejarlo solo en
+ * el chip (o, para `too-many-files`, sin ningún chip) — son configuración del admin (tipo de
+ * archivo, tamaño máximo, cantidad por mensaje), no un error de red o del servidor, así que vale
+ * la pena explicarlos. */
+export type AttachmentFailureReason =
+  | { kind: "unsupported-type"; mimeType: string }
+  | { kind: "size-limit" }
+  | { kind: "too-many-files"; limit: number; attemptedCount: number };
 
 export interface AttachmentValidationError {
-  localId: string;
-  fileName: string;
+  /** Para `unsupported-type`/`size-limit` es el `localId` del adjunto rechazado (así
+   * `removeAttachment` puede limpiar el aviso pendiente si el usuario lo saca antes de leerlo).
+   * Para `too-many-files` no hay un adjunto asociado (los archivos de más ni se agregan) — es un
+   * id sintético solo para la cola. */
+  id: string;
+  /** Ausente en `too-many-files`: no hay un único archivo al que apunte el aviso. */
+  fileName?: string;
   reason: AttachmentFailureReason;
 }
 
@@ -55,6 +65,13 @@ function classifyUploadError(message: string): AttachmentFailureReason | null {
 export function useMessageAttachments(conversationId: string) {
   const { session } = useAuth();
   const token = session?.token;
+  const publicSettings = usePublicSettings();
+  // null = sin límite todavía conocido (settings sin cargar) o deshabilitado
+  // por el admin (`maxFilesPerMessage: null`) — en ambos casos, no frenar acá:
+  // la autoridad real es `message.service.ts#sendMessage`, que rechaza el
+  // POST si de verdad hay más de la cuenta.
+  const maxFilesPerMessage = publicSettings?.maxFilesPerMessage ?? null;
+
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   // Cola en vez de un solo valor: soltar varios archivos rechazados a la vez
   // (ej. arrastrar 3 .exe con un ALLOWLIST activo) no debe perder los otros
@@ -63,10 +80,41 @@ export function useMessageAttachments(conversationId: string) {
   const [validationErrors, setValidationErrors] = useState<AttachmentValidationError[]>([]);
   const nextId = useRef(0);
 
+  // Ref espejo de `attachments.length` para leer la cantidad actual de forma
+  // síncrona dentro de `addFiles` sin tener que declarar `attachments` como
+  // dependencia (eso recrearía el callback en cada archivo agregado/subido).
+  const attachmentsCountRef = useRef(0);
+  useEffect(() => {
+    attachmentsCountRef.current = attachments.length;
+  }, [attachments]);
+
   const addFiles = useCallback(
     (files: FileList | File[]) => {
       if (!token) return;
-      Array.from(files).forEach((file) => {
+      const incoming = Array.from(files);
+
+      // Tope de cantidad por mensaje: se aplica ANTES de subir nada — los
+      // archivos que exceden el límite ni se agregan como chip (a diferencia
+      // de un rechazo por tipo/tamaño, acá no hay "el archivo se sube y
+      // falla", el archivo nunca llega a intentarse).
+      const remainingSlots =
+        maxFilesPerMessage == null
+          ? incoming.length
+          : Math.max(maxFilesPerMessage - attachmentsCountRef.current, 0);
+      const accepted = incoming.slice(0, remainingSlots);
+      const rejectedCount = incoming.length - accepted.length;
+
+      if (rejectedCount > 0 && maxFilesPerMessage != null) {
+        setValidationErrors((prev) => [
+          ...prev,
+          {
+            id: `too-many-files-${Date.now()}`,
+            reason: { kind: "too-many-files", limit: maxFilesPerMessage, attemptedCount: incoming.length },
+          },
+        ]);
+      }
+
+      accepted.forEach((file) => {
         const localId = `${Date.now()}-${nextId.current++}`;
         setAttachments((prev) => [...prev, { localId, file, status: "uploading" }]);
 
@@ -104,24 +152,24 @@ export function useMessageAttachments(conversationId: string) {
             // auto-descarte.
             const reason = classifyUploadError(message);
             if (reason) {
-              setValidationErrors((prev) => [...prev, { localId, fileName: file.name, reason }]);
+              setValidationErrors((prev) => [...prev, { id: localId, fileName: file.name, reason }]);
             }
           });
       });
     },
-    [token, conversationId],
+    [token, conversationId, maxFilesPerMessage],
   );
 
   const removeAttachment = useCallback((localId: string) => {
     setAttachments((prev) => prev.filter((attachment) => attachment.localId !== localId));
-    setValidationErrors((prev) => prev.filter((entry) => entry.localId !== localId));
+    setValidationErrors((prev) => prev.filter((entry) => entry.id !== localId));
   }, []);
 
   // Cierra el modal actual (el primero de la cola) sin tocar `attachments` —
-  // el archivo rechazado sigue seleccionado, ver el comentario en el catch de
-  // `addFiles`.
-  const dismissValidationError = useCallback((localId: string) => {
-    setValidationErrors((prev) => prev.filter((entry) => entry.localId !== localId));
+  // el archivo rechazado (si lo hay) sigue seleccionado, ver el comentario en
+  // el catch de `addFiles`.
+  const dismissValidationError = useCallback((id: string) => {
+    setValidationErrors((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
   const reset = useCallback(() => {

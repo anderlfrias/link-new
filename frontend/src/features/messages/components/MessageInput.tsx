@@ -350,7 +350,7 @@ export function MessageInput({
           fileName={currentValidationError.fileName}
           reason={currentValidationError.reason}
           maxUploadSizeMb={publicSettings?.maxUploadSizeMb}
-          onAccept={() => dismissValidationError(currentValidationError.localId)}
+          onAccept={() => dismissValidationError(currentValidationError.id)}
         />
       )}
     </div>

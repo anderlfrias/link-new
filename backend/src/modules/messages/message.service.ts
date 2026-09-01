@@ -68,6 +68,11 @@ export async function sendMessage(
 
   const fileIds = Array.from(new Set(input.fileIds ?? []));
   if (fileIds.length > 0) {
+    const settings = await SettingsService.getSettings();
+    if (settings.maxFilesPerMessage != null && fileIds.length > settings.maxFilesPerMessage) {
+      throw new BadRequestError(`A message can include at most ${settings.maxFilesPerMessage} files`);
+    }
+
     const existingFiles = await MessageRepository.countExistingFiles(fileIds);
     if (existingFiles !== fileIds.length) {
       throw new BadRequestError("One or more files do not exist");

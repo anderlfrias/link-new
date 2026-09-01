@@ -5,6 +5,8 @@ export interface PublicAppSettings {
   maxUploadSizeMb: number;
   maxVoiceNoteDurationSeconds: number;
   maxGroupMembers: number;
+  /** Máximo de archivos que puede llevar un solo mensaje. `null` = sin límite. */
+  maxFilesPerMessage: number | null;
   allowMessageEdit: boolean;
   messageEditTimeLimitMinutes: number | null;
   allowMessageDeleteForEveryone: boolean;

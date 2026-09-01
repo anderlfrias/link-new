@@ -431,7 +431,7 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 { "content": "Hola!", "fileIds": ["<storedFileId>"] }
 ```
 
-`content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9).
+`content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9), pero no ilimitados: `400` si traés más entradas que `AppSettings.maxFilesPerMessage` (`null` = sin límite, ver sección 12).
 
 → `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
 
@@ -646,6 +646,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
   "maxUploadSizeMb": 25,
   "fileTypeRestrictionMode": "DISABLED",
   "fileTypeList": [],
+  "maxFilesPerMessage": 10,
   "maxVoiceNoteDurationSeconds": 300,
   "maxGroupMembers": 256,
   "whoCanCreateGroups": "ALL_MEMBERS",
@@ -666,7 +667,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
 }
 ```
 
-`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)).
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)).
 
 ### 12.2 `GET /settings/public` — cualquier autenticado
 
@@ -677,6 +678,7 @@ Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesi
   "maxUploadSizeMb": 25,
   "maxVoiceNoteDurationSeconds": 300,
   "maxGroupMembers": 256,
+  "maxFilesPerMessage": 10,
   "allowMessageEdit": true,
   "messageEditTimeLimitMinutes": null,
   "allowMessageDeleteForEveryone": true,

@@ -18,6 +18,7 @@ export const updateSettingsSchema = yup
     fileTypeList: yup
       .array()
       .of(yup.string().required().matches(MIME_TYPE_PATTERN, "Each entry must be a mime type (e.g. \"application/pdf\" or \"audio/*\"), not a file extension")),
+    maxFilesPerMessage: yup.number().integer().min(1).nullable(),
     maxVoiceNoteDurationSeconds: yup.number().integer().min(1),
     maxGroupMembers: yup.number().integer().min(2),
     // No existe grupo ni admin de grupo antes de que el grupo exista, así que
@@ -47,6 +48,7 @@ export const updateSettingsSchema = yup
       value.maxUploadSizeMb !== undefined ||
       value.fileTypeRestrictionMode !== undefined ||
       value.fileTypeList !== undefined ||
+      value.maxFilesPerMessage !== undefined ||
       value.maxVoiceNoteDurationSeconds !== undefined ||
       value.maxGroupMembers !== undefined ||
       value.whoCanCreateGroups !== undefined ||

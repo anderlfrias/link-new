@@ -28,6 +28,8 @@ interface DraftState {
   fileTypeRestrictionMode: FileTypeRestrictionMode;
   /** Categorías curadas + valores manuales — se expanden a mime patterns recién en `toPayload`. */
   fileTypeSelection: FileTypeSelectionItem[];
+  /** Vacío = sin límite (`null`). */
+  maxFilesPerMessage: string;
   maxVoiceNoteDurationSeconds: string;
   maxGroupMembers: string;
   whoCanCreateGroups: GroupPermissionLevel;
@@ -87,6 +89,7 @@ function toDraft(settings: AdminSettings): DraftState {
     maxUploadSizeMb: String(settings.maxUploadSizeMb),
     fileTypeRestrictionMode: settings.fileTypeRestrictionMode,
     fileTypeSelection: selectionFromPatterns(settings.fileTypeList),
+    maxFilesPerMessage: settings.maxFilesPerMessage == null ? "" : String(settings.maxFilesPerMessage),
     maxVoiceNoteDurationSeconds: String(settings.maxVoiceNoteDurationSeconds),
     maxGroupMembers: String(settings.maxGroupMembers),
     whoCanCreateGroups: settings.whoCanCreateGroups,
@@ -131,6 +134,13 @@ function validate(draft: DraftState): FieldErrors {
     errors.maxGroupMembers = "Debe ser un número entero mayor a 1.";
   }
 
+  if (draft.maxFilesPerMessage.trim() !== "") {
+    const filesLimit = Number(draft.maxFilesPerMessage);
+    if (!Number.isInteger(filesLimit) || filesLimit < 1) {
+      errors.maxFilesPerMessage = "Debe ser un número entero mayor a 0, o vacío para sin límite.";
+    }
+  }
+
   if (draft.messageRetentionDays.trim() !== "") {
     const retention = Number(draft.messageRetentionDays);
     if (!Number.isInteger(retention) || retention < 0) {
@@ -160,6 +170,7 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     maxUploadSizeMb: Number(draft.maxUploadSizeMb),
     fileTypeRestrictionMode: draft.fileTypeRestrictionMode,
     fileTypeList: patternsFromSelection(draft.fileTypeSelection),
+    maxFilesPerMessage: draft.maxFilesPerMessage.trim() === "" ? null : Number(draft.maxFilesPerMessage),
     maxVoiceNoteDurationSeconds: Number(draft.maxVoiceNoteDurationSeconds),
     maxGroupMembers: Number(draft.maxGroupMembers),
     whoCanCreateGroups: draft.whoCanCreateGroups,
@@ -293,6 +304,16 @@ export function AdminSettingsPanel() {
                   value={draft.maxUploadSizeMb}
                   onChange={(event) => updateField("maxUploadSizeMb", event.target.value)}
                   error={errors.maxUploadSizeMb}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                Máximo de archivos por mensaje (vacío = sin límite)
+                <Input
+                  type="number"
+                  min={1}
+                  value={draft.maxFilesPerMessage}
+                  onChange={(event) => updateField("maxFilesPerMessage", event.target.value)}
+                  error={errors.maxFilesPerMessage}
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">

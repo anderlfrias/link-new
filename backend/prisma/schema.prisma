@@ -391,6 +391,13 @@ model AppSettings {
   fileTypeRestrictionMode FileTypeRestrictionMode @default(DISABLED) @map("file_type_restriction_mode")
   /// Mime types interpretados según `fileTypeRestrictionMode` (allowlist o blocklist).
   fileTypeList            String[]                @default([]) @map("file_type_list")
+  /// Máximo de archivos (`fileIds`) que puede llevar un solo mensaje (ver
+  /// message.service.ts, sendMessage). null = sin límite. Default 10 (no
+  /// null): a diferencia del resto de los límites de este modelo, acá el
+  /// comportamiento histórico (sin ningún límite) es el que se considera el
+  /// problema a resolver, así que el primer deploy de este campo ya aplica
+  /// una restricción razonable en vez de esperar a que un admin la prenda.
+  maxFilesPerMessage Int? @default(10) @map("max_files_per_message")
 
   // Notas de voz
   maxVoiceNoteDurationSeconds Int @default(300) @map("max_voice_note_duration_seconds")

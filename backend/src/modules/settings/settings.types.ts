@@ -6,6 +6,7 @@ export type UpdateSettingsInput = Partial<
     | "maxUploadSizeMb"
     | "fileTypeRestrictionMode"
     | "fileTypeList"
+    | "maxFilesPerMessage"
     | "maxVoiceNoteDurationSeconds"
     | "maxGroupMembers"
     | "whoCanCreateGroups"
@@ -34,6 +35,11 @@ export interface PublicAppSettingsDTO {
   maxUploadSizeMb: number;
   maxVoiceNoteDurationSeconds: number;
   maxGroupMembers: number;
+  /// null = sin límite. Expuesto para que el compositor de mensajes pueda
+  /// frenar la selección ANTES de subir de más — la autoridad real sigue
+  /// siendo message.service.ts (sendMessage), que rechaza el POST si igual
+  /// llegan más `fileIds` que este límite.
+  maxFilesPerMessage: number | null;
   /// Expuestos a cualquier autenticado (no solo admin) porque el cliente los
   /// necesita para mostrar/ocultar las acciones de editar/borrar sobre sus
   /// propios mensajes — ver message.service.ts (editMessage/deleteMessage),
