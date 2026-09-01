@@ -1,6 +1,13 @@
 import { FileTypeRestrictionMode, GroupPermissionLevel } from "@prisma/client";
 import * as yup from "yup";
 
+// "type/subtype" o wildcard "type/*" (ver FILE_TYPE_CATEGORIES,
+// matchesFileTypePattern en file.service.ts). Sin esta validación, guardar
+// una extensión como ".pdf" en vez de "application/pdf" nunca matchea contra
+// `upload.mimetype` y deja el allowlist/blocklist roto en silencio: un
+// ALLOWLIST así bloquea todo, un BLOCKLIST así no bloquea nada.
+const MIME_TYPE_PATTERN = /^[a-z0-9][a-z0-9.+-]*\/(\*|[a-z0-9][a-z0-9.+-]*)$/i;
+
 // Todos los campos son opcionales (PATCH parcial) — las reglas de negocio que
 // dependen de otros valores (ej. bajar maxGroupMembers por debajo del tamaño
 // de un grupo existente) no se validan acá, viven donde se consulta el valor.
@@ -8,7 +15,9 @@ export const updateSettingsSchema = yup
   .object({
     maxUploadSizeMb: yup.number().integer().min(1),
     fileTypeRestrictionMode: yup.string().oneOf(Object.values(FileTypeRestrictionMode)),
-    fileTypeList: yup.array().of(yup.string().required()),
+    fileTypeList: yup
+      .array()
+      .of(yup.string().required().matches(MIME_TYPE_PATTERN, "Each entry must be a mime type (e.g. \"application/pdf\" or \"audio/*\"), not a file extension")),
     maxVoiceNoteDurationSeconds: yup.number().integer().min(1),
     maxGroupMembers: yup.number().integer().min(2),
     // No existe grupo ni admin de grupo antes de que el grupo exista, así que

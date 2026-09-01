@@ -29,6 +29,20 @@ function buildStorageDir(conversationId?: string): string {
   return conversationId ? `chat/${conversationId}/${yyyy}/${mm}` : `chat/${yyyy}/${mm}`;
 }
 
+/// `pattern` es una entrada de `AppSettings.fileTypeList`: un mime type exacto
+/// ("application/pdf") o un wildcard de tipo ("audio/*", "video/*" — ver
+/// FILE_TYPE_CATEGORIES). Comparar con `===` a secas (como antes) nunca
+/// entiende el wildcard, y tampoco protege contra guardar por error un valor
+/// que no es un mime type (ej. una extensión ".pdf") — eso queda bloqueado en
+/// settings.validator.ts, esto de acá es sobre cómo interpretar un valor ya
+/// validado.
+function matchesFileTypePattern(pattern: string, mimeType: string): boolean {
+  if (pattern.endsWith("/*")) {
+    return mimeType.startsWith(pattern.slice(0, -1));
+  }
+  return pattern === mimeType;
+}
+
 /// La extensión del nombre original es solo un indicio, nunca se confía en
 /// ella para construir la ruta física: si no es alfanumérica simple, se cae
 /// al mapeo por mime type (ver ALLOWED_MIME_TYPES), y si tampoco hay match,
@@ -85,11 +99,11 @@ export async function uploadFile(
   }
 
   if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.ALLOWLIST) {
-    if (!settings.fileTypeList.includes(upload.mimetype)) {
+    if (!settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, upload.mimetype))) {
       throw new BadRequestError(`File type "${upload.mimetype}" is not allowed`);
     }
   } else if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.BLOCKLIST) {
-    if (settings.fileTypeList.includes(upload.mimetype)) {
+    if (settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, upload.mimetype))) {
       throw new BadRequestError(`File type "${upload.mimetype}" is blocked`);
     }
   }

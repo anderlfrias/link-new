@@ -16,6 +16,8 @@ import {
   GROUP_PERMISSION_LABELS,
   MEMBER_ACTION_OPTIONS,
 } from "@/features/admin/constants/group-permission-options.constant";
+import { FILE_TYPE_CATEGORIES } from "@/features/admin/constants/file-type-categories.constant";
+import { FileTypeMultiSelect, type FileTypeSelectionItem } from "@/features/admin/components/FileTypeMultiSelect";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
@@ -24,7 +26,8 @@ import { Select } from "@/components/ui/Select";
 interface DraftState {
   maxUploadSizeMb: string;
   fileTypeRestrictionMode: FileTypeRestrictionMode;
-  fileTypeList: string;
+  /** Categorías curadas + valores manuales — se expanden a mime patterns recién en `toPayload`. */
+  fileTypeSelection: FileTypeSelectionItem[];
   maxVoiceNoteDurationSeconds: string;
   maxGroupMembers: string;
   whoCanCreateGroups: GroupPermissionLevel;
@@ -44,11 +47,46 @@ interface DraftState {
   messageDeleteForEveryoneTimeLimitMinutes: string;
 }
 
+/** Una categoría cuenta como "marcada" si TODOS sus patterns están en la lista guardada —
+ * evita mostrarla a medias marcada por una coincidencia parcial. Cualquier pattern guardado
+ * que no forme una categoría completa (ej. un valor manual, o el remanente de una categoría
+ * que perdió un pattern) sobrevive como un chip "custom" en vez de perderse. */
+function selectionFromPatterns(patterns: string[]): FileTypeSelectionItem[] {
+  const remaining = new Set(patterns);
+  const items: FileTypeSelectionItem[] = [];
+  for (const category of FILE_TYPE_CATEGORIES) {
+    if (category.patterns.every((pattern) => remaining.has(pattern))) {
+      items.push({ type: "category", id: category.id });
+      category.patterns.forEach((pattern) => remaining.delete(pattern));
+    }
+  }
+  // Cada remanente queda como su propio chip de un pattern — no hay forma de recuperar qué
+  // extensión tipeó el admin originalmente (el backend solo guarda el mime type resuelto), así
+  // que el label del chip es el mime type mismo.
+  for (const pattern of remaining) {
+    items.push({ type: "custom", label: pattern, patterns: [pattern] });
+  }
+  return items;
+}
+
+function patternsFromSelection(items: FileTypeSelectionItem[]): string[] {
+  const patterns = new Set<string>();
+  for (const item of items) {
+    if (item.type === "category") {
+      const category = FILE_TYPE_CATEGORIES.find((candidate) => candidate.id === item.id);
+      category?.patterns.forEach((pattern) => patterns.add(pattern));
+    } else {
+      item.patterns.forEach((pattern) => patterns.add(pattern));
+    }
+  }
+  return Array.from(patterns);
+}
+
 function toDraft(settings: AdminSettings): DraftState {
   return {
     maxUploadSizeMb: String(settings.maxUploadSizeMb),
     fileTypeRestrictionMode: settings.fileTypeRestrictionMode,
-    fileTypeList: settings.fileTypeList.join(", "),
+    fileTypeSelection: selectionFromPatterns(settings.fileTypeList),
     maxVoiceNoteDurationSeconds: String(settings.maxVoiceNoteDurationSeconds),
     maxGroupMembers: String(settings.maxGroupMembers),
     whoCanCreateGroups: settings.whoCanCreateGroups,
@@ -121,10 +159,7 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
   return {
     maxUploadSizeMb: Number(draft.maxUploadSizeMb),
     fileTypeRestrictionMode: draft.fileTypeRestrictionMode,
-    fileTypeList: draft.fileTypeList
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean),
+    fileTypeList: patternsFromSelection(draft.fileTypeSelection),
     maxVoiceNoteDurationSeconds: Number(draft.maxVoiceNoteDurationSeconds),
     maxGroupMembers: Number(draft.maxGroupMembers),
     whoCanCreateGroups: draft.whoCanCreateGroups,
@@ -274,14 +309,11 @@ export function AdminSettingsPanel() {
                 </Select>
               </label>
               {draft.fileTypeRestrictionMode !== "DISABLED" && (
-                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                  Tipos MIME (separados por coma)
-                  <Input
-                    placeholder="image/png, application/pdf"
-                    value={draft.fileTypeList}
-                    onChange={(event) => updateField("fileTypeList", event.target.value)}
-                  />
-                </label>
+                <FileTypeMultiSelect
+                  label={draft.fileTypeRestrictionMode === "ALLOWLIST" ? "Tipos permitidos" : "Tipos bloqueados"}
+                  value={draft.fileTypeSelection}
+                  onChange={(next) => updateField("fileTypeSelection", next)}
+                />
               )}
             </div>
           </section>
