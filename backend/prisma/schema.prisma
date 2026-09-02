@@ -258,6 +258,16 @@ model ConversationMember {
   isPinned   Boolean @default(false) @map("is_pinned")
   isFavorite Boolean @default(false) @map("is_favorite")
 
+  /// Oculta esta conversación SOLO para este miembro ("borrado para mí"), a
+  /// diferencia de `Conversation.deletedAt` que la oculta para TODOS. Solo
+  /// tiene sentido en PRIVATE — GROUP sigue usando el borrado global vía
+  /// `whoCanDeleteGroup`/`allowGroupDelete`. Se limpia sola (vuelve a `null`)
+  /// si llega un mensaje nuevo (ver notifyConversationListChanged en
+  /// message.service.ts) o si este mismo miembro reinicia el chat con ese
+  /// contacto (ver createConversation) — así el chat "reaparece" sin
+  /// duplicar nunca la fila de Conversation/ConversationMember.
+  hiddenAt DateTime? @map("hidden_at")
+
   /// Un usuario solo puede tener una membresía por conversación.
   @@unique([conversationId, userId])
   @@map("conversation_members")
@@ -399,6 +409,11 @@ model AppSettings {
   /// una restricción razonable en vez de esperar a que un admin la prenda.
   maxFilesPerMessage Int? @default(10) @map("max_files_per_message")
 
+  // Borrado de conversaciones PRIVATE ("para mí" — ver ConversationMember.hiddenAt)
+  /// Default true: cualquiera puede borrar su chat privado hasta que un admin
+  /// lo desactive explícitamente.
+  allowConversationDelete Boolean @default(true) @map("allow_conversation_delete")
+
   // Notas de voz
   maxVoiceNoteDurationSeconds Int @default(300) @map("max_voice_note_duration_seconds")
 
@@ -416,6 +431,11 @@ model AppSettings {
   /// Default CREATOR_ONLY: reproduce el comportamiento hardcodeado histórico
   /// de `deleteConversation` antes de que este campo existiera.
   whoCanDeleteGroup     GroupPermissionLevel @default(CREATOR_ONLY) @map("who_can_delete_group")
+  /// Interruptor maestro: si es false, NADIE puede borrar un GROUP sin
+  /// importar `whoCanDeleteGroup` (tampoco un admin de la app) — a diferencia
+  /// de las 5 dimensiones de GroupPermissionLevel, esto no es un "quién" sino
+  /// un "si". Default true: reproduce el comportamiento histórico.
+  allowGroupDelete      Boolean              @default(true) @map("allow_group_delete")
 
   // Permiten que los admins de un grupo específico sobrescriban, solo para SU
   // grupo, el valor global de la dimensión correspondiente (ver

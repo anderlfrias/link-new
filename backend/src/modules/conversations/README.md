@@ -70,13 +70,17 @@ Solo `GROUP`. Ids ya miembros se ignoran silenciosamente (no es error); si no qu
 
 ### `DELETE /:id/members/:userId`
 
-* Si `:userId` es el propio usuario autenticado: **salir** de la conversación, permitido a cualquier miembro, sin importar la configuración.
+* Si `:userId` es el propio usuario autenticado: **salir** de la conversación ("Salir del grupo" en la UI), permitido a cualquier miembro, sin importar la configuración.
 * Si es otro usuario: sujeto a `AppSettings.whoCanRemoveMembers` (ver [Autorización](#autorización)).
 * No aplica a `PRIVATE` (`400`): una conversación privada siempre tiene exactamente sus dos miembros originales.
+* Borra la fila `ConversationMember` (hard delete, no soft — sin rastro de membresía después). Emite `conversation:member_removed` a la room de la conversación **y** `conversation:updated` a la room personal de cada miembro que era parte de la conversación (incluido el removido) — ver [Eventos de socket](#eventos-de-socket).
 
 ### `DELETE /:id` — Borrar conversación
 
-Borrado lógico (`deletedAt`). En `GROUP`, sujeto a `AppSettings.whoCanDeleteGroup` (ver [Autorización](#autorización)); en `PRIVATE`, solo el creador (`403` para cualquier otro miembro) — regla histórica, no configurable.
+Comportamiento distinto según el tipo — ver [`ConversationMember.hiddenAt`](#eliminar-chat-borrado-para-mí) para el detalle de `PRIVATE`:
+
+* **`GROUP`**: borrado lógico (`Conversation.deletedAt`) para **todos** los miembros. Requiere `AppSettings.allowGroupDelete` en `true` (interruptor maestro — `403` si está en `false`, sin excepción ni siquiera para un admin de la app) y, además, sujeto a `AppSettings.whoCanDeleteGroup` (ver [Autorización](#autorización)). Emite `conversation:deleted` a la room de la conversación **y** `conversation:updated` a la room personal de cada miembro (mismo criterio que `DELETE /:id/members/:userId` de arriba).
+* **`PRIVATE`**: **"para mí"** — oculta la conversación solo para quien la borra (`ConversationMember.hiddenAt`), el otro miembro no se entera y conserva la conversación intacta con todo su historial. Cualquier miembro puede hacerlo (ya no hay distinción de creador). Requiere `AppSettings.allowConversationDelete` en `true` (`403` si está en `false`). Emite `conversation:deleted` **solo** a la room personal de quien la borró.
 
 ### `PATCH /:id/members/:userId/admin` — Promover/degradar admin de grupo
 
@@ -144,6 +148,8 @@ Ver [Fijar y favoritos](#fijar-y-favoritos). Respuesta: la fila `ConversationMem
 
   Los defaults de `whoCanRemoveMembers` y `whoCanDeleteGroup` (`CREATOR_ONLY`) y de `whoCanChangeGroupInfo`/`whoCanAddMembers`/`whoCanCreateGroups` (`ALL_MEMBERS`) reproducen el comportamiento histórico de este módulo antes de que cada campo existiera — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite.
 
+  Eliminar el grupo además requiere `AppSettings.allowGroupDelete` en `true` — a diferencia de las 5 dimensiones de la tabla (que gobiernan **quién**), este es un interruptor maestro sobre **si** la acción existe en absoluto: en `false`, nadie puede borrar un `GROUP`, sin importar `whoCanDeleteGroup` ni el rol de quien lo intente. Default `true` (reproduce el comportamiento histórico).
+
   `GROUP_ADMINS_ONLY` y `APP_ADMINS_ONLY` son conceptos **distintos**: el primero depende de `ConversationMember.isAdmin` (admin de ese grupo puntual), el segundo del rol `"admin"` de la app (viene de EXTERNAL_AUTH) — un admin de grupo no obtiene ningún permiso a nivel app, y viceversa.
 
 Toda operación primero verifica membresía activa (`403` si el usuario no pertenece a la conversación, `404` si la conversación no existe o está borrada).
@@ -157,6 +163,17 @@ Cada `ConversationMember` tiene un campo `isAdmin` (default `false`), independie
 * Promover/degradar a alguien que ya tiene ese estado es rechazado (`400`, no-op).
 
 Cada cambio escribe un `ChatAuditLog` (`SET_GROUP_ADMIN`, `metadata: { targetUserId, isAdmin }`) y emite `conversation:member_admin_changed` (ver [Eventos de socket](#eventos-de-socket)).
+
+## Eliminar chat (borrado "para mí")
+
+`ConversationMember.hiddenAt` (`DateTime?`, default `null`) oculta una conversación `PRIVATE` solo para el miembro dueño de esa fila — a diferencia de `Conversation.deletedAt` (borrado global, usado por `GROUP`), nunca afecta al otro participante ni borra ningún dato. `GET /` (`listForUser` en `conversation.repository.ts`) filtra por `hiddenAt: null` de la propia membresía del usuario que pide la lista, así que una conversación oculta simplemente deja de listarse para quien la ocultó, sin tocar la fila `Conversation` ni los mensajes.
+
+No existe un endpoint para "desocultar" explícitamente — reaparece sola, sin acción manual, en dos casos:
+
+* **Llega un mensaje nuevo** en esa conversación (de cualquiera de los dos miembros, incluido uno mismo): `messages/message.service.ts#notifyConversationListChanged` limpia `hiddenAt` para todos los miembros antes de emitir `conversation:updated` — así "escribirle de nuevo a alguien que había eliminado" también le desoculta el chat a quien escribe.
+* **Se reinicia el chat con ese contacto** (`POST /` de arriba, camino de reuso de `PRIVATE` existente): si quien pide la conversación la tenía oculta, `createConversation` le limpia `hiddenAt` antes de devolverla.
+
+Es idempotente eliminar un chat ya oculto (vuelve a fijar `hiddenAt` a la fecha actual, sin error) y no genera ningún `ChatAuditLog` — es preferencia/estado personal, mismo criterio que [Fijar y favoritos](#fijar-y-favoritos), no una acción sobre la conversación en sí.
 
 ## Fijar y favoritos
 
@@ -204,10 +221,10 @@ Definidos en `conversation.socket.ts` (`CONVERSATION_EVENTS`). El cliente debe a
 | `conversation:created` | servidor → cliente | conversación completa | A la room personal (`user:<internalUserId>`) de cada miembro, al agregarlo a una `GROUP` (existente o recién creada). Una `PRIVATE` recién creada **no** emite esto mientras no tenga mensajes — ver nota en `POST /` arriba. |
 | `conversation:updated` | servidor → cliente | conversación completa (rename/imagen) o `{ conversationId }` (mensaje nuevo/editado/borrado) | Rename/cambio de imagen: a la room de la conversación (`conversation:<id>`). Mensaje nuevo/editado/borrado que sea el último de la conversación: a la room personal de cada miembro (`notifyConversationListChanged` en `messages/message.service.ts`) — así la lista se refresca sola, y es justo lo que revela una `PRIVATE` la primera vez que se manda un mensaje. |
 | `conversation:member_added` | servidor → cliente | `{ conversationId, userIds }` | A la room de la conversación. |
-| `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | A la room de la conversación. |
+| `conversation:member_removed` | servidor → cliente | `{ conversationId, userId }` | A la room de la conversación **y** `conversation:updated` a la room personal de cada miembro (incluido el removido) — la mayoría no tiene la conversación abierta, solo la room de arriba no les llegaría. |
 | `conversation:member_admin_changed` | servidor → cliente | `{ conversationId, userId, isAdmin }` | A la room de la conversación, cuando `setMemberAdminStatus` promueve/degrada a un miembro — cambia en vivo qué acciones puede hacer, por eso se empuja de inmediato (a diferencia de los cambios de `PATCH /:id/settings`, que no emiten evento). |
 | `conversation:member_preference_changed` | servidor → cliente | `{ conversationId, isPinned, isFavorite }` | **Solo** a la room personal (`user:<internalUserId>`) de quien fijó/favoriteó — nunca a la room de la conversación (ver [Fijar y favoritos](#fijar-y-favoritos)). Sincroniza entre pestañas/dispositivos del mismo usuario. |
-| `conversation:deleted` | servidor → cliente | `{ conversationId }` | A la room de la conversación. |
+| `conversation:deleted` | servidor → cliente | `{ conversationId }` | `GROUP`: a la room de la conversación **y** `conversation:updated` a la room personal de cada miembro (mismo motivo que `member_removed`). `PRIVATE`: **solo** a la room personal de quien la eliminó — es un borrado "para mí", el otro miembro no debe enterarse (ver [Eliminar chat](#eliminar-chat-borrado-para-mí)). |
 | `conversation:receipt_updated` | servidor → cliente | `{ conversationId, userId, kind: "read"\|"delivered", messageId, at }` | A la room de la conversación, cuando el `lastRead*`/`lastDelivered*` de `userId` avanza (`POST /:id/read`, o `markDelivered` desde `messages`). Solo se emite si el puntero realmente cambió — no en cada fetch que no aporta nada nuevo. |
 
 El servicio (`conversation.service.ts`) emite estos eventos directamente con `getIO()` — no pasan por el registry de sockets, porque no son eventos que un socket dispare sobre sí mismo sino notificaciones que dispara la capa HTTP hacia todos los sockets conectados relevantes.

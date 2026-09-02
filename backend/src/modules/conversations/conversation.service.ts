@@ -118,6 +118,13 @@ export async function createConversation(
 
     const existing = await ConversationRepository.findPrivateConversationBetween(currentUserId, otherMemberIds[0]);
     if (existing) {
+      // Si yo la había ocultado ("Eliminar chat", ver deleteConversation),
+      // reiniciar el chat con este mismo contacto la desoculta para mí — no
+      // hace falta emitir nada acá, la respuesta HTTP va directo a quien la pidió.
+      const myMembership = existing.members.find((member) => member.userId === currentUserId);
+      if (myMembership?.hiddenAt) {
+        await ConversationRepository.setMemberHidden(existing.id, currentUserId, null);
+      }
       return existing;
     }
   } else {
@@ -375,16 +382,41 @@ export async function removeMember(
     metadata: { removedUserId: targetUserId, self: isSelf },
   });
 
-  getIO()
-    .to(conversationRoomName(conversationId))
-    .emit(CONVERSATION_EVENTS.MEMBER_REMOVED, { conversationId, userId: targetUserId });
+  const io = getIO();
+  io.to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.MEMBER_REMOVED, {
+    conversationId,
+    userId: targetUserId,
+  });
+  // Además de la room de la conversación (para quien la tenga abierta en ese
+  // momento), avisar a la room personal de CADA miembro — incluido el
+  // removido: la mayoría de la gente está mirando su lista, no adentro de
+  // esta conversación puntual, y sin esto su lista no se refrescaría hasta el
+  // próximo focus de la pestaña. Mismo criterio que
+  // notifyConversationListChanged en message.service.ts.
+  conversation.members.forEach((member) => {
+    io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.UPDATED, { conversationId });
+  });
 
   return { conversationId, userId: targetUserId };
 }
 
+/// GROUP: borrado global (Conversation.deletedAt), gobernado por
+/// `whoCanDeleteGroup` + el interruptor maestro `allowGroupDelete` — si está
+/// en false, nadie puede borrar el grupo sin importar el nivel de permiso,
+/// tampoco un admin de la app.
+/// PRIVATE: "borrado" es siempre para uno mismo (ver ConversationMember.hiddenAt)
+/// — nunca toca `Conversation.deletedAt` ni afecta al otro miembro, así su
+/// historial no se pierde por algo que no pidió. Gobernado por
+/// `allowConversationDelete`; cualquier miembro puede ocultar su propia vista,
+/// sin distinción de creador (a diferencia del comportamiento histórico).
 export async function deleteConversation(currentUserId: string, conversationId: string, userRoles: string[]) {
   const conversation = await assertMembership(conversationId, currentUserId);
+  const settings = await SettingsService.getSettings();
+
   if (conversation.type === ConversationType.GROUP) {
+    if (!settings.allowGroupDelete) {
+      throw new ForbiddenError("Group deletion is disabled by an administrator");
+    }
     const override = await ConversationRepository.findGroupSettings(conversationId);
     const effective = await SettingsService.resolveEffectiveGroupSettings(override);
     assertGroupPermission(
@@ -394,14 +426,26 @@ export async function deleteConversation(currentUserId: string, conversationId: 
       userRoles,
       "You are not allowed to delete this conversation",
     );
-  } else if (conversation.createdById !== currentUserId) {
-    // PRIVATE mantiene la regla histórica sin cambios — whoCanDeleteGroup es
-    // gobierno de GROUP únicamente.
-    throw new ForbiddenError("Only the conversation creator can delete it");
+
+    await ConversationRepository.softDelete(conversationId);
+    const io = getIO();
+    io.to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.DELETED, { conversationId });
+    // Ver el mismo comentario en removeMember: la mayoría de los miembros no
+    // tiene esta conversación abierta, así que también hace falta avisarles
+    // en su room personal para que su lista se refresque.
+    conversation.members.forEach((member) => {
+      io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.UPDATED, { conversationId });
+    });
+    return { conversationId };
   }
 
-  await ConversationRepository.softDelete(conversationId);
-  getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.DELETED, { conversationId });
+  if (!settings.allowConversationDelete) {
+    throw new ForbiddenError("Conversation deletion is disabled by an administrator");
+  }
+  await ConversationRepository.setMemberHidden(conversationId, currentUserId, new Date());
+  // Solo a MI room personal — el otro miembro no debe enterarse ni ver su
+  // chat afectado, es un borrado exclusivamente "para mí".
+  getIO().to(userRoomName(currentUserId)).emit(CONVERSATION_EVENTS.DELETED, { conversationId });
 
   return { conversationId };
 }

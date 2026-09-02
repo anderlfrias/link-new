@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { IconLoader2, IconMessageCircle2 } from "@tabler/icons-react";
+import { ConversationDangerConfirmModal } from "@/features/conversations/components/ConversationDangerConfirmModal";
 import { ConversationListItem } from "@/features/conversations/components/ConversationListItem";
+import { useDeleteConversation } from "@/features/conversations/hooks/use-delete-conversation";
+import { useLeaveGroup } from "@/features/conversations/hooks/use-leave-group";
 import { useSetConversationPreference } from "@/features/conversations/hooks/use-set-conversation-preference";
 import { getConversationDisplayName } from "@/utils/conversation-display";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
@@ -19,6 +22,8 @@ interface ConversationListProps {
   currentUserId: string;
 }
 
+type PendingAction = { conversationId: string; kind: "delete-chat" | "delete-group" | "leave-group" };
+
 export function ConversationList({
   conversations,
   status,
@@ -27,9 +32,30 @@ export function ConversationList({
   currentUserId,
 }: ConversationListProps) {
   const { setPinned, setFavorite, pendingId } = useSetConversationPreference();
+  const { remove: deleteConversation, pending: deletePending, error: deleteError } = useDeleteConversation();
+  const { leave: leaveGroup, pending: leavePending, error: leaveError } = useLeaveGroup();
   // Un solo menú de opciones abierto a la vez — vive acá (no en cada fila)
   // para que abrir el de un chat cierre el de cualquier otro automáticamente.
   const [openMenuConversationId, setOpenMenuConversationId] = useState<string | null>(null);
+  // Un solo modal de confirmación reusado para las 3 acciones destructivas
+  // (ver ConversationDangerConfirmModal) — nunca hay más de una a la vez.
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+
+  const pendingConversation = pendingAction
+    ? conversations.find((conversation) => conversation.id === pendingAction.conversationId)
+    : undefined;
+
+  async function confirmPendingAction() {
+    if (!pendingAction) return;
+    const ok =
+      pendingAction.kind === "leave-group"
+        ? await leaveGroup(pendingAction.conversationId)
+        : await deleteConversation(pendingAction.conversationId);
+    // No se refresca la lista a mano acá: el backend avisa por socket a la
+    // room personal de quien actuó (ver conversation.service.ts) y
+    // use-conversations.ts ya escucha esos eventos y refresca solo.
+    if (ok) setPendingAction(null);
+  }
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -86,8 +112,43 @@ export function ConversationList({
           onCloseMenu={() => setOpenMenuConversationId((prev) => (prev === conversation.id ? null : prev))}
           onTogglePin={setPinned}
           onToggleFavorite={setFavorite}
+          onRequestDeleteChat={(id) => setPendingAction({ conversationId: id, kind: "delete-chat" })}
+          onRequestDeleteGroup={(id) => setPendingAction({ conversationId: id, kind: "delete-group" })}
+          onRequestLeaveGroup={(id) => setPendingAction({ conversationId: id, kind: "leave-group" })}
         />
       ))}
+
+      {pendingAction && (
+        <ConversationDangerConfirmModal
+          title={
+            pendingAction.kind === "delete-chat"
+              ? "Eliminar chat"
+              : pendingAction.kind === "delete-group"
+                ? "Eliminar grupo"
+                : "Salir del grupo"
+          }
+          description={
+            pendingAction.kind === "delete-chat"
+              ? `Se eliminará esta conversación de tu lista. Si ${
+                  pendingConversation ? getConversationDisplayName(pendingConversation, currentUserId) : "la otra persona"
+                } te escribe de nuevo, o si vos le volvés a escribir, va a reaparecer.`
+              : pendingAction.kind === "delete-group"
+                ? "Esta acción no se puede deshacer. El grupo se va a eliminar para todos los integrantes."
+                : "Vas a dejar de ser miembro de este grupo y no vas a poder ver los mensajes nuevos."
+          }
+          confirmLabel={
+            pendingAction.kind === "delete-chat"
+              ? "Eliminar chat"
+              : pendingAction.kind === "delete-group"
+                ? "Eliminar grupo"
+                : "Salir del grupo"
+          }
+          pending={pendingAction.kind === "leave-group" ? leavePending : deletePending}
+          error={pendingAction.kind === "leave-group" ? leaveError : deleteError}
+          onConfirm={() => void confirmPendingAction()}
+          onCancel={() => setPendingAction(null)}
+        />
+      )}
     </div>
   );
 }

@@ -67,7 +67,14 @@ export function listForUser(userId: string) {
   return prisma.conversation.findMany({
     where: {
       deletedAt: null,
-      members: { some: { userId } },
+      // `hiddenAt` va DENTRO del mismo `some` que `userId` a propósito: exige
+      // que la propia fila de membresía de ESTE usuario no esté oculta, no
+      // "algún miembro está oculto" — un `hiddenAt: null` a nivel de
+      // `Conversation` filtraría para todos, y acá el ocultamiento es por
+      // miembro (ver ConversationMember.hiddenAt). Una vez oculta, solo
+      // reaparece si se limpia explícitamente (notifyConversationListChanged
+      // en message.service.ts, o createConversation al reusar la PRIVATE).
+      members: { some: { userId, hiddenAt: null } },
       // Una conversación PRIVATE recién creada (sin ningún mensaje) todavía no
       // "existe" para nadie: evita que abrir un contacto nuevo le muestre un
       // chat vacío a la otra persona antes de que se mande el primer mensaje.
@@ -136,6 +143,27 @@ export function setMemberFavorite(conversationId: string, userId: string, isFavo
   return prisma.conversationMember.update({
     where: { conversationId_userId: { conversationId, userId } },
     data: { isFavorite },
+  });
+}
+
+export function setMemberHidden(conversationId: string, userId: string, hiddenAt: Date | null) {
+  return prisma.conversationMember.update({
+    where: { conversationId_userId: { conversationId, userId } },
+    data: { hiddenAt },
+  });
+}
+
+/// "Reaparición" en bloque de un chat oculto — ver notifyConversationListChanged
+/// en message.service.ts, que la llama en cada mensaje nuevo (para todos los
+/// miembros de la conversación, no solo el destinatario: si el propio remitente
+/// la había ocultado, escribir de nuevo también se la desoculta a él). El
+/// `hiddenAt: { not: null }` en el where hace que sea un UPDATE de 0 filas en
+/// el caso normal (nadie la ocultó) — costo despreciable.
+export function clearHiddenForMembers(conversationId: string, userIds: string[]) {
+  if (userIds.length === 0) return Promise.resolve({ count: 0 });
+  return prisma.conversationMember.updateMany({
+    where: { conversationId, userId: { in: userIds }, hiddenAt: { not: null } },
+    data: { hiddenAt: null },
   });
 }
 

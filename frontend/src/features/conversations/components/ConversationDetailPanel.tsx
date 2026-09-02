@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   IconAlertCircle,
   IconCamera,
   IconCheck,
+  IconDoorExit,
   IconLoader2,
   IconPencil,
+  IconTrash,
   IconUserPlus,
   IconX,
 } from "@tabler/icons-react";
@@ -15,11 +18,14 @@ import { Modal } from "@/components/ui/Modal";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { useConversationFiles } from "@/features/messages/hooks/use-conversation-files";
 import { useConversationSettings } from "@/features/conversations/hooks/use-conversation-settings";
+import { useDeleteConversation } from "@/features/conversations/hooks/use-delete-conversation";
+import { useLeaveGroup } from "@/features/conversations/hooks/use-leave-group";
 import { useUpdateConversation } from "@/features/conversations/hooks/use-update-conversation";
 import { useSetMemberAdmin } from "@/features/conversations/hooks/use-set-member-admin";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { useAuth } from "@/providers/auth-provider";
+import { usePublicSettings } from "@/providers/public-settings-provider";
 import {
   getConversationAvatarUrl,
   getConversationDisplayName,
@@ -31,6 +37,7 @@ import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image
 import { formatFileSize, isImageMimeType } from "@/utils/file-format";
 import { canPerformGroupAction } from "@/utils/group-permissions";
 import { AddMembersModal } from "@/features/conversations/components/AddMembersModal";
+import { ConversationDangerConfirmModal } from "@/features/conversations/components/ConversationDangerConfirmModal";
 import { GroupMemberRow } from "@/features/conversations/components/GroupMemberRow";
 import { GroupSettingsSection } from "@/features/conversations/components/GroupSettingsSection";
 import type { Conversation } from "@/features/conversations/types/conversation.types";
@@ -47,11 +54,15 @@ interface ConversationDetailPanelProps {
  * sección 4.8/4.9), en PRIVATE solo a la otra persona — y en ambos casos,
  * los archivos compartidos. */
 export function ConversationDetailPanel({ conversation, currentUserId, onClose }: ConversationDetailPanelProps) {
+  const router = useRouter();
   const { files, status: filesStatus, hasMore, loadingMore, loadMore } = useConversationFiles(conversation.id);
   const { open: openLightbox } = useImageLightbox();
   const { session } = useAuth();
+  const publicSettings = usePublicSettings();
   const { update, pending: updating, error: updateError } = useUpdateConversation(conversation.id);
   const { setAdmin, pendingUserId: pendingAdminUserId, error: setAdminError } = useSetMemberAdmin(conversation.id);
+  const { remove: deleteConversation, pending: deletePending, error: deleteError } = useDeleteConversation();
+  const { leave: leaveGroup, pending: leavePending, error: leaveError } = useLeaveGroup();
 
   const isGroup = conversation.type === "GROUP";
   const { settings: groupSettings } = useConversationSettings(conversation.id, isGroup);
@@ -69,11 +80,21 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
     isGroup && groupSettings
       ? canPerformGroupAction(groupSettings.effective.whoCanAddMembers, conversation, currentUserId, session?.user.roles ?? [])
       : false;
+  // Acá sí tenemos `groupSettings.effective.whoCanDeleteGroup` cargado gratis
+  // (a diferencia del menú rápido de la lista, que solo gatea por el
+  // interruptor público) — mismo criterio que canAddMembers.
+  const canDeleteGroup =
+    isGroup &&
+    Boolean(publicSettings?.allowGroupDelete) &&
+    groupSettings != null &&
+    canPerformGroupAction(groupSettings.effective.whoCanDeleteGroup, conversation, currentUserId, session?.user.roles ?? []);
+  const canDeleteChat = !isGroup && Boolean(publicSettings?.allowConversationDelete);
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(conversation.name ?? "");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showAddMembers, setShowAddMembers] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"delete-chat" | "delete-group" | "leave-group" | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // El nombre puede cambiar por socket (otro miembro lo editó) mientras no
@@ -114,6 +135,23 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
       await update({ imageFileId: uploaded.id });
     } finally {
       setUploadingPhoto(false);
+    }
+  }
+
+  // Cualquiera de las 3 hace que esta conversación deje de existir para mí
+  // (oculta, borrada, o ya no soy miembro) — cerrar el panel y salir de la
+  // conversación abierta, no tiene sentido quedarse mirándola.
+  async function confirmPendingAction() {
+    if (!pendingAction) return;
+    const ok = pendingAction === "leave-group" ? await leaveGroup(conversation.id) : await deleteConversation(conversation.id);
+    if (ok) {
+      setPendingAction(null);
+      onClose();
+      // No hay ruta para "/conversations" sin id (`(chat)/page.tsx` es la que
+      // resuelve en "/", con el estado vacío de "sin conversación
+      // seleccionada") — esta conversación ya no existe para mí, así que no
+      // hay a dónde volver salvo la raíz.
+      router.push("/");
     }
   }
 
@@ -272,6 +310,41 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
 
         {isGroup && canManageGroup && <GroupSettingsSection conversationId={conversation.id} />}
 
+        {(isGroup || canDeleteChat) && (
+          <div className="mt-4 flex flex-col gap-1">
+            {isGroup && (
+              <button
+                type="button"
+                onClick={() => setPendingAction("leave-group")}
+                className="flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                <IconDoorExit size={18} stroke={1.75} />
+                <p className="font-medium">Salir del grupo</p>
+              </button>
+            )}
+            {canDeleteGroup && (
+              <button
+                type="button"
+                onClick={() => setPendingAction("delete-group")}
+                className="flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                <IconTrash size={18} stroke={1.75} />
+                <p className="font-medium">Eliminar grupo</p>
+              </button>
+            )}
+            {canDeleteChat && (
+              <button
+                type="button"
+                onClick={() => setPendingAction("delete-chat")}
+                className="flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                <IconTrash size={18} stroke={1.75} />
+                <p className="font-medium">Eliminar chat</p>
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="mt-4">
           <h3 className="mb-1 px-1 text-sm font-medium text-neutral-500 dark:text-neutral-400">
             Archivos compartidos
@@ -358,6 +431,24 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
         <Modal onClose={() => setShowAddMembers(false)} aria-label="Agregar participantes">
           <AddMembersModal conversation={conversation} onClose={() => setShowAddMembers(false)} />
         </Modal>
+      )}
+
+      {pendingAction && (
+        <ConversationDangerConfirmModal
+          title={pendingAction === "delete-chat" ? "Eliminar chat" : pendingAction === "delete-group" ? "Eliminar grupo" : "Salir del grupo"}
+          description={
+            pendingAction === "delete-chat"
+              ? `Se eliminará esta conversación de tu lista. Si ${displayName} te escribe de nuevo, o si vos le volvés a escribir, va a reaparecer.`
+              : pendingAction === "delete-group"
+                ? "Esta acción no se puede deshacer. El grupo se va a eliminar para todos los integrantes."
+                : "Vas a dejar de ser miembro de este grupo y no vas a poder ver los mensajes nuevos."
+          }
+          confirmLabel={pendingAction === "delete-chat" ? "Eliminar chat" : pendingAction === "delete-group" ? "Eliminar grupo" : "Salir del grupo"}
+          pending={pendingAction === "leave-group" ? leavePending : deletePending}
+          error={pendingAction === "leave-group" ? leaveError : deleteError}
+          onConfirm={() => void confirmPendingAction()}
+          onCancel={() => setPendingAction(null)}
+        />
       )}
     </div>
   );

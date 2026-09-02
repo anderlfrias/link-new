@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { IconPin, IconPinnedOff, IconStar, IconStarFilled } from "@tabler/icons-react";
+import { IconDoorExit, IconPin, IconPinnedOff, IconStar, IconStarFilled, IconTrash } from "@tabler/icons-react";
 
 interface ConversationOptionsMenuProps {
   open: boolean;
@@ -10,6 +10,13 @@ interface ConversationOptionsMenuProps {
   isFavorite: boolean;
   onTogglePin: () => void;
   onToggleFavorite: () => void;
+  /** PRIVATE únicamente — "Eliminar chat" (se oculta solo para quien lo borra). Ausente = no
+   * mostrar la opción (ej. `allowConversationDelete` en `false`, o es una conversación GROUP). */
+  onDeleteChat?: () => void;
+  /** GROUP únicamente — "Eliminar grupo" (para todos los integrantes). */
+  onDeleteGroup?: () => void;
+  /** GROUP únicamente — "Salir del grupo" (auto-remoción). */
+  onLeaveGroup?: () => void;
 }
 
 /** Mismo patrón que GroupMemberRow.tsx/UserMenu.tsx (panel absoluto +
@@ -23,6 +30,9 @@ export function ConversationOptionsMenu({
   isFavorite,
   onTogglePin,
   onToggleFavorite,
+  onDeleteChat,
+  onDeleteGroup,
+  onLeaveGroup,
 }: ConversationOptionsMenuProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +76,32 @@ export function ConversationOptionsMenu({
         {isFavorite ? <IconStarFilled size={16} /> : <IconStar size={16} stroke={1.75} />}
         {isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
       </button>
+      {onLeaveGroup && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onLeaveGroup();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+        >
+          <IconDoorExit size={16} stroke={1.75} />
+          Salir del grupo
+        </button>
+      )}
+      {(onDeleteChat || onDeleteGroup) && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            (onDeleteChat ?? onDeleteGroup)?.();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+        >
+          <IconTrash size={16} stroke={1.75} />
+          {onDeleteChat ? "Eliminar chat" : "Eliminar grupo"}
+        </button>
+      )}
     </div>
   );
 }

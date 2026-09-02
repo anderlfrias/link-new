@@ -11,4 +11,8 @@ export interface PublicAppSettings {
   messageEditTimeLimitMinutes: number | null;
   allowMessageDeleteForEveryone: boolean;
   messageDeleteForEveryoneTimeLimitMinutes: number | null;
+  /** Si un miembro puede eliminar (ocultar "para sí mismo") una conversación PRIVATE. */
+  allowConversationDelete: boolean;
+  /** Interruptor maestro: si es false, nadie puede eliminar un grupo sin importar `whoCanDeleteGroup`. */
+  allowGroupDelete: boolean;
 }

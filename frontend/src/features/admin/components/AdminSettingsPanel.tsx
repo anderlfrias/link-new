@@ -30,6 +30,7 @@ interface DraftState {
   fileTypeSelection: FileTypeSelectionItem[];
   /** Vacío = sin límite (`null`). */
   maxFilesPerMessage: string;
+  allowConversationDelete: boolean;
   maxVoiceNoteDurationSeconds: string;
   maxGroupMembers: string;
   whoCanCreateGroups: GroupPermissionLevel;
@@ -37,6 +38,7 @@ interface DraftState {
   whoCanRemoveMembers: GroupPermissionLevel;
   whoCanChangeGroupInfo: GroupPermissionLevel;
   whoCanDeleteGroup: GroupPermissionLevel;
+  allowGroupDelete: boolean;
   allowGroupOverrideAddMembers: boolean;
   allowGroupOverrideRemoveMembers: boolean;
   allowGroupOverrideMaxGroupMembers: boolean;
@@ -90,6 +92,7 @@ function toDraft(settings: AdminSettings): DraftState {
     fileTypeRestrictionMode: settings.fileTypeRestrictionMode,
     fileTypeSelection: selectionFromPatterns(settings.fileTypeList),
     maxFilesPerMessage: settings.maxFilesPerMessage == null ? "" : String(settings.maxFilesPerMessage),
+    allowConversationDelete: settings.allowConversationDelete,
     maxVoiceNoteDurationSeconds: String(settings.maxVoiceNoteDurationSeconds),
     maxGroupMembers: String(settings.maxGroupMembers),
     whoCanCreateGroups: settings.whoCanCreateGroups,
@@ -97,6 +100,7 @@ function toDraft(settings: AdminSettings): DraftState {
     whoCanRemoveMembers: settings.whoCanRemoveMembers,
     whoCanChangeGroupInfo: settings.whoCanChangeGroupInfo,
     whoCanDeleteGroup: settings.whoCanDeleteGroup,
+    allowGroupDelete: settings.allowGroupDelete,
     allowGroupOverrideAddMembers: settings.allowGroupOverrideAddMembers,
     allowGroupOverrideRemoveMembers: settings.allowGroupOverrideRemoveMembers,
     allowGroupOverrideMaxGroupMembers: settings.allowGroupOverrideMaxGroupMembers,
@@ -171,6 +175,7 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     fileTypeRestrictionMode: draft.fileTypeRestrictionMode,
     fileTypeList: patternsFromSelection(draft.fileTypeSelection),
     maxFilesPerMessage: draft.maxFilesPerMessage.trim() === "" ? null : Number(draft.maxFilesPerMessage),
+    allowConversationDelete: draft.allowConversationDelete,
     maxVoiceNoteDurationSeconds: Number(draft.maxVoiceNoteDurationSeconds),
     maxGroupMembers: Number(draft.maxGroupMembers),
     whoCanCreateGroups: draft.whoCanCreateGroups,
@@ -178,6 +183,7 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     whoCanRemoveMembers: draft.whoCanRemoveMembers,
     whoCanChangeGroupInfo: draft.whoCanChangeGroupInfo,
     whoCanDeleteGroup: draft.whoCanDeleteGroup,
+    allowGroupDelete: draft.allowGroupDelete,
     allowGroupOverrideAddMembers: draft.allowGroupOverrideAddMembers,
     allowGroupOverrideRemoveMembers: draft.allowGroupOverrideRemoveMembers,
     allowGroupOverrideMaxGroupMembers: draft.allowGroupOverrideMaxGroupMembers,
@@ -202,6 +208,7 @@ interface GroupPermissionFieldProps {
   onChange: (value: GroupPermissionLevel) => void;
   overrideAllowed?: boolean;
   onOverrideChange?: (value: boolean) => void;
+  disabled?: boolean;
 }
 
 function GroupPermissionField({
@@ -211,11 +218,16 @@ function GroupPermissionField({
   onChange,
   overrideAllowed,
   onOverrideChange,
+  disabled,
 }: GroupPermissionFieldProps) {
   return (
     <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
       {label}
-      <Select value={value} onChange={(event) => onChange(event.target.value as GroupPermissionLevel)}>
+      <Select
+        value={value}
+        onChange={(event) => onChange(event.target.value as GroupPermissionLevel)}
+        disabled={disabled}
+      >
         {options.map((option) => (
           <option key={option} value={option}>
             {GROUP_PERMISSION_LABELS[option]}
@@ -227,6 +239,7 @@ function GroupPermissionField({
           className="mt-1"
           checked={overrideAllowed ?? false}
           onChange={(event) => onOverrideChange(event.target.checked)}
+          disabled={disabled}
           label="El grupo puede cambiar esto"
         />
       )}
@@ -340,6 +353,19 @@ export function AdminSettingsPanel() {
           </section>
 
           <section>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Conversaciones privadas</h3>
+            <Checkbox
+              checked={draft.allowConversationDelete}
+              onChange={(event) => updateField("allowConversationDelete", event.target.checked)}
+              label="Los usuarios pueden eliminar sus chats privados"
+            />
+            <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+              El chat se elimina solo para quien lo borra — reaparece si la otra persona escribe de nuevo, o si vos
+              le volvés a escribir.
+            </p>
+          </section>
+
+          <section>
             <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Notas de voz</h3>
             <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
               Duración máxima (segundos)
@@ -402,14 +428,22 @@ export function AdminSettingsPanel() {
                 overrideAllowed={draft.allowGroupOverrideChangeGroupInfo}
                 onOverrideChange={(value) => updateField("allowGroupOverrideChangeGroupInfo", value)}
               />
-              <GroupPermissionField
-                label="¿Quién puede eliminar el grupo?"
-                value={draft.whoCanDeleteGroup}
-                options={DELETE_GROUP_OPTIONS}
-                onChange={(value) => updateField("whoCanDeleteGroup", value)}
-                overrideAllowed={draft.allowGroupOverrideDeleteGroup}
-                onOverrideChange={(value) => updateField("allowGroupOverrideDeleteGroup", value)}
-              />
+              <div className="flex flex-col gap-1">
+                <Checkbox
+                  checked={draft.allowGroupDelete}
+                  onChange={(event) => updateField("allowGroupDelete", event.target.checked)}
+                  label="Los grupos se pueden eliminar"
+                />
+                <GroupPermissionField
+                  label="¿Quién puede eliminar el grupo?"
+                  value={draft.whoCanDeleteGroup}
+                  options={DELETE_GROUP_OPTIONS}
+                  onChange={(value) => updateField("whoCanDeleteGroup", value)}
+                  overrideAllowed={draft.allowGroupOverrideDeleteGroup}
+                  onOverrideChange={(value) => updateField("allowGroupOverrideDeleteGroup", value)}
+                  disabled={!draft.allowGroupDelete}
+                />
+              </div>
             </div>
           </section>
 

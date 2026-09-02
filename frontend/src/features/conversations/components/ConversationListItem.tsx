@@ -8,6 +8,7 @@ import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
 import { ConversationOptionsMenu } from "@/features/conversations/components/ConversationOptionsMenu";
 import { useLongPress } from "@/features/conversations/hooks/use-long-press";
+import { usePublicSettings } from "@/providers/public-settings-provider";
 import {
   getConversationAvatarUrl,
   getConversationDisplayName,
@@ -26,6 +27,9 @@ interface ConversationListItemProps {
   onCloseMenu: () => void;
   onTogglePin: (conversationId: string, next: boolean) => void;
   onToggleFavorite: (conversationId: string, next: boolean) => void;
+  onRequestDeleteChat: (conversationId: string) => void;
+  onRequestDeleteGroup: (conversationId: string) => void;
+  onRequestLeaveGroup: (conversationId: string) => void;
 }
 
 export function ConversationListItem({
@@ -37,7 +41,18 @@ export function ConversationListItem({
   onCloseMenu,
   onTogglePin,
   onToggleFavorite,
+  onRequestDeleteChat,
+  onRequestDeleteGroup,
+  onRequestLeaveGroup,
 }: ConversationListItemProps) {
+  const publicSettings = usePublicSettings();
+  const isGroup = conversation.type === "GROUP";
+  // El backend es la autoridad real (`whoCanDeleteGroup` incluido) — acá solo
+  // se gatea por el interruptor público, para no pagar un fetch de settings
+  // de grupo por cada fila de la lista. Un 403 se muestra como error en el
+  // modal de confirmación.
+  const canDeleteChat = !isGroup && Boolean(publicSettings?.allowConversationDelete);
+  const canDeleteGroup = isGroup && Boolean(publicSettings?.allowGroupDelete);
   const pathname = usePathname();
   const isActive = pathname === `/conversations/${conversation.id}`;
   const displayName = getConversationDisplayName(conversation, currentUserId);
@@ -118,6 +133,9 @@ export function ConversationListItem({
         isFavorite={conversation.isFavoritedByMe}
         onTogglePin={() => onTogglePin(conversation.id, !conversation.isPinnedByMe)}
         onToggleFavorite={() => onToggleFavorite(conversation.id, !conversation.isFavoritedByMe)}
+        onDeleteChat={canDeleteChat ? () => onRequestDeleteChat(conversation.id) : undefined}
+        onDeleteGroup={canDeleteGroup ? () => onRequestDeleteGroup(conversation.id) : undefined}
+        onLeaveGroup={isGroup ? () => onRequestLeaveGroup(conversation.id) : undefined}
       />
     </div>
   );

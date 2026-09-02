@@ -19,6 +19,7 @@ export const updateSettingsSchema = yup
       .array()
       .of(yup.string().required().matches(MIME_TYPE_PATTERN, "Each entry must be a mime type (e.g. \"application/pdf\" or \"audio/*\"), not a file extension")),
     maxFilesPerMessage: yup.number().integer().min(1).nullable(),
+    allowConversationDelete: yup.boolean(),
     maxVoiceNoteDurationSeconds: yup.number().integer().min(1),
     maxGroupMembers: yup.number().integer().min(2),
     // No existe grupo ni admin de grupo antes de que el grupo exista, así que
@@ -30,6 +31,7 @@ export const updateSettingsSchema = yup
     whoCanRemoveMembers: yup.string().oneOf(Object.values(GroupPermissionLevel)),
     whoCanChangeGroupInfo: yup.string().oneOf(Object.values(GroupPermissionLevel)),
     whoCanDeleteGroup: yup.string().oneOf(Object.values(GroupPermissionLevel)),
+    allowGroupDelete: yup.boolean(),
     allowGroupOverrideAddMembers: yup.boolean(),
     allowGroupOverrideRemoveMembers: yup.boolean(),
     allowGroupOverrideMaxGroupMembers: yup.boolean(),
@@ -49,6 +51,7 @@ export const updateSettingsSchema = yup
       value.fileTypeRestrictionMode !== undefined ||
       value.fileTypeList !== undefined ||
       value.maxFilesPerMessage !== undefined ||
+      value.allowConversationDelete !== undefined ||
       value.maxVoiceNoteDurationSeconds !== undefined ||
       value.maxGroupMembers !== undefined ||
       value.whoCanCreateGroups !== undefined ||
@@ -56,6 +59,7 @@ export const updateSettingsSchema = yup
       value.whoCanRemoveMembers !== undefined ||
       value.whoCanChangeGroupInfo !== undefined ||
       value.whoCanDeleteGroup !== undefined ||
+      value.allowGroupDelete !== undefined ||
       value.allowGroupOverrideAddMembers !== undefined ||
       value.allowGroupOverrideRemoveMembers !== undefined ||
       value.allowGroupOverrideMaxGroupMembers !== undefined ||

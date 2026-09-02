@@ -5,6 +5,7 @@ import {
   computeReceipts,
   markDelivered,
 } from "../conversations/conversation.service";
+import * as ConversationRepository from "../conversations/conversation.repository";
 import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
 import { ConversationMemberWithUser, MessageReceipt } from "../conversations/conversation.types";
 import { toStoredFileResponse } from "../files/file.service";
@@ -30,7 +31,20 @@ import {
 /// conversaciones se refresque sola aunque no tengan esta conversación
 /// abierta — la room de conversación sola no alcanza para eso (ver
 /// use-conversations.ts en el frontend, que reacciona a este mismo evento).
-function notifyConversationListChanged(members: ConversationMemberWithUser[], conversationId: string): void {
+/// También desoculta el chat ("Eliminar chat", ver ConversationMember.hiddenAt
+/// en conversation.service.ts#deleteConversation) para TODOS los miembros que
+/// lo hubieran ocultado, incluido el propio remitente — si yo oculté un chat
+/// y le vuelvo a escribir, también tiene que reaparecerme a mí. El
+/// `updateMany` de clearHiddenForMembers ya filtra `hiddenAt: { not: null }`,
+/// así que en el caso normal (nadie lo ocultó) es una escritura de 0 filas.
+async function notifyConversationListChanged(
+  members: ConversationMemberWithUser[],
+  conversationId: string,
+): Promise<void> {
+  await ConversationRepository.clearHiddenForMembers(
+    conversationId,
+    members.map((member) => member.userId),
+  );
   const io = getIO();
   members.forEach((member) => {
     io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.UPDATED, { conversationId });
@@ -114,7 +128,7 @@ export async function sendMessage(
 
   const messageWithReceipts: MessageWithReceipts = { ...message, receipts };
   io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
-  notifyConversationListChanged(conversation.members, conversationId);
+  await notifyConversationListChanged(conversation.members, conversationId);
 
   // Web Push para quien no tiene ESTA conversación abierta ahora mismo —
   // reutiliza `deliveredNow` (arriba) en vez de recalcular "quién está
@@ -224,7 +238,7 @@ export async function editMessage(
   // Solo importa para la lista de conversaciones si justo edité el último
   // mensaje — editar uno viejo no cambia lo que se muestra ahí.
   if (messageId === conversation.lastMessageId) {
-    notifyConversationListChanged(conversation.members, conversationId);
+    await notifyConversationListChanged(conversation.members, conversationId);
   }
   return messageWithReceipts;
 }
@@ -261,7 +275,7 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
 
   getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.DELETED, { conversationId, messageId });
   if (messageId === conversation.lastMessageId) {
-    notifyConversationListChanged(conversation.members, conversationId);
+    await notifyConversationListChanged(conversation.members, conversationId);
   }
   return { conversationId, messageId };
 }

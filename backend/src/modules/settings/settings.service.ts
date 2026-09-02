@@ -33,6 +33,8 @@ export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
     messageEditTimeLimitMinutes: settings.messageEditTimeLimitMinutes,
     allowMessageDeleteForEveryone: settings.allowMessageDeleteForEveryone,
     messageDeleteForEveryoneTimeLimitMinutes: settings.messageDeleteForEveryoneTimeLimitMinutes,
+    allowConversationDelete: settings.allowConversationDelete,
+    allowGroupDelete: settings.allowGroupDelete,
   };
 }
 

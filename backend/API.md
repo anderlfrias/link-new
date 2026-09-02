@@ -305,11 +305,16 @@ Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningú
 - `:userId` = otro usuario → sujeto a `AppSettings.whoCanRemoveMembers` (ver 4.8) — `403` si no tenés permiso.
 - No aplica a `PRIVATE` (`400` siempre).
 
-→ `200` `{ "conversationId": "...", "userId": "..." }`. Emite `conversation:member_removed` a la room.
+→ `200` `{ "conversationId": "...", "userId": "..." }`. Emite `conversation:member_removed` a la room de la conversación **y** `conversation:updated` a la room personal de cada miembro (incluido el removido) — la mayoría no tiene la conversación abierta, la room sola no les llega. Este es el endpoint que usa "Salir del grupo" en la UI.
 
 ### 4.7 `DELETE /:id` — Borrar conversación
 
-Borrado lógico. En `GROUP`, sujeto a `AppSettings.whoCanDeleteGroup` (ver 4.8); en `PRIVATE`, solo el creador (`403` para cualquier otro miembro) — regla histórica, no configurable. → `200` `{ "conversationId": "..." }`. Emite `conversation:deleted` `{ conversationId }`.
+Comportamiento distinto según el tipo:
+
+- **`GROUP`** ("Eliminar grupo"): borrado lógico para todos los miembros. Requiere `AppSettings.allowGroupDelete: true` (interruptor maestro, `403` si está en `false` — sin excepción, ni un admin de la app puede saltearlo) y, además, `AppSettings.whoCanDeleteGroup` (ver 4.8). Emite `conversation:deleted` a la room **y** `conversation:updated` a la room personal de cada miembro.
+- **`PRIVATE`** ("Eliminar chat"): borrado **"para mí"** — oculta la conversación solo para quien la pide (`ConversationMember.hiddenAt`), sin afectar al otro participante ni su historial. Cualquier miembro puede hacerlo (ya no hay distinción de creador). Requiere `AppSettings.allowConversationDelete: true` (`403` si está en `false`). Reaparece sola en la lista de quien la ocultó si el otro miembro le escribe de nuevo, o si el propio usuario reinicia el chat con ese contacto (`POST /` reusando la conversación existente). Emite `conversation:deleted` **solo** a la room personal de quien la eliminó.
+
+→ `200` `{ "conversationId": "..." }` en ambos casos.
 
 ### 4.8 Quién puede hacer qué
 
@@ -329,6 +334,8 @@ Crear un `GROUP`, agregar/quitar miembros, renombrar/cambiar imagen y borrar el 
 | Quitar a otro miembro | `whoCanRemoveMembers` | `CREATOR_ONLY` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
 | Renombrar / cambiar imagen | `whoCanChangeGroupInfo` | `ALL_MEMBERS` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
 | Borrar el grupo | `whoCanDeleteGroup` | `CREATOR_ONLY` | cualquier miembro | solo admins de ese grupo | solo rol `"admin"` | solo el creador |
+
+Borrar el grupo además requiere `AppSettings.allowGroupDelete: true` (default `true`) — interruptor maestro sobre **si** la acción existe, aparte de **quién** puede hacerla (`whoCanDeleteGroup`). Borrar un chat `PRIVATE` ("para mí", ver 4.7) requiere `AppSettings.allowConversationDelete: true` (default `true`) y no tiene tabla de "quién" — cualquier miembro puede ocultar su propia vista.
 
 Los defaults reproducen el comportamiento histórico de cada endpoint — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite. `GROUP_ADMINS_ONLY` (admin de ese grupo puntual, `isAdmin`) y `APP_ADMINS_ONLY` (rol `"admin"` de EXTERNAL_AUTH) son conceptos **distintos** — uno no otorga el otro. Ver [`conversations/README.md`](./src/modules/conversations/README.md#autorización) y [`settings/README.md`](./src/modules/settings/README.md).
 
@@ -647,6 +654,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
   "fileTypeRestrictionMode": "DISABLED",
   "fileTypeList": [],
   "maxFilesPerMessage": 10,
+  "allowConversationDelete": true,
   "maxVoiceNoteDurationSeconds": 300,
   "maxGroupMembers": 256,
   "whoCanCreateGroups": "ALL_MEMBERS",
@@ -654,6 +662,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
   "whoCanRemoveMembers": "CREATOR_ONLY",
   "whoCanChangeGroupInfo": "ALL_MEMBERS",
   "whoCanDeleteGroup": "CREATOR_ONLY",
+  "allowGroupDelete": true,
   "allowGroupOverrideAddMembers": false,
   "allowGroupOverrideRemoveMembers": false,
   "allowGroupOverrideMaxGroupMembers": false,
@@ -667,7 +676,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
 }
 ```
 
-`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)).
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`.
 
 ### 12.2 `GET /settings/public` — cualquier autenticado
 
@@ -682,7 +691,9 @@ Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesi
   "allowMessageEdit": true,
   "messageEditTimeLimitMinutes": null,
   "allowMessageDeleteForEveryone": true,
-  "messageDeleteForEveryoneTimeLimitMinutes": null
+  "messageDeleteForEveryoneTimeLimitMinutes": null,
+  "allowConversationDelete": true,
+  "allowGroupDelete": true
 }
 ```
 

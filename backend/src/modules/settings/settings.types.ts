@@ -7,6 +7,7 @@ export type UpdateSettingsInput = Partial<
     | "fileTypeRestrictionMode"
     | "fileTypeList"
     | "maxFilesPerMessage"
+    | "allowConversationDelete"
     | "maxVoiceNoteDurationSeconds"
     | "maxGroupMembers"
     | "whoCanCreateGroups"
@@ -14,6 +15,7 @@ export type UpdateSettingsInput = Partial<
     | "whoCanRemoveMembers"
     | "whoCanChangeGroupInfo"
     | "whoCanDeleteGroup"
+    | "allowGroupDelete"
     | "allowGroupOverrideAddMembers"
     | "allowGroupOverrideRemoveMembers"
     | "allowGroupOverrideMaxGroupMembers"
@@ -48,6 +50,12 @@ export interface PublicAppSettingsDTO {
   messageEditTimeLimitMinutes: number | null;
   allowMessageDeleteForEveryone: boolean;
   messageDeleteForEveryoneTimeLimitMinutes: number | null;
+  /// Idem — el cliente los necesita para mostrar/ocultar "Eliminar chat"
+  /// (PRIVATE) y "Eliminar grupo" (GROUP) sin depender de un fetch de
+  /// settings de grupo; la autoridad real sigue siendo
+  /// conversation.service.ts#deleteConversation.
+  allowConversationDelete: boolean;
+  allowGroupDelete: boolean;
 }
 
 /// Las 5 dimensiones de gobierno de grupo que pueden tener un override por

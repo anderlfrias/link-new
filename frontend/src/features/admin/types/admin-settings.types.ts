@@ -11,6 +11,8 @@ export interface AdminSettings {
   fileTypeList: string[];
   /** Máximo de archivos que puede llevar un solo mensaje. `null` = sin límite. */
   maxFilesPerMessage: number | null;
+  /** Si un miembro puede eliminar (ocultar "para sí mismo") una conversación PRIVATE. */
+  allowConversationDelete: boolean;
   maxVoiceNoteDurationSeconds: number;
   maxGroupMembers: number;
   /** Solo admite "ALL_MEMBERS" | "APP_ADMINS_ONLY" — no hay grupo ni admin de grupo antes de que el grupo exista. */
@@ -19,6 +21,8 @@ export interface AdminSettings {
   whoCanRemoveMembers: GroupPermissionLevel;
   whoCanChangeGroupInfo: GroupPermissionLevel;
   whoCanDeleteGroup: GroupPermissionLevel;
+  /** Interruptor maestro: si es false, nadie puede eliminar un grupo sin importar `whoCanDeleteGroup`. */
+  allowGroupDelete: boolean;
   /** Si un grupo puede fijar su propio valor para la dimensión correspondiente. */
   allowGroupOverrideAddMembers: boolean;
   allowGroupOverrideRemoveMembers: boolean;
