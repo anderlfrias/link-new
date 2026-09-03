@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { IconLoader2 } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversations } from "@/features/conversations/hooks/use-conversations";
+import { useNewMessageSound } from "@/features/conversations/hooks/use-new-message-sound";
 import { NotificationsBanner } from "@/features/notifications/components/NotificationsBanner";
 import { DesktopSidebar } from "@/components/layout/DesktopSidebar";
 import { MobileChatListScreen } from "@/components/layout/MobileChatListScreen";
@@ -18,8 +19,10 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   // la pantalla en mobile, en vez del listado de conversaciones.
   const isConversationRoute = pathname?.startsWith("/conversations/") ?? false;
   const showMainPanelOnMobile = isConversationRoute;
+  const activeConversationId = isConversationRoute ? (pathname?.split("/")[2] ?? null) : null;
 
   const { conversations, status: conversationsStatus } = useConversations();
+  useNewMessageSound(conversations, session?.user.internalUserId ?? "", activeConversationId);
 
   useEffect(() => {
     if (status === "unauthenticated") {
