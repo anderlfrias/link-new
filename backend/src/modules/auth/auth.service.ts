@@ -38,7 +38,7 @@ export async function login(user: string, password: string): Promise<string> {
     console.log(`EXTERNAL_AUTH login request returned status ${response.status}`);
     console.log(`EXTERNAL_AUTH login request body: ${await response.clone().text()}`);
   } catch {
-    throw new ServiceUnavailableError("User service unavailable");
+    throw new ServiceUnavailableError("No pudimos conectar con el servicio de autenticación. Intentá de nuevo en unos minutos.");
   } finally {
     clearTimeout(timeout);
   }
@@ -52,19 +52,21 @@ export async function login(user: string, password: string): Promise<string> {
   }
 
   if (response.status === 403 || /forbidden/i.test(data.error ?? "")) {
-    throw new ForbiddenError(data.error ?? "Forbidden");
+    throw new ForbiddenError(data.error ?? "Tu usuario no tiene acceso a esta aplicación. Contactá a un administrador.");
   }
 
   if (response.status === 401) {
-    throw new UnauthorizedError(data.error ?? "Invalid credentials");
+    throw new UnauthorizedError(data.error ?? "Usuario o contraseña incorrectos.");
   }
 
   if (!response.ok) {
-    throw new ServiceUnavailableError("User service unavailable");
+    throw new ServiceUnavailableError(
+      "No pudimos conectar con el servicio de autenticación. Intentá de nuevo en unos minutos.",
+    );
   }
 
   if (!data.success || !data.token) {
-    throw new UnauthorizedError(data.error ?? "Invalid credentials");
+    throw new UnauthorizedError(data.error ?? "Usuario o contraseña incorrectos.");
   }
 
   return data.token;
