@@ -45,6 +45,10 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
+  /* Refuerza el `maximumScale`/`userScalable` del viewport (ver app/layout.tsx)
+     contra el doble-tap-para-acercar — algunos navegadores móviles lo siguen
+     permitiendo aunque el meta tag ya lo desactive. */
+  touch-action: manipulation;
 }
 
 body {

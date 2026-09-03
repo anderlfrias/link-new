@@ -34,8 +34,16 @@ export const metadata: Metadata = {
   },
 };
 
+// `maximumScale`/`userScalable` bloquean el pinch-zoom y el doble-tap-para-acercar —
+// solo tienen efecto en touch (no afectan el zoom de escritorio, que es Ctrl+/- del
+// navegador, ajeno a este meta tag), así que esto hace que la vista móvil se sienta
+// como una app nativa sin restringir nada en desktop.
 export const viewport: Viewport = {
   themeColor: "#0068d8",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

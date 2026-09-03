@@ -82,8 +82,15 @@ export function MessageInput({
   } = attachmentsState;
   const currentValidationError = validationErrors[0];
 
+  // Auto-focus solo en desktop (breakpoint `lg`, ver app/(chat)/layout.tsx):
+  // ahí no hay teclado virtual, así que arrancar escribiendo de una es más
+  // cómodo. En mobile, auto-focus dispara el teclado apenas se abre el chat
+  // — ni WhatsApp ni Telegram lo hacen — así que ahí el foco (y el teclado)
+  // solo debe aparecer cuando el usuario toca el campo explícitamente.
   useEffect(() => {
-    textareaRef.current?.focus();
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      textareaRef.current?.focus();
+    }
   }, [conversationId]);
 
   // Autogrow: por default un <textarea rows={1}> no crece con el contenido —
