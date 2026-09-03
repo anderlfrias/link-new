@@ -18,6 +18,7 @@ export function useNewMessageSound(
   conversations: ConversationListItem[],
   currentUserId: string,
   activeConversationId: string | null,
+  soundEnabled: boolean,
 ): void {
   const lastMessageIdsRef = useRef<Map<string, string | null> | null>(null);
 
@@ -26,7 +27,9 @@ export function useNewMessageSound(
     const next = new Map(conversations.map((c) => [c.id, c.lastMessageId]));
 
     // Primera carga: solo establece la línea base, nunca suena por historial ya existente.
-    if (previous) {
+    // Preferencia del usuario (ver ProfileSettingsPanel) apagada: igual actualizamos
+    // la línea base para no disparar un sonido "atrasado" si la vuelve a activar.
+    if (previous && soundEnabled) {
       const hasNewMessageFromOthers = conversations.some((conversation) => {
         if (conversation.lastMessageId == null) return false;
         if (conversation.lastMessageId === previous.get(conversation.id)) return false;
@@ -37,5 +40,5 @@ export function useNewMessageSound(
     }
 
     lastMessageIdsRef.current = next;
-  }, [conversations, currentUserId, activeConversationId]);
+  }, [conversations, currentUserId, activeConversationId, soundEnabled]);
 }

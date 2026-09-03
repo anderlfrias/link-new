@@ -10,10 +10,11 @@ import {
   deleteProfilePicture,
   getProfilePicture,
   login,
+  updatePreferences,
   updateProfile,
   updateProfilePicture,
 } from "./auth.controller";
-import { updateProfileSchema } from "./auth.validator";
+import { updatePreferencesSchema, updateProfileSchema } from "./auth.validator";
 
 const router = Router();
 
@@ -23,6 +24,14 @@ router.post("/login", loginRateLimiter, login);
 router.get("/profile/picture", authenticate, attachInternalUser, getProfilePicture);
 
 router.patch("/profile", authenticate, attachInternalUser, validateBody(updateProfileSchema), updateProfile);
+
+router.patch(
+  "/profile/preferences",
+  authenticate,
+  attachInternalUser,
+  validateBody(updatePreferencesSchema),
+  updatePreferences,
+);
 
 // Límite propio, más chico que `MAX_UPLOAD_SIZE_MB` (adjuntos): EXTERNAL_AUTH guarda
 // esto como data URI en un campo de texto de su base, no en storage de

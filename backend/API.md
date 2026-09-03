@@ -89,7 +89,8 @@ Response `200`:
     "permissions": ["chat.read", "chat.write"],
     "app": "chat-interno",
     "exp": 1735000000,
-    "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>"
+    "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>",
+    "notificationSoundEnabled": true
   }
 }
 ```
@@ -145,6 +146,24 @@ await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
 `GET` responde `302` a `/uploads/<path del StoredFile>` (mismo archivo estático que sirve el avatar de cualquier otro usuario) — `fetch()` lo sigue solo, así que `.blob()` sigue funcionando igual que antes. `404` si todavía no hay ninguna foto cacheada (nunca inició sesión con una, o ya la sacó).
 
 `name`: 1-120 caracteres, requerido. No importa si la imagen del `PUT` viene de un archivo real o de un avatar generado (ej. Boring Avatars, ver `frontend/src/features/profile`) rasterizado a PNG del lado del cliente — para este endpoint son lo mismo. Errores: `400` (falta el archivo en `PUT`, tipo de imagen no permitido, o `name` vacío/demasiado largo en `PATCH`).
+
+### Preferencias propias
+
+```
+PATCH /api/v1/auth/profile/preferences   { "notificationSoundEnabled": false }
+```
+
+Requiere `Authorization: Bearer <token>`. 100% local — no existe en EXTERNAL_AUTH ni en ningún otro proveedor de identidad, y a diferencia de `PATCH /profile` no toca `syncProfileWithIntegration` (no tiene nada que ver con nombre/foto). Hoy solo controla si el cliente reproduce un tono al recibir un mensaje nuevo (ver `frontend/src/features/conversations/hooks/use-new-message-sound.ts`); el valor por defecto para un usuario nuevo es `true`.
+
+```js
+await fetch("http://localhost:4000/api/v1/auth/profile/preferences", {
+  method: "PATCH",
+  headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ notificationSoundEnabled: false }),
+}); // 200 { "notificationSoundEnabled": false }
+```
+
+`notificationSoundEnabled` viaja también en `user` de `POST /api/v1/auth/login` (arriba) — el frontend lo guarda en la sesión igual que `fullName`, sin necesitar un fetch aparte. Errores: `400` (falta o no es boolean).
 
 ---
 

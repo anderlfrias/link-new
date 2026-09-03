@@ -13,6 +13,7 @@ import {
   findAvatarPath,
   setLocalAvatar,
   setLocalName,
+  setNotificationSoundEnabled,
   updateAvatarFileId,
   upsertUserFromExternalUser,
 } from "./auth.repository";
@@ -254,6 +255,12 @@ export function removeProfilePicture(userId: string): Promise<User> {
 /// toca el proveedor externo, y apaga `syncProfileWithIntegration`.
 export function updateOwnName(userId: string, name: string): Promise<User> {
   return setLocalName(userId, name);
+}
+
+/// Activar/desactivar el tono de notificación de mensajes nuevos — preferencia
+/// exclusiva de este usuario, ver `notificationSoundEnabled` en schema.prisma.
+export function updateNotificationSoundEnabled(userId: string, enabled: boolean): Promise<User> {
+  return setNotificationSoundEnabled(userId, enabled);
 }
 
 /// URL pública (relativa, `/uploads/...`) de mi propia foto ya cacheada

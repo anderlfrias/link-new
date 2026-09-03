@@ -22,7 +22,12 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       // el JWT externo sigue teniendo el nombre viejo — mandar `mappedUser.fullName`
       // acá mostraría ese nombre viejo en el propio cliente aunque la base ya
       // tenga el correcto.
-      user: { ...mappedUser, fullName: internalUser.name, internalUserId: internalUser.id },
+      user: {
+        ...mappedUser,
+        fullName: internalUser.name,
+        internalUserId: internalUser.id,
+        notificationSoundEnabled: internalUser.notificationSoundEnabled,
+      },
     });
 
     // Fire-and-forget: no debe retrasar ni romper el login si el proveedor
@@ -79,6 +84,17 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
     const userId = req.user!.internalUserId!;
     const updated = await AuthService.updateOwnName(userId, name);
     res.json({ name: updated.name });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updatePreferences(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { notificationSoundEnabled } = req.body as { notificationSoundEnabled: boolean };
+    const userId = req.user!.internalUserId!;
+    const updated = await AuthService.updateNotificationSoundEnabled(userId, notificationSoundEnabled);
+    res.json({ notificationSoundEnabled: updated.notificationSoundEnabled });
   } catch (error) {
     next(error);
   }

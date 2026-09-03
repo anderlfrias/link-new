@@ -22,7 +22,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const activeConversationId = isConversationRoute ? (pathname?.split("/")[2] ?? null) : null;
 
   const { conversations, status: conversationsStatus } = useConversations();
-  useNewMessageSound(conversations, session?.user.internalUserId ?? "", activeConversationId);
+  useNewMessageSound(
+    conversations,
+    session?.user.internalUserId ?? "",
+    activeConversationId,
+    session?.user.notificationSoundEnabled !== false,
+  );
 
   useEffect(() => {
     if (status === "unauthenticated") {

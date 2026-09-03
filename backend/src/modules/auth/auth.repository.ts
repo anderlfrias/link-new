@@ -65,6 +65,14 @@ export function setLocalName(userId: string, name: string): Promise<User> {
   });
 }
 
+/// Preferencia 100% local, sin ningún flag tipo `syncProfileWithIntegration`
+/// de por medio (no existe en el proveedor externo, ver schema.prisma) —
+/// a diferencia de `setLocalName`/`setLocalAvatar`, cambiar esto nunca afecta
+/// esa sincronización.
+export function setNotificationSoundEnabled(userId: string, enabled: boolean): Promise<User> {
+  return prisma.user.update({ where: { id: userId }, data: { notificationSoundEnabled: enabled } });
+}
+
 /// Para servir la propia foto ya cacheada (`getOwnProfilePictureUrl` en
 /// auth.service.ts) sin pedir el `User` completo.
 export async function findAvatarPath(userId: string): Promise<string | null> {

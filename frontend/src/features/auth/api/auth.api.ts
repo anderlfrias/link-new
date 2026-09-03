@@ -31,3 +31,16 @@ export function deleteProfilePicture(token: string): Promise<void> {
 export function updateProfile(token: string, name: string): Promise<{ name: string }> {
   return apiRequest<{ name: string }>("/v1/auth/profile", { method: "PATCH", token, body: { name } });
 }
+
+/** Activa/desactiva el tono de notificación de mensajes nuevos — preferencia
+ * exclusiva mía, 100% local (no existe en el proveedor externo de identidad). */
+export function updateNotificationSoundPreference(
+  token: string,
+  enabled: boolean,
+): Promise<{ notificationSoundEnabled: boolean }> {
+  return apiRequest<{ notificationSoundEnabled: boolean }>("/v1/auth/profile/preferences", {
+    method: "PATCH",
+    token,
+    body: { notificationSoundEnabled: enabled },
+  });
+}

@@ -15,9 +15,11 @@ import { useAuth } from "@/providers/auth-provider";
 import { useProfilePicture } from "@/features/auth/hooks/use-profile-picture";
 import { useUpdateProfilePicture } from "@/features/profile/hooks/use-update-profile-picture";
 import { useUpdateProfileName } from "@/features/profile/hooks/use-update-profile-name";
+import { useUpdateNotificationSound } from "@/features/profile/hooks/use-update-notification-sound";
 import { BoringAvatarPicker } from "@/features/profile/components/BoringAvatarPicker";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 
 interface ProfileSettingsPanelProps {
   onClose: () => void;
@@ -28,6 +30,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
   const { url: profilePictureUrl } = useProfilePicture();
   const { upload, remove, pending, error } = useUpdateProfilePicture();
   const { updateName, pending: updatingName, error: nameError } = useUpdateProfileName();
+  const { setEnabled: setSoundEnabled, pending: updatingSound, error: soundError } = useUpdateNotificationSound();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
@@ -91,10 +94,10 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-6">
-        {(error || nameError) && (
+        {(error || nameError || soundError) && (
           <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
             <IconAlertCircle size={16} className="shrink-0" />
-            <span>{error || nameError}</span>
+            <span>{error || nameError || soundError}</span>
           </div>
         )}
 
@@ -202,6 +205,16 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             seed={session.user.internalUserId}
             onSelect={(blob) => upload(blob, "avatar.png")}
             disabled={pending}
+          />
+        </div>
+
+        <div className="mt-6">
+          <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Notificaciones</h3>
+          <Checkbox
+            checked={session.user.notificationSoundEnabled !== false}
+            disabled={updatingSound}
+            onChange={(event) => setSoundEnabled(event.target.checked)}
+            label="Reproducir un sonido al recibir mensajes"
           />
         </div>
       </div>

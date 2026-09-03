@@ -17,6 +17,8 @@ export interface AuthUser {
   exp: number;
   /** Id interno (UUID de la tabla User local) — este es "mi id" para todo lo demás. */
   internalUserId: string;
+  /** Preferencia 100% local — ver backend User.notificationSoundEnabled. */
+  notificationSoundEnabled: boolean;
 }
 
 export interface LoginResponse {

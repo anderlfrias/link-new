@@ -160,6 +160,12 @@ model User {
 
   status UserStatus @default(ACTIVE)
 
+  /// Preferencia 100% local del usuario — nunca sincronizada desde el
+  /// proveedor externo de identidad (a diferencia de `name`/avatar, no tiene
+  /// equivalente en EXTERNAL_AUTH). Controla si `message:created` dispara un sonido
+  /// en su cliente (ver frontend/src/features/conversations/hooks/use-new-message-sound.ts).
+  notificationSoundEnabled Boolean @default(true) @map("notification_sound_enabled")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
