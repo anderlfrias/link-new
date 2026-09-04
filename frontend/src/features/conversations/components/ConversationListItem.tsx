@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconChevronDown, IconPin } from "@tabler/icons-react";
+import { IconBookmark, IconChevronDown, IconPin } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
@@ -78,7 +78,12 @@ export function ConversationListItem({
             isActive && "bg-black/4 dark:bg-white/10",
           )}
         >
-          <Avatar name={displayName} imageUrl={avatarUrl} size="lg" />
+          <Avatar
+            name={displayName}
+            imageUrl={avatarUrl}
+            icon={conversation.type === "SELF" ? <IconBookmark size={22} stroke={1.75} /> : undefined}
+            size="lg"
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-medium text-brand-ink dark:text-white">{displayName}</span>

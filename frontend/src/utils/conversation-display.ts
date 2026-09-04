@@ -9,19 +9,28 @@ export function getOtherMembers(conversation: Conversation, currentUserId: strin
   return conversation.members.filter((member) => member.userId !== currentUserId);
 }
 
-/** GROUP muestra su nombre; PRIVATE muestra el nombre del otro miembro. */
+/** GROUP muestra su nombre; SELF un nombre fijo; PRIVATE el nombre del otro miembro. */
 export function getConversationDisplayName(conversation: Conversation, currentUserId: string): string {
   if (conversation.type === "GROUP") {
     return conversation.name ?? "Grupo";
+  }
+  if (conversation.type === "SELF") {
+    return "Mensajes guardados";
   }
   const other = getOtherMembers(conversation, currentUserId)[0];
   return other?.user.name ?? "Usuario";
 }
 
-/** GROUP: foto del grupo si se subió una (si no, cae a iniciales). PRIVATE: foto del otro miembro. */
+/** GROUP: foto del grupo si se subió una (si no, cae a iniciales). SELF: sin
+ * foto — cae al ícono de marcador que arma el propio `<Avatar icon={...}>`
+ * (ver ConversationListItem/ConversationDetailPanel/ConversationHeader), no
+ * a las iniciales de "Mensajes guardados". PRIVATE: foto del otro miembro. */
 export function getConversationAvatarUrl(conversation: Conversation, currentUserId: string): string | null {
   if (conversation.type === "GROUP") {
     return conversation.imageFile ? buildStoredFileUrl(conversation.imageFile.path) : null;
+  }
+  if (conversation.type === "SELF") {
+    return null;
   }
   const other = getOtherMembers(conversation, currentUserId)[0];
   return other?.user.avatarFile ? buildStoredFileUrl(other.user.avatarFile.path) : null;

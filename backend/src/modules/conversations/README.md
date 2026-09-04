@@ -1,6 +1,6 @@
 # Conversations
 
-CRUD de conversaciones (`PRIVATE` y `GROUP`) sobre los modelos `Conversation` / `ConversationMember` (`prisma/schema.prisma`), más los eventos de socket para unirse/salir de la room de una conversación en tiempo real. No incluye mensajes (`messages`) ni presencia (`presence`) — cada uno es su propio módulo.
+CRUD de conversaciones (`PRIVATE`, `GROUP` y `SELF`) sobre los modelos `Conversation` / `ConversationMember` (`prisma/schema.prisma`), más los eventos de socket para unirse/salir de la room de una conversación en tiempo real. No incluye mensajes (`messages`) ni presencia (`presence`) — cada uno es su propio módulo.
 
 Todas las rutas requieren autenticación y devuelven el `id` **interno** (UUID de la tabla `User`) en cualquier campo `userId`/`memberIds`/etc., nunca el `id` externo de EXTERNAL_AUTH — ver [`internalUserId`](../auth/README.md#respuesta-200) y `attachInternalUser` más abajo.
 
@@ -19,6 +19,7 @@ Base: `/api/v1/conversations`
 | Método | Ruta | Descripción |
 |---|---|---|
 | `POST` | `/` | Crea una conversación `PRIVATE` o `GROUP`. |
+| `POST` | `/self` | Obtiene (o crea) tu conversación `SELF` — "Mensajes guardados". |
 | `GET` | `/` | Lista las conversaciones del usuario actual, con `unreadCount`. |
 | `GET` | `/:id` | Detalle de una conversación (requiere ser miembro). |
 | `PATCH` | `/:id` | Renombra o cambia la imagen (solo `GROUP`). |
@@ -46,11 +47,19 @@ Base: `/api/v1/conversations`
 
 Respuesta `201` con la conversación y sus miembros (incluye `user: { id, name, email, avatarFileId, status }` por cada miembro).
 
+`type: "SELF"` acá tira `400` — no tiene "otro miembro" que validar, así que no pasa por este flujo genérico. Usar `POST /self` (abajo) en su lugar.
+
+### `POST /self` — Obtener (o crear) tus "Mensajes guardados"
+
+Sin body — es tu id, tomado del token. Idempotente: si ya existe, la devuelve tal cual (desocultándola si la habías "eliminado", mismo criterio que reusar una `PRIVATE` existente); si no, la crea con un único miembro (vos). Respuesta `200` con la misma forma que cualquier conversación (`type: "SELF"`, `members` con una sola entrada).
+
+Una vez que existe, es una conversación como cualquier otra: mandar/editar/borrar/responder mensajes, adjuntos, fijar, marcar favorita, "Eliminar chat" (oculta "para mí", igual que en `PRIVATE`) — nada de eso necesitó ningún cambio, porque ninguno asumía una cantidad fija de miembros. Lo único que no aplica es lo que ya era exclusivo de `GROUP` (`PATCH /:id`, `POST /:id/members`, admins, settings) — esos endpoints ya rechazaban cualquier `type !== "GROUP"` desde antes de que existiera `SELF`, así que quedó cubierto sin tocarlos.
+
 **`PRIVATE` sin mensajes todavía no se avisa ni se lista para nadie**: `conversation.service.ts` solo emite `conversation:created` (ver [Eventos de socket](#eventos-de-socket)) cuando `type` es `GROUP` — crear un grupo es una acción explícita con miembros elegidos, así que sí tiene sentido avisarles de una. Una `PRIVATE` recién creada (o encontrada por el chequeo de duplicado de arriba, si todavía no tiene mensajes) queda con `lastMessageId: null`, y `GET /` (abajo) la excluye del listado de **ambos** miembros hasta que se manda el primer mensaje — de otro modo, abrir el perfil de un contacto nuevo le mostraría un chat vacío a la otra persona sin que vos hayas escrito nada. El creador puede seguir usando el `id` de esta respuesta para pedir `GET /:id` o mandar mensajes directamente; en cuanto el primer mensaje se envía, `Conversation.lastMessageId` deja de ser `null` y el `conversation:updated` que ya dispara `POST .../messages` (ver [`messages`](../messages/README.md)) revela la conversación para ambos por igual.
 
 ### `GET /` — Listar mis conversaciones
 
-Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas por `lastMessageAt` descendente (con las **fijadas por vos primero** — ver [Fijar y favoritos](#fijar-y-favoritos)), cada una con `unreadCount` (mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual — sin agregaciones sobre todo el historial, gracias a `lastReadAt`/`lastMessageAt` denormalizados que documenta el [README del backend](../../../README.md#por-qué-existen-lastreadmessageid-en-conversationmember-y-lastmessageat-en-conversation)) y `lastMessageStatus` (ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura) — `null` si el último mensaje no lo enviaste vos). Excluye las `PRIVATE` con `lastMessageId: null` (ver nota arriba) — `GROUP` aparece siempre, aunque no tenga mensajes.
+Devuelve las conversaciones donde el usuario es miembro (no borradas), ordenadas por `lastMessageAt` descendente (con las **fijadas por vos primero** — ver [Fijar y favoritos](#fijar-y-favoritos)), cada una con `unreadCount` (mensajes de otros usuarios posteriores a `lastReadAt` del miembro actual — sin agregaciones sobre todo el historial, gracias a `lastReadAt`/`lastMessageAt` denormalizados que documenta el [README del backend](../../../README.md#por-qué-existen-lastreadmessageid-en-conversationmember-y-lastmessageat-en-conversation)) y `lastMessageStatus` (ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura) — `null` si el último mensaje no lo enviaste vos). Excluye las `PRIVATE`/`SELF` con `lastMessageId: null` (ver nota arriba) — `GROUP` aparece siempre, aunque no tenga mensajes. Para `SELF` esto es intencional aunque no haya "otra persona" a quien protegerle un chat vacío: `POST /self` de todos modos sigue devolviendo el `id` para poder abrir la conversación directamente (`GET /:id`) y empezar a escribir — la fila recién se lista sola una vez que mandás tu primer mensaje ahí, mismo comportamiento que cualquier `PRIVATE` nueva.
 
 ### `PATCH /:id` — Renombrar / cambiar imagen
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/utils/cn";
 
 /** Variaciones sobre la paleta de marca — sin colores ajenos al branding de Link. */
@@ -26,17 +26,35 @@ interface AvatarProps {
   name: string;
   /** Si se rompe la carga, cae solo a las iniciales — no hace falta manejarlo desde afuera. */
   imageUrl?: string | null;
+  /** Reemplaza foto E iniciales por este ícono (ej. el marcador de "Mensajes
+   * guardados", que no tiene ni foto ni un nombre de persona del cual sacar
+   * inicial). Tiene prioridad sobre `imageUrl`. */
+  icon?: ReactNode;
   size?: keyof typeof SIZE_CLASSES;
   className?: string;
 }
 
-export function Avatar({ name, imageUrl, size = "md", className }: AvatarProps) {
+export function Avatar({ name, imageUrl, icon, size = "md", className }: AvatarProps) {
   const [imageFailed, setImageFailed] = useState(false);
   // Sin esto, una vez que una `imageUrl` falla el componente queda pegado en
   // iniciales para siempre — incluso después de subir una foto nueva válida
   // (ej. al cambiar de foto de perfil), porque el estado no se resetea solo.
   useEffect(() => setImageFailed(false), [imageUrl]);
   const trimmed = name.trim();
+
+  if (icon) {
+    return (
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-full bg-brand-teal text-white",
+          SIZE_CLASSES[size],
+          className,
+        )}
+      >
+        {icon}
+      </span>
+    );
+  }
 
   if (imageUrl && !imageFailed) {
     return (

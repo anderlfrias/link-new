@@ -41,6 +41,13 @@ enum ConversationType {
   PRIVATE @map("private")
   /// Conversación con más de dos participantes.
   GROUP   @map("group")
+  /// Conversación de un usuario consigo mismo ("Mensajes guardados", tipo
+  /// Telegram) — un único miembro (el propio usuario). No reutiliza PRIVATE
+  /// porque esa validación exige exactamente OTRO miembro (ver
+  /// conversation.service.ts, createConversation) y `ConversationMember` tiene
+  /// `@@unique([conversationId, userId])`, así que dos filas con el mismo
+  /// usuario en la misma conversación no son representables.
+  SELF    @map("self")
 
   @@map("conversation_type")
 }

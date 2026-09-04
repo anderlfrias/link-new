@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { IconMessage2Plus, IconSearch } from "@tabler/icons-react";
+import { IconBookmark, IconLoader2, IconMessage2Plus, IconSearch } from "@tabler/icons-react";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Input } from "@/components/ui/Input";
@@ -10,6 +10,7 @@ import { ConversationFilterBar } from "@/features/conversations/components/Conve
 import { ConversationList } from "@/features/conversations/components/ConversationList";
 import { NewChatModal } from "@/features/users/components/NewChatModal";
 import { ProfileSettingsPanel } from "@/features/profile/components/ProfileSettingsPanel";
+import { useOpenSelfChat } from "@/features/conversations/hooks/use-open-self-chat";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
 import type { ConversationFilter, ConversationListItem } from "@/features/conversations/types/conversation.types";
 
@@ -28,6 +29,7 @@ export function MobileChatListScreen({
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
   const [view, setView] = useState<"list" | "profileSettings">("list");
   const [showNewChat, setShowNewChat] = useState(false);
+  const { open: openSelfChat, pending: openingSelfChat } = useOpenSelfChat();
 
   if (view === "profileSettings") {
     return <ProfileSettingsPanel onClose={() => setView("list")} />;
@@ -44,6 +46,19 @@ export function MobileChatListScreen({
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
+          <button
+            type="button"
+            title="Mensajes guardados"
+            disabled={openingSelfChat}
+            onClick={() => void openSelfChat()}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+          >
+            {openingSelfChat ? (
+              <IconLoader2 size={20} stroke={1.75} className="animate-spin" />
+            ) : (
+              <IconBookmark size={20} stroke={1.75} />
+            )}
+          </button>
           <button
             type="button"
             title="Chat nuevo"

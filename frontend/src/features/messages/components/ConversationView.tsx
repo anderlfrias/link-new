@@ -1,7 +1,7 @@
 "use client";
 
 import { DragEvent, useRef, useState } from "react";
-import { IconLoader2, IconCloudUpload } from "@tabler/icons-react";
+import { IconBookmark, IconLoader2, IconCloudUpload } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversation } from "@/features/conversations/hooks/use-conversation";
 import { useMessages } from "@/features/messages/hooks/use-messages";
@@ -115,6 +115,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           title={displayName}
           subtitle={subtitle}
           imageUrl={avatarUrl}
+          icon={conversation.type === "SELF" ? <IconBookmark size={20} stroke={1.75} /> : undefined}
           onOpenDetails={() => setShowDetails(true)}
         />
         <MessageList

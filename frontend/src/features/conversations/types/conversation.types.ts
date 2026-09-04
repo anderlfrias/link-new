@@ -1,6 +1,8 @@
 /** Ver backend/API.md, sección 4 (Conversaciones). */
 
-export type ConversationType = "PRIVATE" | "GROUP";
+/** `SELF` = "Mensajes guardados": conversación con un solo miembro, el
+ * propio usuario. Ver backend/API.md sección 4.1.1. */
+export type ConversationType = "PRIVATE" | "GROUP" | "SELF";
 
 export type UserStatus = "ACTIVE" | "INACTIVE";
 

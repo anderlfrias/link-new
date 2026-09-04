@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } fro
 import { useRouter } from "next/navigation";
 import {
   IconAlertCircle,
+  IconBookmark,
   IconCamera,
   IconCheck,
   IconDoorExit,
@@ -187,7 +188,12 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
 
         <div className="flex flex-col items-center gap-1 py-4 text-center">
           <div className="relative">
-            <Avatar name={displayName} imageUrl={avatarUrl} size="xl" />
+            <Avatar
+              name={displayName}
+              imageUrl={avatarUrl}
+              icon={conversation.type === "SELF" ? <IconBookmark size={40} stroke={1.75} /> : undefined}
+              size="xl"
+            />
             {isGroup && (
               <>
                 <button

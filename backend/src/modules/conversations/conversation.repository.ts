@@ -37,6 +37,16 @@ export function findPrivateConversationBetween(userAId: string, userBId: string)
   });
 }
 
+/// A diferencia de `findPrivateConversationBetween`, un solo id alcanza: por
+/// construcción nunca hay más de una `SELF` por usuario (siempre se busca
+/// antes de crear, ver `getOrCreateSelfChat` en conversation.service.ts).
+export function findSelfChat(userId: string) {
+  return prisma.conversation.findFirst({
+    where: { type: ConversationType.SELF, deletedAt: null, members: { some: { userId } } },
+    include: withMembers,
+  });
+}
+
 export function countExistingUsers(userIds: string[]): Promise<number> {
   if (userIds.length === 0) return Promise.resolve(0);
   return prisma.user.count({ where: { id: { in: userIds } } });

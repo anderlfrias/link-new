@@ -28,6 +28,11 @@ export function createConversation(
   return apiRequest<Conversation>(BASE_PATH, { method: "POST", token, body: input });
 }
 
+/** Obtiene (o crea, la primera vez) tus "Mensajes guardados" — idempotente. */
+export function getOrCreateSelfChat(token: string): Promise<Conversation> {
+  return apiRequest<Conversation>(`${BASE_PATH}/self`, { method: "POST", token });
+}
+
 export function updateConversation(
   token: string,
   conversationId: string,

@@ -109,6 +109,15 @@ export async function createConversation(
   input: CreateConversationInput,
   userRoles: string[],
 ) {
+  // SELF ("Mensajes guardados") no pasa por acá — tiene su propio flujo
+  // idempotente (`getOrCreateSelfChat`, vía POST /conversations/self) porque
+  // no hay ningún "otro miembro" que validar. Cortar temprano con un mensaje
+  // claro en vez de dejar que caiga en la rama de GROUP de abajo (que daría
+  // un error confuso sobre "al menos dos miembros").
+  if (input.type === ConversationType.SELF) {
+    throw new BadRequestError("Use POST /conversations/self to get or create your own saved-messages chat");
+  }
+
   const otherMemberIds = Array.from(new Set(input.memberIds)).filter((id) => id !== currentUserId);
 
   if (input.type === ConversationType.PRIVATE) {
@@ -173,6 +182,37 @@ export async function createConversation(
       io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.CREATED, conversation);
     });
   }
+
+  return conversation;
+}
+
+/// "Mensajes guardados" (tipo Telegram) — conversación con un solo miembro:
+/// el propio usuario. Idempotente: si ya existe, la devuelve tal cual (y la
+/// desoculta si el usuario la había "eliminado" — mismo criterio que reusar
+/// una PRIVATE existente en `createConversation`); si no, la crea. No pasa
+/// por el flujo genérico de `createConversation` porque ese exige exactamente
+/// UN OTRO miembro para PRIVATE — acá no hay "otro" en absoluto.
+export async function getOrCreateSelfChat(currentUserId: string): Promise<ConversationWithMembers> {
+  const existing = await ConversationRepository.findSelfChat(currentUserId);
+  if (existing) {
+    const myMembership = existing.members.find((member) => member.userId === currentUserId);
+    if (myMembership?.hiddenAt) {
+      await ConversationRepository.setMemberHidden(existing.id, currentUserId, null);
+    }
+    return existing;
+  }
+
+  const conversation = await ConversationRepository.createConversation({
+    type: ConversationType.SELF,
+    createdById: currentUserId,
+    memberIds: [currentUserId],
+  });
+
+  await ConversationRepository.logAudit({
+    userId: currentUserId,
+    action: ChatAuditAction.CREATE_CONVERSATION,
+    conversationId: conversation.id,
+  });
 
   return conversation;
 }

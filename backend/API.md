@@ -249,7 +249,7 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 }
 ```
 
-`type` es `"PRIVATE"` (exactamente 2 miembros fijos) o `"GROUP"` (3 o más). `name`/`imageFileId`/`imageFile` solo aplican a `GROUP`.
+`type` es `"PRIVATE"` (exactamente 2 miembros fijos), `"GROUP"` (3 o más) o `"SELF"` (exactamente 1: el propio usuario — "Mensajes guardados", ver 4.1.1). `name`/`imageFileId`/`imageFile` solo aplican a `GROUP`.
 
 `user.avatarFile` viene embebido (igual que los adjuntos de mensajes) para no tener que pedir cada avatar por separado: si no es `null`, construir la URL como `<origin-del-backend>/uploads/<avatarFile.path>` (sin autenticación, igual que cualquier otro `StoredFile` servido por `express.static`). Se cachea automáticamente en cada login de **ese** usuario — ver "Endpoint: foto de perfil" más abajo y `backend/src/modules/files/README.md`.
 
@@ -269,6 +269,14 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 - `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total), sin superar el máximo configurado por un admin (`AppSettings.maxGroupMembers`, ver sección 12) — `400` si se excede. Si un admin configuró `whoCanCreateGroups: "APP_ADMINS_ONLY"`, solo un usuario con rol `"admin"` puede crear un `GROUP` (`403` en caso contrario) — ver 4.8. `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6). El creador queda marcado como admin de ese grupo (`isAdmin: true` en su membresía) — ver 4.9.
 
 → `201` con la conversación completa.
+
+#### 4.1.1 `POST /self` — Obtener (o crear) tus "Mensajes guardados"
+
+Sin body. Idempotente: si ya tenés una conversación `SELF`, la devuelve tal cual (y la desoculta si la habías "eliminado" — ver 4.6); si no, la crea. `400` si intentás crear un `SELF` a mano vía `POST /` (arriba) — este es el único camino.
+
+→ `200` con la conversación completa (`type: "SELF"`, `members` con una sola entrada: la tuya).
+
+Funciona como cualquier otra conversación una vez que existe: mandar/editar/borrar/responder mensajes, adjuntos, fijar/marcar favorita, "Eliminar chat" — todo igual. Lo único que no aplica es lo que ya es exclusivo de `GROUP` (agregar/quitar miembros, cambiar nombre/foto, admins) — esos endpoints ya rechazaban cualquier cosa que no fuera `GROUP` desde antes, así que `SELF` cae ahí solo, sin necesitar ningún chequeo nuevo.
 
 **`PRIVATE` recién creada (sin mensajes) no aparece para nadie todavía**: no emite `conversation:created` ni sale en `GET /` (para ninguno de los dos miembros) hasta que se manda el primer mensaje — así abrir el perfil de un contacto nuevo no le arma un chat vacío a la otra persona. Vos igual podés seguir usando el `id` que devuelve esta respuesta para pedir `GET /:id` o mandar el primer mensaje directamente; una vez que ese mensaje se envía, la conversación se revela sola para ambos vía el `conversation:updated` que ya dispara toda `POST /messages` (ver 4.2 y sección 6). `GROUP` sí emite `conversation:created` de una — crear un grupo ya es una acción explícita con miembros elegidos, no una simple apertura de contacto.
 

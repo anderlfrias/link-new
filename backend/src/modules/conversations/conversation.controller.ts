@@ -22,6 +22,15 @@ export async function create(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function getOrCreateSelf(req: Request, res: Response, next: NextFunction) {
+  try {
+    const conversation = await ConversationService.getOrCreateSelfChat(currentUserId(req));
+    res.json(conversation);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const conversations = await ConversationService.listConversations(currentUserId(req));

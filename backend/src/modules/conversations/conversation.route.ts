@@ -19,6 +19,10 @@ const router = Router();
 router.use(authenticate, attachInternalUser);
 
 router.post("/", validateBody(createConversationSchema), ConversationController.create);
+// Antes de "/:id" (GET) a propósito, aunque acá no colisionarían (son
+// métodos/formas de ruta distintas) — así queda documentado el orden por si
+// en el futuro se agrega algo que sí lo haría.
+router.post("/self", ConversationController.getOrCreateSelf);
 router.get("/", ConversationController.list);
 router.get("/:id", ConversationController.getById);
 router.patch("/:id", validateBody(updateConversationSchema), ConversationController.update);
