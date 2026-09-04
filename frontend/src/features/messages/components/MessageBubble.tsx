@@ -78,18 +78,33 @@ export function MessageBubble({
     onSwipeReply: () => onReply(message),
   });
 
-  // Desktop: clickear cualquier parte de la FILA (no solo la burbujita — la
-  // fila ocupa todo el ancho del hilo, aunque la burbuja sea angosta) la
-  // selecciona para responder, igual que el long-press en mobile pero con
-  // click. Se frena si el click fue sobre un elemento interactivo propio (el
-  // menú "⋮", un adjunto, el editor) o si el usuario estaba seleccionando
-  // texto (un click-and-drag para copiar también dispara "click" al soltar).
-  function handleRowClick(event: MouseEvent<HTMLDivElement>) {
+  // Desktop: la ruta real para responder es el menú (botón "⋮" o click derecho,
+  // ver handleRowContextMenu) — esto de acá es solo un atajo extra para
+  // usuarios avanzados, por eso no lleva cursor de mano ni reacciona a un
+  // solo click, para no competir visualmente con la vía "real". Doble click
+  // en cualquier parte de la FILA (no solo la burbujita — la fila ocupa todo
+  // el ancho del hilo, aunque la burbuja sea angosta) selecciona para
+  // responder. Se frena si el click fue sobre un elemento interactivo propio
+  // (el menú "⋮", un adjunto, el editor) o si el usuario estaba
+  // seleccionando texto (un click-and-drag para copiar también dispara esto al soltar).
+  function handleRowDoubleClick(event: MouseEvent<HTMLDivElement>) {
     if (!canReply || isEditing) return;
     if (!window.matchMedia("(min-width: 1024px)").matches) return;
     if ((event.target as HTMLElement).closest("button, a, input, textarea")) return;
     if (window.getSelection()?.toString()) return;
     onReply(message);
+  }
+
+  // La vía "real" en desktop: click derecho en cualquier parte de la fila
+  // abre el mismo menú que el botón "⋮" (Responder/Editar/Eliminar), en vez
+  // del menú nativo del navegador. Nunca en mobile — ahí el long-press ya
+  // cubre exactamente este mismo rol, y un `contextmenu` disparado por un
+  // long-press táctil no debe interferir con ese gesto.
+  function handleRowContextMenu(event: MouseEvent<HTMLDivElement>) {
+    if (!showOptionsTrigger || isEditing) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    event.preventDefault();
+    setMenuOpen(true);
   }
 
   useEffect(() => {
@@ -158,12 +173,9 @@ export function MessageBubble({
     // durante el swipe (ver `style` más abajo).
     <div
       {...gestureHandlers}
-      onClick={handleRowClick}
-      className={cn(
-        "relative flex",
-        isOwn ? "justify-end" : "justify-start",
-        canReply && !isEditing && "lg:cursor-pointer",
-      )}
+      onDoubleClick={handleRowDoubleClick}
+      onContextMenu={handleRowContextMenu}
+      className={cn("relative flex", isOwn ? "justify-end" : "justify-start")}
     >
       {/* Ícono que se revela detrás de la burbuja al arrastrarla (swipe-to-reply,
           mobile) — mismo lenguaje visual que WhatsApp: aparece a la izquierda,
