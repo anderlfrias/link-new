@@ -51,8 +51,16 @@ export async function login(user: string, password: string): Promise<string> {
     // EXTERNAL_AUTH no devolvió un body JSON válido; se resuelve más abajo según el status HTTP.
   }
 
+  // EXTERNAL_AUTH devuelve 403 tanto para credenciales incorrectas como para falta de
+  // acceso a esta app — no hay forma de distinguir el motivo real desde acá
+  // (y tampoco confiamos en `data.error`: si EXTERNAL_AUTH no distingue el motivo,
+  // su propio texto tampoco es confiable). Por eso el mensaje es genérico
+  // a propósito, en vez de afirmar "no tenés acceso" cuando puede ser
+  // simplemente un typo en la contraseña.
   if (response.status === 403 || /forbidden/i.test(data.error ?? "")) {
-    throw new ForbiddenError(data.error ?? "Tu usuario no tiene acceso a esta aplicación. Contactá a un administrador.");
+    throw new ForbiddenError(
+      "No pudimos verificar tus credenciales. Revisá tu usuario y contraseña. Si el problema persiste, contactá a un administrador.",
+    );
   }
 
   if (response.status === 401) {

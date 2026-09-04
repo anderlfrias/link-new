@@ -3,7 +3,7 @@ import multer from "multer";
 import { authenticate } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import { validateBody } from "../../middlewares/validate.middleware";
-import { loginRateLimiter } from "../../middlewares/rate-limit.middleware";
+import { loginIpRateLimiter, loginUserRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { BadRequestError } from "../../utils/errors";
 import {
@@ -18,7 +18,7 @@ import { updatePreferencesSchema, updateProfileSchema } from "./auth.validator";
 
 const router = Router();
 
-router.post("/login", loginRateLimiter, login);
+router.post("/login", loginIpRateLimiter, loginUserRateLimiter, login);
 // GET ahora sí necesita attachInternalUser: lee la foto ya cacheada en la
 // base local (`getOwnProfilePictureUrl`), ya no proxea a ningún proveedor externo.
 router.get("/profile/picture", authenticate, attachInternalUser, getProfilePicture);

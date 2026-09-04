@@ -88,8 +88,8 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 |---|---|
 | `400` | Falta `user` o `password` en el body |
 | `401` | EXTERNAL_AUTH respondió que las credenciales son inválidas |
-| `403` | EXTERNAL_AUTH respondió `403` (o un error con "forbidden") — el usuario existe pero no tiene acceso a esta `app` |
-| `429` | Más de 10 intentos de login en 15 minutos desde la misma IP (`rate-limit.middleware.ts`) |
+| `403` | EXTERNAL_AUTH respondió `403` (o un error con "forbidden"). **Ojo:** EXTERNAL_AUTH usa este mismo status tanto para credenciales incorrectas como para falta de acceso a esta `app` — no hay forma de distinguir el motivo real desde acá, así que el mensaje que ve el usuario es genérico a propósito ("revisá tus credenciales... si persiste, contactá a un administrador"), nunca "no tenés acceso" |
+| `429` | Se agotó el cupo de intentos de login — por usuario (5 cada 15 min, `loginUserRateLimiter`) o por IP (20 cada 15 min, `loginIpRateLimiter`), ver `rate-limit.middleware.ts` |
 | `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) o devolvió un status inesperado (5xx u otro distinto de `200`/`401`/`403`) |
 
 ## Desacoplar el perfil del proveedor externo (`syncProfileWithIntegration`)

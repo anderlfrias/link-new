@@ -1,20 +1,60 @@
 import rateLimit from "express-rate-limit";
 
-export const loginRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
+const WINDOW_MS = 15 * 60 * 1000;
+const TOO_MANY_ATTEMPTS_MESSAGE = {
+  error: "Hiciste demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar.",
+};
+
+// Cloudflare siempre manda la IP real del visitante en `CF-Connecting-IP`, y
+// ese header no se puede falsificar desde el cliente (Cloudflare lo
+// sobreescribe en su borde) — usarlo acá evita depender de adivinar cuántos
+// saltos de proxy hay entre Cloudflare y este proceso (ver `trust proxy` en
+// app.ts, que igual hace falta para que `req.ip` — el fallback de acá, y lo
+// que usa morgan para loguear — también sea el real).
+//
+// Dos limiters en paralelo, no uno solo: si el único límite fuera por IP,
+// todo el tráfico detrás del mismo proxy/NAT (oficina, CGNAT) comparte una
+// sola IP a ojos de Express, y el límite terminaba siendo compartido entre
+// TODOS los usuarios en vez de ser por persona — así se explicaba el "too
+// many requests" en el primer intento de alguien que nunca lo había hecho
+// antes: OTRA persona en la misma red ya había gastado el cupo compartido.
+//
+// `loginUserRateLimiter` (por usuario) es la defensa real para ese caso: cada
+// cuenta tiene su propio cupo, así que los intentos fallidos de un usuario
+// nunca afectan a otro que comparte la misma IP. `loginIpRateLimiter` (por IP)
+// se mantiene como respaldo más amplio, para frenar a quien prueba muchos
+// usuarios distintos desde una sola IP (fuerza bruta clásica) — con más cupo
+// porque ya no es la única línea de defensa.
+//
+// `skipSuccessfulRequests: true` en ambos: un login que sale bien no debería
+// sumar contra el límite, incluso si antes hubo algún typo — así el cupo solo
+// se gasta con fallos reales, no con el uso normal de alguien reintentando.
+
+export const loginIpRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  // Cloudflare siempre manda la IP real del visitante en `CF-Connecting-IP`, y
-  // ese header no se puede falsificar desde el cliente (Cloudflare lo
-  // sobreescribe en su borde) — usarlo acá evita depender de adivinar cuántos
-  // saltos de proxy hay entre Cloudflare y este proceso (ver `trust proxy` en
-  // app.ts, que igual hace falta para que `req.ip` — el fallback de acá, y lo
-  // que usa morgan para loguear — también sea el real). Sin esto, todo el
-  // tráfico detrás del mismo proxy comparte una sola IP a ojos de Express, y
-  // este límite terminaba siendo compartido entre TODOS los usuarios en vez
-  // de ser por persona — así se explica el "too many requests" en el primer
-  // intento de alguien que nunca lo había hecho antes.
+  skipSuccessfulRequests: true,
   keyGenerator: (req) => req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
-  message: { error: "Hiciste demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar." },
+  message: TOO_MANY_ATTEMPTS_MESSAGE,
+});
+
+// Sin `user` en el body (o con un tipo raro) todos esos intentos caen en un
+// mismo bucket compartido genérico — no hace falta más precisión ahí: ya
+// quedan cubiertos por `loginIpRateLimiter` de todos modos, y un `user`
+// faltante de por sí corta enseguida en el controller con `BadRequestError`.
+const UNKNOWN_USER_KEY = "unknown-user";
+
+export const loginUserRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const user = req.body?.user;
+    return typeof user === "string" && user.trim() ? user.trim().toLowerCase() : UNKNOWN_USER_KEY;
+  },
+  message: TOO_MANY_ATTEMPTS_MESSAGE,
 });

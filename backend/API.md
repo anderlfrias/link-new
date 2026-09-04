@@ -95,7 +95,7 @@ Response `200`:
 }
 ```
 
-Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores), `403` (el usuario existe en EXTERNAL_AUTH pero no tiene acceso a esta app), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 10 intentos en 15 minutos desde la misma IP.
+Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores), `403` (EXTERNAL_AUTH devolvió `403` — puede ser credenciales incorrectas o falta de acceso a esta app; EXTERNAL_AUTH no distingue el motivo, así que el mensaje que ve el usuario es genérico a propósito, nunca "no tenés acceso"), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 5 intentos en 15 minutos para el mismo usuario, o 20 en 15 minutos desde la misma IP (ver `backend/src/modules/auth/README.md`, "Errores posibles").
 
 Después del login, todo el resto del API (HTTP y socket) usa el mismo `token` — no hay un endpoint de logout ni de refresh; "cerrar sesión" en el frontend es simplemente descartar el token guardado y desconectar el socket.
 
