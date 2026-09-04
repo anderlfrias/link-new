@@ -441,6 +441,8 @@ Forma de un mensaje:
     { "id": "messagefile-uuid", "messageId": "msg-uuid", "fileId": "file-uuid", "createdAt": "...",
       "file": { "id": "file-uuid", "originalName": "foto.jpg", "mimeType": "image/jpeg", "path": "chat/....jpg", "extension": "jpg", "size": 245678, "provider": "LOCAL", "checksum": "...", "createdById": "user-uuid", "createdAt": "...", "deletedAt": null } }
   ],
+  "replyToId": null,
+  "replyTo": null,
   "receipts": [
     { "userId": "otro-user-uuid", "status": "delivered" }
   ]
@@ -449,15 +451,31 @@ Forma de un mensaje:
 
 `type` es `"TEXT"` (lo único que este API genera hoy) o `"SYSTEM"` (reservado para narrar eventos de la conversación — todavía no se genera automáticamente). `receipts` trae un estado por cada miembro que **no** sea el autor — ver sección 7.
 
+`replyToId`/`replyTo`: si este mensaje responde a otro (tipo WhatsApp/Telegram, ver 6.1), `replyToId` es el id crudo y `replyTo` trae una vista resumida ya armada del original — para poder pintar la cita sin pedirlo aparte:
+
+```json
+"replyTo": {
+  "id": "msg-original-uuid",
+  "senderId": "user-uuid",
+  "senderName": "Juan",
+  "preview": "Hola!",
+  "deletedAt": null
+}
+```
+
+`preview` es el mismo texto que usa `lastMessagePreview` en la lista de conversaciones (sección 4): el contenido tal cual, `"📎 Archivo adjunto"` si no tiene texto pero sí adjuntos, o `"Mensaje eliminado"` si `deletedAt` no es `null` — esto último puede pasar aunque el mensaje que lo cita nunca cambie: si el original se borra *después*, la cita simplemente empieza a mostrar "Mensaje eliminado" la próxima vez que se lea este mensaje, `replyToId` nunca se toca.
+
 Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están en la base (a diferencia de la respuesta de `POST /api/v1/files`, que devuelve `url` ya armada) — para armar la URL de descarga desde acá, prefijá `path` con `/uploads/`, ej. `http://localhost:4000/uploads/chat/....jpg`. Si `deletedAt` no es `null`, el archivo fue eliminado (ver sección 13.2) — el contenido ya no existe, pero el resto de los campos (`originalName`, `size`, etc.) siguen siendo válidos para mostrar un placeholder tipo "archivo eliminado" en vez de intentar cargarlo.
 
 ### 6.1 `POST /` — Enviar mensaje
 
 ```json
-{ "content": "Hola!", "fileIds": ["<storedFileId>"] }
+{ "content": "Hola!", "fileIds": ["<storedFileId>"], "replyToId": "<messageId>" }
 ```
 
 `content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9), pero no ilimitados: `400` si traés más entradas que `AppSettings.maxFilesPerMessage` (`null` = sin límite, ver sección 12).
+
+`replyToId` opcional — responder a un mensaje puntual de la conversación (tipo WhatsApp/Telegram). Solo se valida que el id exista y pertenezca a **esta misma** conversación (`400` si no); a propósito no se exige que siga sin borrar — si alguien lo borra justo mientras vos tenías la cita armada en tu campo de texto, el envío igual funciona (ver `replyTo` más abajo).
 
 → `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
 

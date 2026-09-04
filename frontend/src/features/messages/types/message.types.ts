@@ -25,6 +25,17 @@ export interface MessageReceipt {
   status: MessageReceiptStatus;
 }
 
+/** Vista resumida del mensaje original citado — ver backend/API.md sección 6. */
+export interface MessageReplyPreview {
+  id: string;
+  senderId: string;
+  senderName: string;
+  /** Mismo texto que `lastMessagePreview` de la conversación — ya resuelve
+   * "Mensaje eliminado" / "📎 Archivo adjunto" / el texto tal cual. */
+  preview: string;
+  deletedAt: string | null;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -37,12 +48,15 @@ export interface Message {
   createdAt: string;
   sender: MessageSender;
   files: MessageFile[];
+  replyToId: string | null;
+  replyTo: MessageReplyPreview | null;
   receipts: MessageReceipt[];
 }
 
 export interface SendMessageInput {
   content: string;
   fileIds?: string[];
+  replyToId?: string;
 }
 
 export interface EditMessageInput {

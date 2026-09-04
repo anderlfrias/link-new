@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import { IconCheck, IconChevronDown, IconLoader2, IconX } from "@tabler/icons-react";
+import { MouseEvent, useEffect, useRef, useState } from "react";
+import { IconCheck, IconChevronDown, IconCornerUpLeft, IconLoader2, IconX } from "@tabler/icons-react";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
 import { MessageAttachments } from "@/features/messages/components/MessageAttachments";
 import { MessageOptionsMenu } from "@/features/messages/components/MessageOptionsMenu";
+import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
 import { DeleteMessageConfirmModal } from "@/features/messages/components/DeleteMessageConfirmModal";
-import { useLongPress } from "@/features/conversations/hooks/use-long-press";
+import { useMessageGestures } from "@/features/messages/hooks/use-message-gestures";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { aggregateMessageStatus } from "@/utils/message-status";
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
@@ -15,15 +16,27 @@ interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
   showSender: boolean;
+  currentUserId: string;
   onEdit: (messageId: string, content: string) => Promise<void>;
   onDelete: (messageId: string) => Promise<void>;
+  onReply: (message: Message) => void;
+  onJumpToMessage: (messageId: string) => void;
 }
 
 function formatBubbleTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
 }
 
-export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isOwn,
+  showSender,
+  currentUserId,
+  onEdit,
+  onDelete,
+  onReply,
+  onJumpToMessage,
+}: MessageBubbleProps) {
   const settings = usePublicSettings();
   const isDeleted = Boolean(message.deletedAt);
   const status = isOwn ? aggregateMessageStatus(message.receipts) : null;
@@ -31,9 +44,11 @@ export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: 
   const hasCaption = isDeleted || Boolean(message.content.trim());
   const hasAttachments = !isDeleted && message.files.length > 0;
 
-  // Ambas acciones son solo autoservicio sobre el propio mensaje — el
+  // A diferencia de editar/eliminar (autoservicio sobre el propio mensaje),
+  // responder está disponible sobre CUALQUIER mensaje ajeno o propio — el
   // creador de la conversación borrando un mensaje ajeno (moderación) no
   // tiene disparador en esta UI todavía, aunque el backend ya lo permite.
+  const canReply = !isDeleted;
   const canEdit =
     isOwn &&
     !isDeleted &&
@@ -45,7 +60,7 @@ export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: 
     !isDeleted &&
     Boolean(settings?.allowMessageDeleteForEveryone) &&
     isWithinMessageTimeLimit(message.createdAt, settings?.messageDeleteForEveryoneTimeLimitMinutes ?? null);
-  const showOptionsTrigger = canEdit || canDelete;
+  const showOptionsTrigger = canReply || canEdit || canDelete;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -57,9 +72,25 @@ export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const longPress = useLongPress(() => {
-    if (showOptionsTrigger) setMenuOpen(true);
+  const { handlers: gestureHandlers, swipeOffset, isSwiping } = useMessageGestures({
+    disabled: !showOptionsTrigger,
+    onLongPress: () => setMenuOpen(true),
+    onSwipeReply: () => onReply(message),
   });
+
+  // Desktop: clickear cualquier parte de la FILA (no solo la burbujita — la
+  // fila ocupa todo el ancho del hilo, aunque la burbuja sea angosta) la
+  // selecciona para responder, igual que el long-press en mobile pero con
+  // click. Se frena si el click fue sobre un elemento interactivo propio (el
+  // menú "⋮", un adjunto, el editor) o si el usuario estaba seleccionando
+  // texto (un click-and-drag para copiar también dispara "click" al soltar).
+  function handleRowClick(event: MouseEvent<HTMLDivElement>) {
+    if (!canReply || isEditing) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    if ((event.target as HTMLElement).closest("button, a, input, textarea")) return;
+    if (window.getSelection()?.toString()) return;
+    onReply(message);
+  }
 
   useEffect(() => {
     if (isEditing) editTextareaRef.current?.focus();
@@ -121,9 +152,36 @@ export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: 
   );
 
   return (
-    <div className={cn("flex", isOwn ? "justify-end" : "justify-start")}>
+    // La fila entera es el área de click/swipe (no solo la burbujita) — así
+    // no hace falta acertarle a una burbuja angosta para responder. La
+    // burbuja en sí no cambia de tamaño ni posición, solo desliza visualmente
+    // durante el swipe (ver `style` más abajo).
+    <div
+      {...gestureHandlers}
+      onClick={handleRowClick}
+      className={cn(
+        "relative flex",
+        isOwn ? "justify-end" : "justify-start",
+        canReply && !isEditing && "lg:cursor-pointer",
+      )}
+    >
+      {/* Ícono que se revela detrás de la burbuja al arrastrarla (swipe-to-reply,
+          mobile) — mismo lenguaje visual que WhatsApp: aparece a la izquierda,
+          se va marcando a medida que te acercás al umbral que dispara "responder". */}
+      {swipeOffset > 0 && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-black/10 text-neutral-500 dark:bg-white/10 dark:text-neutral-400"
+          style={{ opacity: Math.min(swipeOffset / 56, 1) }}
+        >
+          <IconCornerUpLeft size={16} stroke={2} />
+        </div>
+      )}
       <div
-        {...longPress}
+        style={{
+          transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
+          transition: isSwiping ? "none" : "transform 200ms ease-out",
+        }}
         className={cn(
           "group relative max-w-[75%] min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
           isOwn
@@ -132,11 +190,13 @@ export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: 
         )}
       >
         {showOptionsTrigger && !isEditing && (
-          <div className={cn("absolute -top-1", isOwn ? "-left-7" : "-right-7")}>
+          <div className={cn("absolute -top-1", isOwn ? "right-full mr-1" : "left-full ml-1")}>
             <button
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
               aria-label="Opciones del mensaje"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
               className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 dark:text-neutral-400 dark:hover:bg-white/10"
             >
               <IconChevronDown size={14} stroke={2} />
@@ -144,13 +204,26 @@ export function MessageBubble({ message, isOwn, showSender, onEdit, onDelete }: 
             <MessageOptionsMenu
               open={menuOpen}
               onClose={() => setMenuOpen(false)}
+              canReply={canReply}
               canEdit={canEdit}
               canDelete={canDelete}
+              onReply={() => onReply(message)}
               onEdit={startEditing}
               onDelete={() => setDeleteModalOpen(true)}
               align={isOwn ? "right" : "left"}
             />
           </div>
+        )}
+
+        {message.replyTo && !isEditing && (
+          <QuotedMessagePreview
+            variant="bubble"
+            isOwnBubble={isOwn}
+            senderName={message.replyTo.senderId === currentUserId ? "Vos" : message.replyTo.senderName}
+            preview={message.replyTo.preview}
+            isDeleted={Boolean(message.replyTo.deletedAt)}
+            onClick={() => onJumpToMessage(message.replyTo!.id)}
+          />
         )}
 
         {showSender && !isOwn && (

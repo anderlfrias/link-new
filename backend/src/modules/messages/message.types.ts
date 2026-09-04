@@ -6,6 +6,9 @@ export interface CreateMessageInput {
   /// Ids de `StoredFile` ya existentes a adjuntar. Este módulo no sube
   /// archivos (ver `../files`), solo referencia los ya subidos ahí.
   fileIds?: string[];
+  /// Mensaje al que este responde (tipo WhatsApp/Telegram) — debe pertenecer
+  /// a la misma conversación, se valida en `sendMessage` (message.service.ts).
+  replyToId?: string;
 }
 
 export interface UpdateMessageInput {
@@ -39,9 +42,24 @@ export interface ConversationFileResponse {
   senderId: string;
 }
 
+/// Vista resumida del mensaje original, embebida en la respuesta del que
+/// responde — evita un round-trip aparte para mostrar la cita (mismo criterio
+/// que `sender`/`files` acá al lado). `preview` sale de `buildLastMessagePreview`
+/// (`../conversations/conversation.service.ts`) — mismo texto que ya se usa para
+/// la lista de conversaciones y el cuerpo del push, así "Mensaje eliminado" /
+/// "📎 Archivo adjunto" nunca queda inconsistente entre pantallas.
+export interface MessageReplyPreview {
+  id: string;
+  senderId: string;
+  senderName: string;
+  preview: string;
+  deletedAt: Date | null;
+}
+
 export type MessageWithRelations = Message & {
   sender: Pick<User, "id" | "name" | "email" | "avatarFileId">;
   files: (MessageFile & { file: StoredFile })[];
+  replyTo: MessageReplyPreview | null;
 };
 
 /// Forma pública de un mensaje: la relación con sus destinatarios (todo

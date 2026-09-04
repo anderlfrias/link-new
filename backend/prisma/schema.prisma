@@ -289,6 +289,15 @@ model Message {
   senderId String @map("sender_id")
   sender   User   @relation("MessageSender", fields: [senderId], references: [id])
 
+  /// Mensaje al que este responde (tipo WhatsApp/Telegram) — mismo `conversationId`
+  /// siempre, se valida en message.service.ts. Nunca se toca al editar/borrar el
+  /// original: si el original se borra (borrado lógico), el puntero sigue firme y
+  /// el cliente arma la cita mostrando "Mensaje eliminado" (ver `replyTo` en
+  /// message.service.ts, mismo criterio que `buildLastMessagePreview`).
+  replyToId String?  @map("reply_to_id")
+  replyTo   Message? @relation("MessageReplyTo", fields: [replyToId], references: [id])
+  replies   Message[] @relation("MessageReplyTo")
+
   type    MessageType
   /// Contenido del mensaje. Para mensajes SYSTEM, es el texto descriptivo del evento.
   content String
@@ -309,6 +318,7 @@ model Message {
 
   @@index([conversationId])
   @@index([senderId])
+  @@index([replyToId])
   @@map("messages")
 }
 

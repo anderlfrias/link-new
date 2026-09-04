@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconLoader2 } from "@tabler/icons-react";
 import { MessageBubble } from "@/features/messages/components/MessageBubble";
 import { TypingIndicator } from "@/features/messages/components/TypingIndicator";
 import { formatDateSeparator } from "@/utils/format-date";
+import { cn } from "@/utils/cn";
 import type { Message } from "@/features/messages/types/message.types";
 import type { MessagesStatus } from "@/features/messages/hooks/use-messages";
 import type { ConversationType } from "@/features/conversations/types/conversation.types";
@@ -20,10 +21,13 @@ interface MessageListProps {
   isTyping: boolean;
   onEditMessage: (messageId: string, content: string) => Promise<void>;
   onDeleteMessage: (messageId: string) => Promise<void>;
+  onReplyMessage: (message: Message) => void;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
 const LOAD_MORE_THRESHOLD = 80;
+/** Cuánto queda "encendida" la burbuja al saltar a un mensaje citado (ver `jumpToMessage`) — suficiente para que el ojo la encuentre sin sentirse pegajoso. */
+const HIGHLIGHT_DURATION_MS = 1500;
 
 /** Fondo del hilo — patrón propio de Link (ver globals.css / public/chat-pattern-*.svg),
  * mismo espíritu que el wallpaper de WhatsApp/Telegram. Vía CSS vars (no clases Tailwind)
@@ -45,10 +49,34 @@ export function MessageList({
   isTyping,
   onEditMessage,
   onDeleteMessage,
+  onReplyMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
   const stickToBottomRef = useRef(true);
+  const messageElementsRef = useRef(new Map<string, HTMLDivElement>());
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Saltar al mensaje citado desde una respuesta (ver MessageBubble) — solo
+  // funciona si ya está cargado en este hilo; si es más viejo que lo que se
+  // paginó hasta ahora, no hay a dónde saltar todavía (habría que pedir más
+  // historial primero, no implementado). `scrollIntoView` + un resalte
+  // temporal es el mismo patrón que WhatsApp/Telegram usan para esto.
+  function jumpToMessage(messageId: string) {
+    const element = messageElementsRef.current.get(messageId);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    setHighlightedId(messageId);
+    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), HIGHLIGHT_DURATION_MS);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -137,7 +165,17 @@ export function MessageList({
           (showDateSeparator || previousMessage?.senderId !== message.senderId);
 
         return (
-          <div key={message.id}>
+          <div
+            key={message.id}
+            ref={(element) => {
+              if (element) messageElementsRef.current.set(message.id, element);
+              else messageElementsRef.current.delete(message.id);
+            }}
+            className={cn(
+              "rounded-2xl transition-colors duration-300",
+              highlightedId === message.id && "bg-brand-blue/10 dark:bg-brand-blue/15",
+            )}
+          >
             {showDateSeparator && (
               <div className="my-3 flex justify-center">
                 <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
@@ -149,8 +187,11 @@ export function MessageList({
               message={message}
               isOwn={isOwn}
               showSender={showSender}
+              currentUserId={currentUserId}
               onEdit={onEditMessage}
               onDelete={onDeleteMessage}
+              onReply={onReplyMessage}
+              onJumpToMessage={jumpToMessage}
             />
           </div>
         );

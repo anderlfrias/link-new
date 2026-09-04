@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconCornerUpLeft, IconPencil, IconTrash } from "@tabler/icons-react";
 
 interface MessageOptionsMenuProps {
   open: boolean;
   onClose: () => void;
+  canReply: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  onReply: () => void;
   onEdit: () => void;
   onDelete: () => void;
   align: "left" | "right";
@@ -15,12 +17,16 @@ interface MessageOptionsMenuProps {
 
 /** Mismo patrón que ConversationOptionsMenu.tsx: panel absoluto + mousedown
  * afuera cierra, controlado desde afuera para que tanto el botón "⋮" (hover,
- * desktop) como el long-press (mobile) lo puedan abrir sobre el mismo bubble. */
+ * desktop) como el long-press (mobile) lo puedan abrir sobre el mismo bubble.
+ * "Responder" va primero (mismo orden que WhatsApp/Telegram) — es la única
+ * acción disponible sobre CUALQUIER mensaje, propio o ajeno. */
 export function MessageOptionsMenu({
   open,
   onClose,
+  canReply,
   canEdit,
   canDelete,
+  onReply,
   onEdit,
   onDelete,
   align,
@@ -38,18 +44,34 @@ export function MessageOptionsMenu({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open, onClose]);
 
-  if (!open || (!canEdit && !canDelete)) return null;
+  if (!open || (!canReply && !canEdit && !canDelete)) return null;
 
   return (
     <div
       ref={containerRef}
+      role="menu"
       className={`absolute top-full z-20 mt-1 w-40 overflow-hidden rounded-lg border border-black/5 bg-white py-1 text-left shadow-lg dark:border-white/10 dark:bg-neutral-900 ${
         align === "right" ? "right-0" : "left-0"
       }`}
     >
+      {canReply && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onReply();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          <IconCornerUpLeft size={16} stroke={1.75} />
+          Responder
+        </button>
+      )}
       {canEdit && (
         <button
           type="button"
+          role="menuitem"
           onClick={() => {
             onClose();
             onEdit();
@@ -63,6 +85,7 @@ export function MessageOptionsMenu({
       {canDelete && (
         <button
           type="button"
+          role="menuitem"
           onClick={() => {
             onClose();
             onDelete();

@@ -14,6 +14,7 @@ import { MessageInput } from "@/features/messages/components/MessageInput";
 import { ConversationDetailPanel } from "@/features/conversations/components/ConversationDetailPanel";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
+import type { Message } from "@/features/messages/types/message.types";
 
 interface ConversationViewProps {
   conversationId: string;
@@ -35,6 +36,15 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const dragCounter = useRef(0);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<Message | null>(null);
+
+  // El propio `send` no sabe nada de "a qué estoy respondiendo" — ese estado
+  // es puramente de esta pantalla (qué está armado en el composer ahora
+  // mismo), por eso se resuelve acá y no en use-messages.ts.
+  async function handleSend(content: string, fileIds?: string[]) {
+    await send(content, fileIds, replyTarget?.id);
+    setReplyTarget(null);
+  }
 
   function handleDragEnter(event: DragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.types.includes("Files")) return;
@@ -118,13 +128,17 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           isTyping={typingNames.length > 0}
           onEditMessage={edit}
           onDeleteMessage={remove}
+          onReplyMessage={setReplyTarget}
         />
         <MessageInput
           conversationId={conversationId}
-          onSend={send}
+          onSend={handleSend}
           onTyping={notifyTyping}
           onStopTyping={notifyStopped}
           attachmentsState={attachmentsState}
+          replyTo={replyTarget}
+          onCancelReply={() => setReplyTarget(null)}
+          currentUserId={currentUserId}
         />
         {isDraggingFile && (
           <div className="pointer-events-none absolute inset-0 z-20 p-10 bg-brand-ink/5 dark:bg-black/35 backdrop-blur-[2px] transition-all duration-300">

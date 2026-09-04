@@ -18,12 +18,15 @@ import {
 import { AttachmentErrorModal } from "@/features/messages/components/AttachmentErrorModal";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { EmojiPicker } from "@/features/messages/components/EmojiPicker";
+import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
 import { useVoiceRecorder } from "@/features/messages/hooks/use-voice-recorder";
 import { useAuth } from "@/providers/auth-provider";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { formatDuration } from "@/utils/format-duration";
+import { buildMessagePreview } from "@/utils/message-preview";
+import type { Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
   conversationId: string;
@@ -31,6 +34,12 @@ interface MessageInputProps {
   onTyping: () => void;
   onStopTyping: () => void;
   attachmentsState: ReturnType<typeof useMessageAttachments>;
+  /** Mensaje al que se está respondiendo — el envío en sí lo resuelve el
+   * `onSend` del padre (ver ConversationView.tsx), este componente solo
+   * muestra la cita y permite cancelarla. */
+  replyTo: Message | null;
+  onCancelReply: () => void;
+  currentUserId: string;
 }
 
 /** `accept: undefined` para "Documento" — a propósito, sin filtro (el
@@ -56,6 +65,9 @@ export function MessageInput({
   onTyping,
   onStopTyping,
   attachmentsState,
+  replyTo,
+  onCancelReply,
+  currentUserId,
 }: MessageInputProps) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
@@ -92,6 +104,12 @@ export function MessageInput({
       textareaRef.current?.focus();
     }
   }, [conversationId]);
+
+  // Elegir "Responder" en un mensaje lleva el foco al campo de una — igual
+  // que WhatsApp/Telegram, para poder escribir la respuesta sin un click de más.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus();
+  }, [replyTo]);
 
   // Autogrow: por default un <textarea rows={1}> no crece con el contenido —
   // un mensaje de varias líneas queda "escondido" scrolleando dentro de una
@@ -222,6 +240,17 @@ export function MessageInput({
 
   return (
     <div className="min-w-0 border-t border-black/5 dark:border-white/10">
+      {replyTo && (
+        <div className="pt-2.5 pl-3 pr-5">
+          <QuotedMessagePreview
+            variant="composer"
+            senderName={replyTo.senderId === currentUserId ? "Vos" : replyTo.sender.name}
+            preview={buildMessagePreview(replyTo)}
+            isDeleted={false}
+            onCancel={onCancelReply}
+          />
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="flex min-w-0 gap-2 overflow-x-auto pl-3 pr-5 pt-2.5">
           {attachments.map((attachment) => (

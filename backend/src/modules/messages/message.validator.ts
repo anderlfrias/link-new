@@ -7,6 +7,7 @@ export const createMessageSchema = yup
   .object({
     content: yup.string().trim().max(4000).default(""),
     fileIds: yup.array().of(yup.string().required()),
+    replyToId: yup.string().optional(),
   })
   .test(
     "content-or-attachment",

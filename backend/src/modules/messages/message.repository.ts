@@ -4,6 +4,19 @@ import { prisma } from "../../config/prisma";
 const withRelations = {
   sender: { select: { id: true, name: true, email: true, avatarFileId: true } },
   files: { include: { file: true } },
+  // Sin filtrar `deletedAt` acá tampoco (mismo criterio que `files[].file` más
+  // abajo, ver README): si el original se borra después, la cita debe poder
+  // seguir mostrando quién lo mandó y que fue borrado, no desaparecer.
+  replyTo: {
+    select: {
+      id: true,
+      senderId: true,
+      content: true,
+      deletedAt: true,
+      files: { select: { id: true } },
+      sender: { select: { name: true } },
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 const fileWithRelations = {
@@ -26,6 +39,7 @@ export function createMessage(data: {
   content: string;
   type?: MessageType;
   fileIds?: string[];
+  replyToId?: string;
 }) {
   return prisma.$transaction(async (tx) => {
     const message = await tx.message.create({
@@ -35,6 +49,7 @@ export function createMessage(data: {
         type: data.type ?? MessageType.TEXT,
         content: data.content,
         files: data.fileIds?.length ? { create: data.fileIds.map((fileId) => ({ fileId })) } : undefined,
+        replyToId: data.replyToId,
       },
       include: withRelations,
     });
@@ -77,6 +92,16 @@ export function listFiles(conversationId: string, options: { beforeId?: string; 
 
 export function findById(messageId: string) {
   return prisma.message.findFirst({ where: { id: messageId, deletedAt: null }, include: withRelations });
+}
+
+/// A diferencia de `findById`, no filtra `deletedAt`: valida `replyToId` al
+/// mandar un mensaje (`sendMessage`, message.service.ts), y ahí un mensaje ya
+/// borrado sigue siendo un destino válido para responder — solo debe existir
+/// y pertenecer a la misma conversación, no importa si ya se borró mientras
+/// tanto (ver comentario de `replyToId` en schema.prisma).
+export async function existsInConversation(messageId: string, conversationId: string): Promise<boolean> {
+  const message = await prisma.message.findFirst({ where: { id: messageId, conversationId }, select: { id: true } });
+  return message !== null;
 }
 
 export function updateContent(messageId: string, content: string) {

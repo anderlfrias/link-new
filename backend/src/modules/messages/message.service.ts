@@ -21,10 +21,35 @@ import {
   CreateMessageInput,
   ListConversationFilesOptions,
   ListMessagesOptions,
+  MessageReplyPreview,
   MessageWithReceipts,
   MessageWithRelations,
   UpdateMessageInput,
 } from "./message.types";
+
+/// `MessageRepository.createMessage`/`listMessages`/`updateContent` traen
+/// `replyTo` con la forma cruda del `select` de Prisma (ver `withRelations` en
+/// message.repository.ts) — este módulo, no el repositorio, es quien conoce
+/// `buildLastMessagePreview` (capa de servicio, ver conversation.service.ts),
+/// así que la conversión al shape público (`MessageReplyPreview`) vive acá.
+function toReplyPreview(
+  raw: { id: string; senderId: string; content: string; deletedAt: Date | null; files: { id: string }[]; sender: { name: string } } | null,
+): MessageReplyPreview | null {
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    senderId: raw.senderId,
+    senderName: raw.sender.name,
+    preview: buildLastMessagePreview(raw),
+    deletedAt: raw.deletedAt,
+  };
+}
+
+function withReplyPreview<T extends { replyTo: Parameters<typeof toReplyPreview>[0] }>(
+  message: T,
+): Omit<T, "replyTo"> & { replyTo: MessageReplyPreview | null } {
+  return { ...message, replyTo: toReplyPreview(message.replyTo) };
+}
 
 /// Avisa a cada miembro (en su room personal, no la de la conversación) que
 /// el "último mensaje" de la conversación cambió, para que su lista de
@@ -59,7 +84,7 @@ async function assertOwnedMessage(conversationId: string, messageId: string): Pr
   if (!message || message.conversationId !== conversationId) {
     throw new NotFoundError("Message not found");
   }
-  return message;
+  return withReplyPreview(message);
 }
 
 /// Ventanas de tiempo configurables (ver AppSettings, allowMessageEdit/
@@ -93,11 +118,19 @@ export async function sendMessage(
     }
   }
 
+  // No filtra `deletedAt` (ver `existsInConversation`): responder a un mensaje
+  // que se borró justo mientras el usuario tenía la cita armada en su
+  // composer debe seguir funcionando, igual que WhatsApp/Telegram.
+  if (input.replyToId && !(await MessageRepository.existsInConversation(input.replyToId, conversationId))) {
+    throw new BadRequestError("El mensaje al que querés responder ya no existe en esta conversación.");
+  }
+
   const message = await MessageRepository.createMessage({
     conversationId,
     senderId: currentUserId,
     content: input.content.trim(),
     fileIds,
+    replyToId: input.replyToId,
   });
 
   await MessageRepository.logAudit({
@@ -126,7 +159,7 @@ export async function sendMessage(
       status: deliveredNow.has(member.userId) ? "delivered" : "sent",
     }));
 
-  const messageWithReceipts: MessageWithReceipts = { ...message, receipts };
+  const messageWithReceipts: MessageWithReceipts = { ...withReplyPreview(message), receipts };
   io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
   await notifyConversationListChanged(conversation.members, conversationId);
 
@@ -175,7 +208,7 @@ export async function listMessages(
   }
 
   return ordered.map((message) => ({
-    ...message,
+    ...withReplyPreview(message),
     receipts: computeReceipts(conversation.members, message),
   }));
 }
@@ -230,7 +263,7 @@ export async function editMessage(
   });
 
   const messageWithReceipts: MessageWithReceipts = {
-    ...updated,
+    ...withReplyPreview(updated),
     receipts: computeReceipts(conversation.members, updated),
   };
 

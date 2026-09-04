@@ -21,14 +21,16 @@ Todas requieren ser miembro activo de `:conversationId` — se verifica con `ass
 ### `POST /` — Enviar mensaje
 
 ```json
-{ "content": "Hola!", "fileIds": ["<storedFileId>"] }
+{ "content": "Hola!", "fileIds": ["<storedFileId>"], "replyToId": "<messageId>" }
 ```
+
+`replyToId` es opcional — responder a un mensaje puntual de la conversación (tipo WhatsApp/Telegram, ver `replyToId`/`replyTo` en `prisma/schema.prisma`). Solo se valida que exista y pertenezca a esta misma conversación (`400` si no) — a propósito **no** se exige que siga sin borrar: el `replyToId` es un puntero fijo que nunca se toca después de crear el mensaje, así que si el original se borra (borrado lógico) más tarde, la cita simplemente empieza a mostrar `"Mensaje eliminado"` la próxima vez que se lea (`replyTo.preview`, calculado en el momento de leer, no guardado). Esto es intencional: si el original se borra justo mientras alguien tenía la cita armada en su composer, el envío no debe fallar por eso.
 
 `fileIds` es opcional (adjuntos ya subidos como `StoredFile` — subidos antes vía [`files`](../files/README.md), este módulo no sube archivos), pero no ilimitado: si `AppSettings.maxFilesPerMessage` no es `null`, `400` cuando `fileIds` trae más entradas que ese límite (ver [`settings`](../settings/README.md#consumidores)) — antes incluso de chequear que esos archivos existan. Siempre crea un mensaje `type: TEXT`; `type: SYSTEM` está reservado para narrar eventos de la conversación (agregar/quitar miembro, cambio de nombre, etc., ver [backend/README.md](../../../README.md#propósito-de-los-mensajes-de-tipo-system)) — **este módulo todavía no los genera**, es el próximo paso natural una vez `conversations` esté listo para llamarlo.
 
 Además de crear el mensaje, actualiza en la misma transacción `Conversation.lastMessageId`/`lastMessageAt`/`lastMessageSenderId` (los punteros denormalizados que usa `conversations` para ordenar la lista, calcular no leídos, y mostrar el estado del último mensaje — ver [Confirmación de entrega y lectura](#confirmación-de-entrega-y-lectura)) — mantenerlos al día es responsabilidad de quien los vuelve stale, y eso es este módulo, no `conversations`.
 
-Respuesta `201` con el mensaje, su remitente (`sender: { id, name, email, avatarFileId }`), sus archivos, y `receipts` (ver más abajo). Emite `message:created` (con el mismo `receipts`) a la room de la conversación.
+Respuesta `201` con el mensaje, su remitente (`sender: { id, name, email, avatarFileId }`), sus archivos, `replyTo` (vista resumida del original citado, o `null`), y `receipts` (ver más abajo). Emite `message:created` (con el mismo `receipts`/`replyTo`) a la room de la conversación. `replyTo` sale de `buildLastMessagePreview` (`../conversations/conversation.service.ts`) — el mismo criterio que ya usa la lista de conversaciones y el cuerpo del push, así "Mensaje eliminado"/"📎 Archivo adjunto" nunca queda inconsistente entre pantallas (ver `toReplyPreview` en `message.service.ts`).
 
 `files[].file` es el `StoredFile` completo (no `toStoredFileResponse`, a diferencia de `GET /files` de abajo) — a propósito **sin** filtrar `deletedAt`, tanto acá como en `GET /` y `message:updated`: si un admin borra el archivo después (ver [`files`, "Gestión de storage"](../files/README.md#gestión-de-storage-admin)), el mensaje debe poder seguir mostrando que hubo un adjunto ahí, solo que ya no está disponible, en vez de que desaparezca o rompa la carga — el cliente es quien decide cómo renderizar eso a partir de `file.deletedAt` (ver `frontend/src/features/messages/components/MessageAttachments.tsx`). Contrastar con `GET /files`, que sí filtra `deletedAt: null` (ese panel es "qué hay disponible para ver ahora", no el historial del chat).
 
