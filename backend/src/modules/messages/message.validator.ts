@@ -18,3 +18,7 @@ export const createMessageSchema = yup
 export const updateMessageSchema = yup.object({
   content: yup.string().trim().min(1).max(4000).required(),
 });
+
+export const forwardMessageSchema = yup.object({
+  messageId: yup.string().required(),
+});

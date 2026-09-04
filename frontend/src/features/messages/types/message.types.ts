@@ -36,6 +36,18 @@ export interface MessageReplyPreview {
   deletedAt: string | null;
 }
 
+/** Quién mandó el mensaje original de un reenvío — a propósito nunca incluye
+ * nada de la conversación de origen (ver backend/API.md sección 6): el
+ * destino puede tener miembros que no pertenecen a esa conversación, así que
+ * revelarla filtraría de qué chat/grupo salió. Mostrar `senderName` en la UI
+ * está limitado a cuando el destino es tu propia conversación `SELF` — ver
+ * MessageBubble.tsx. */
+export interface ForwardedFromPreview {
+  id: string;
+  senderId: string;
+  senderName: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -50,6 +62,8 @@ export interface Message {
   files: MessageFile[];
   replyToId: string | null;
   replyTo: MessageReplyPreview | null;
+  forwardedFromId: string | null;
+  forwardedFrom: ForwardedFromPreview | null;
   receipts: MessageReceipt[];
 }
 

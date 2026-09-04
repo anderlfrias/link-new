@@ -22,6 +22,7 @@ interface MessageListProps {
   onEditMessage: (messageId: string, content: string) => Promise<void>;
   onDeleteMessage: (messageId: string) => Promise<void>;
   onReplyMessage: (message: Message) => void;
+  onForwardMessage: (message: Message) => void;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
@@ -50,6 +51,7 @@ export function MessageList({
   onEditMessage,
   onDeleteMessage,
   onReplyMessage,
+  onForwardMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const prevLengthRef = useRef(0);
@@ -187,10 +189,12 @@ export function MessageList({
               message={message}
               isOwn={isOwn}
               showSender={showSender}
+              isSelfChat={conversationType === "SELF"}
               currentUserId={currentUserId}
               onEdit={onEditMessage}
               onDelete={onDeleteMessage}
               onReply={onReplyMessage}
+              onForward={onForwardMessage}
               onJumpToMessage={jumpToMessage}
             />
           </div>

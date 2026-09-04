@@ -11,6 +11,7 @@ Base: `/api/v1/conversations/:conversationId/messages` (montado en `route.ts` **
 | Método | Ruta | Descripción |
 |---|---|---|
 | `POST` | `/` | Envía un mensaje. |
+| `POST` | `/forward` | Reenvía un mensaje (de cualquier conversación donde seas miembro) a `:conversationId`. |
 | `GET` | `/` | Lista mensajes, paginado por cursor. |
 | `GET` | `/files` | Archivos compartidos en la conversación, paginado por cursor. |
 | `PATCH` | `/:id` | Edita el contenido (solo el propio autor, solo `TEXT`). |
@@ -33,6 +34,22 @@ Además de crear el mensaje, actualiza en la misma transacción `Conversation.la
 Respuesta `201` con el mensaje, su remitente (`sender: { id, name, email, avatarFileId }`), sus archivos, `replyTo` (vista resumida del original citado, o `null`), y `receipts` (ver más abajo). Emite `message:created` (con el mismo `receipts`/`replyTo`) a la room de la conversación. `replyTo` sale de `buildLastMessagePreview` (`../conversations/conversation.service.ts`) — el mismo criterio que ya usa la lista de conversaciones y el cuerpo del push, así "Mensaje eliminado"/"📎 Archivo adjunto" nunca queda inconsistente entre pantallas (ver `toReplyPreview` en `message.service.ts`).
 
 `files[].file` es el `StoredFile` completo (no `toStoredFileResponse`, a diferencia de `GET /files` de abajo) — a propósito **sin** filtrar `deletedAt`, tanto acá como en `GET /` y `message:updated`: si un admin borra el archivo después (ver [`files`, "Gestión de storage"](../files/README.md#gestión-de-storage-admin)), el mensaje debe poder seguir mostrando que hubo un adjunto ahí, solo que ya no está disponible, en vez de que desaparezca o rompa la carga — el cliente es quien decide cómo renderizar eso a partir de `file.deletedAt` (ver `frontend/src/features/messages/components/MessageAttachments.tsx`). Contrastar con `GET /files`, que sí filtra `deletedAt: null` (ese panel es "qué hay disponible para ver ahora", no el historial del chat).
+
+### `POST /forward` — Reenviar un mensaje
+
+```json
+{ "messageId": "<messageId>" }
+```
+
+`:conversationId` es el **destino**; `messageId` puede pertenecer a cualquier otra conversación donde el usuario sea miembro (`assertMembership` se llama dos veces: una para el destino, otra para la conversación de origen del mensaje — `404`/`403` si no es miembro de esa). `400` si `messageId` no existe o ya está borrado — no se puede reenviar algo que el propio usuario ya no puede ver.
+
+A diferencia de responder (`replyToId`), reenviar **copia** `content` y `fileIds` del mensaje original hacia el nuevo (mismo `sendMessage` internamente, vía un núcleo compartido `createAndDeliverMessage`) — el mensaje nuevo tiene su propio contenido, no depende de que el original siga existiendo. Lo único que se guarda como puntero es `forwardedFromId`, usado solo para reconstruir quién lo mandó (`forwardedFrom.senderName`, resuelto en vivo desde ese puntero, igual que `replyTo`) al leer. Auditoría: `FORWARD_MESSAGE` (no `SEND_MESSAGE`), para poder distinguir un reenvío de un mensaje escrito de cero en `ChatAuditLog`.
+
+**`forwardedFrom` nunca incluye nada de la conversación de origen** (ni `conversationId`, ni su tipo, ni su nombre — ver `ForwardedFromPreview` en `message.types.ts`): el destino de un reenvío puede tener miembros que no pertenecen a esa conversación de origen, así que devolverlos filtraría de qué chat/grupo salió el mensaje a gente sin acceso a él. `message.repository.ts` ni siquiera lo trae en el `select` — no es una omisión del cliente, es que el dato no viaja. El propio `senderName` tampoco se muestra siempre en la UI: el criterio (frontend, `MessageBubble.tsx`) es solo atribuirlo cuando el DESTINO es la conversación `SELF` de quien reenvía ("Mensajes guardados", donde el reenvío es privado de esa persona); en cualquier otro destino se muestra únicamente que el mensaje fue reenviado, sin nombre.
+
+Sin restricción de tipos: se puede reenviar desde/hacia `PRIVATE`, `GROUP` o `SELF` — reenviarte algo a "Mensajes guardados" es el caso de uso típico (ver [`conversations`, sección SELF](../conversations/README.md)), pero no el único.
+
+**Reenvío a varios destinos a la vez** (grupos, personas y/o "Mensajes guardados", tipo WhatsApp/Telegram) es puramente un patrón del frontend, no un endpoint nuevo: `ForwardMessageModal.tsx` deja marcar varios chats con un check-badge (reutilizando `ContactRow`) y `useForwardMessage` llama a este mismo `POST /forward` una vez por cada destino elegido, en paralelo (`Promise.allSettled`) — creando primero la conversación `PRIVATE`/`SELF` para los destinos que aún no existen. Si algún destino falla, no cancela a los demás (el hook cuenta éxitos/fallos y expone un mensaje de error si no todos llegaron). Con varios destinos posibles ya no tiene sentido navegar a "el" chat de destino tras reenviar — a diferencia de antes, el modal ya no hace `router.push`, solo se cierra si todos los envíos tuvieron éxito.
 
 ### `GET /` — Listar mensajes
 
@@ -76,7 +93,7 @@ Cada mensaje devuelto por `POST /`, `GET /` o `PATCH /:id` (y sus equivalentes p
 
 ## Auditoría
 
-`SEND_MESSAGE`, `EDIT_MESSAGE`, `DELETE_MESSAGE` en `ChatAuditLog`, con `conversationId` y `messageId`. `CREATE_CONVERSATION`/`ADD_MEMBER`/`REMOVE_MEMBER`/`CHANGE_NAME`/`CHANGE_IMAGE` los escribe `conversations`, no este módulo.
+`SEND_MESSAGE`, `FORWARD_MESSAGE`, `EDIT_MESSAGE`, `DELETE_MESSAGE` en `ChatAuditLog`, con `conversationId` y `messageId`. `CREATE_CONVERSATION`/`ADD_MEMBER`/`REMOVE_MEMBER`/`CHANGE_NAME`/`CHANGE_IMAGE` los escribe `conversations`, no este módulo.
 
 ## Eventos de socket
 

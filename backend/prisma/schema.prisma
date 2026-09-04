@@ -68,6 +68,7 @@ enum ChatAuditAction {
   ADD_MEMBER          @map("add_member")
   REMOVE_MEMBER       @map("remove_member")
   SEND_MESSAGE        @map("send_message")
+  FORWARD_MESSAGE     @map("forward_message")
   EDIT_MESSAGE        @map("edit_message")
   DELETE_MESSAGE      @map("delete_message")
   CHANGE_NAME         @map("change_name")
@@ -305,6 +306,19 @@ model Message {
   replyTo   Message? @relation("MessageReplyTo", fields: [replyToId], references: [id])
   replies   Message[] @relation("MessageReplyTo")
 
+  /// Mensaje original si este es un reenvío (tipo WhatsApp/Telegram) — a
+  /// diferencia de `replyToId`, SÍ puede apuntar a un mensaje de OTRA
+  /// conversación (reenviar cruza conversaciones por naturaleza). El mensaje
+  /// reenviado es una copia independiente (`content`/adjuntos propios, ver
+  /// `forwardMessage` en message.service.ts) — el puntero es solo para poder
+  /// mostrar "Reenviado de <remitente original> · <conversación de origen>"
+  /// resuelto en vivo (mismo criterio que `replyTo`: si el original se borra
+  /// o se renombra el grupo de origen después, el reenvío ya hecho lo refleja
+  /// solo la próxima vez que se lea, nunca se "congela" en el momento del reenvío).
+  forwardedFromId String?   @map("forwarded_from_id")
+  forwardedFrom   Message?  @relation("MessageForward", fields: [forwardedFromId], references: [id])
+  forwardedTo     Message[] @relation("MessageForward")
+
   type    MessageType
   /// Contenido del mensaje. Para mensajes SYSTEM, es el texto descriptivo del evento.
   content String
@@ -326,6 +340,7 @@ model Message {
   @@index([conversationId])
   @@index([senderId])
   @@index([replyToId])
+  @@index([forwardedFromId])
   @@map("messages")
 }
 

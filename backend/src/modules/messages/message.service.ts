@@ -7,7 +7,7 @@ import {
 } from "../conversations/conversation.service";
 import * as ConversationRepository from "../conversations/conversation.repository";
 import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
-import { ConversationMemberWithUser, MessageReceipt } from "../conversations/conversation.types";
+import { ConversationMemberWithUser, ConversationWithMembers, MessageReceipt } from "../conversations/conversation.types";
 import { toStoredFileResponse } from "../files/file.service";
 import * as PushService from "../push/push.service";
 import * as SettingsService from "../settings/settings.service";
@@ -19,6 +19,7 @@ import { MESSAGE_EVENTS } from "./message.socket";
 import {
   ConversationFileResponse,
   CreateMessageInput,
+  ForwardedFromPreview,
   ListConversationFilesOptions,
   ListMessagesOptions,
   MessageReplyPreview,
@@ -45,10 +46,28 @@ function toReplyPreview(
   };
 }
 
-function withReplyPreview<T extends { replyTo: Parameters<typeof toReplyPreview>[0] }>(
+/// Mismo criterio que `toReplyPreview` — `forwardedFrom` también trae la
+/// forma cruda del `select` de Prisma y se traduce acá. A propósito no trae
+/// nada de la conversación de origen (ver `ForwardedFromPreview`).
+function toForwardedFromPreview(
+  raw: { id: string; senderId: string; sender: { name: string } } | null,
+): ForwardedFromPreview | null {
+  if (!raw) return null;
+  return { id: raw.id, senderId: raw.senderId, senderName: raw.sender.name };
+}
+
+function withPreviews<
+  T extends {
+    replyTo: Parameters<typeof toReplyPreview>[0];
+    forwardedFrom: Parameters<typeof toForwardedFromPreview>[0];
+  },
+>(
   message: T,
-): Omit<T, "replyTo"> & { replyTo: MessageReplyPreview | null } {
-  return { ...message, replyTo: toReplyPreview(message.replyTo) };
+): Omit<T, "replyTo" | "forwardedFrom"> & {
+  replyTo: MessageReplyPreview | null;
+  forwardedFrom: ForwardedFromPreview | null;
+} {
+  return { ...message, replyTo: toReplyPreview(message.replyTo), forwardedFrom: toForwardedFromPreview(message.forwardedFrom) };
 }
 
 /// Avisa a cada miembro (en su room personal, no la de la conversación) que
@@ -84,7 +103,7 @@ async function assertOwnedMessage(conversationId: string, messageId: string): Pr
   if (!message || message.conversationId !== conversationId) {
     throw new NotFoundError("Message not found");
   }
-  return withReplyPreview(message);
+  return withPreviews(message);
 }
 
 /// Ventanas de tiempo configurables (ver AppSettings, allowMessageEdit/
@@ -96,6 +115,89 @@ function assertWithinTimeLimit(sentAt: Date, limitMinutes: number | null, action
   if (elapsedMinutes > limitMinutes) {
     throw new ForbiddenError(`The time window to ${action} this message has expired`);
   }
+}
+
+interface CreateAndDeliverParams {
+  content: string;
+  fileIds?: string[];
+  replyToId?: string;
+  forwardedFromId?: string;
+  auditAction: ChatAuditAction;
+}
+
+/// Núcleo compartido por `sendMessage` y `forwardMessage`: crear la fila,
+/// auditarla, calcular entrega/recibos, emitir por socket, refrescar la
+/// lista de conversaciones de cada miembro, y mandar push a quien no está
+/// conectado. Lo único que cambia entre las dos es CÓMO se validó/armó
+/// `content`/`fileIds` antes de llegar acá, y qué `ChatAuditAction` corresponde.
+async function createAndDeliverMessage(
+  currentUserId: string,
+  conversationId: string,
+  conversation: ConversationWithMembers,
+  params: CreateAndDeliverParams,
+): Promise<MessageWithReceipts> {
+  const message = await MessageRepository.createMessage({
+    conversationId,
+    senderId: currentUserId,
+    content: params.content,
+    fileIds: params.fileIds,
+    replyToId: params.replyToId,
+    forwardedFromId: params.forwardedFromId,
+  });
+
+  await MessageRepository.logAudit({
+    userId: currentUserId,
+    action: params.auditAction,
+    conversationId,
+    messageId: message.id,
+  });
+
+  // Quien ya está conectado a la room lo recibe en el acto: eso ES "entregado"
+  // (ver markDelivered en conversation.service.ts). El resto queda en "sent"
+  // hasta que se conecte o pida el historial (ver listMessages más abajo).
+  const io = getIO();
+  const connectedUserIds = await getConnectedUserIds(io, conversationId);
+  const deliveredNow = new Set(connectedUserIds.filter((userId) => userId !== currentUserId));
+  await Promise.all(
+    Array.from(deliveredNow).map((userId) =>
+      markDelivered(conversationId, userId, message.id, message.createdAt, conversation.members),
+    ),
+  );
+
+  const receipts: MessageReceipt[] = conversation.members
+    .filter((member) => member.userId !== currentUserId)
+    .map((member) => ({
+      userId: member.userId,
+      status: deliveredNow.has(member.userId) ? "delivered" : "sent",
+    }));
+
+  const messageWithReceipts: MessageWithReceipts = { ...withPreviews(message), receipts };
+  io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
+  await notifyConversationListChanged(conversation.members, conversationId);
+
+  // Web Push para quien no tiene ESTA conversación abierta ahora mismo —
+  // reutiliza `deliveredNow` (arriba) en vez de recalcular "quién está
+  // conectado", porque es exactamente la misma pregunta. A diferencia de la
+  // room de socket, un push llega aunque la pestaña esté cerrada o el
+  // navegador entero cerrado (ver push/README.md) — por eso vale la pena
+  // mandarlo incluso a quien tiene la app abierta pero en OTRA conversación.
+  // No se espera (`void`): un push lento o caído nunca debe demorar ni tumbar
+  // la respuesta de este POST.
+  const offlineMemberIds = conversation.members
+    .map((member) => member.userId)
+    .filter((userId) => userId !== currentUserId && !deliveredNow.has(userId));
+  if (offlineMemberIds.length > 0) {
+    const preview = buildLastMessagePreview(message);
+    const isGroup = conversation.type === ConversationType.GROUP;
+    void PushService.notifyUsers(offlineMemberIds, {
+      title: isGroup ? (conversation.name ?? "Grupo") : message.sender.name,
+      body: isGroup ? `${message.sender.name}: ${preview}` : preview,
+      url: `/conversations/${conversationId}`,
+      tag: conversationId,
+    });
+  }
+
+  return messageWithReceipts;
 }
 
 export async function sendMessage(
@@ -125,67 +227,42 @@ export async function sendMessage(
     throw new BadRequestError("El mensaje al que querés responder ya no existe en esta conversación.");
   }
 
-  const message = await MessageRepository.createMessage({
-    conversationId,
-    senderId: currentUserId,
+  return createAndDeliverMessage(currentUserId, conversationId, conversation, {
     content: input.content.trim(),
     fileIds,
     replyToId: input.replyToId,
+    auditAction: ChatAuditAction.SEND_MESSAGE,
   });
+}
 
-  await MessageRepository.logAudit({
-    userId: currentUserId,
-    action: ChatAuditAction.SEND_MESSAGE,
-    conversationId,
-    messageId: message.id,
-  });
+/// Reenviar un mensaje existente (de cualquier conversación donde el usuario
+/// sea miembro, no solo la de destino) a `conversationId`. El reenvío es una
+/// COPIA independiente de `content`/adjuntos — no un puntero "vacío" que
+/// dependa de que el original siga existiendo (mismo criterio que Telegram:
+/// si borrás el original después, el reenvío ya hecho sigue teniendo su
+/// propio contenido). `forwardedFromId` solo se usa para reconstruir la
+/// atribución ("Reenviado de X — ver ForwardedFromPreview") al leer.
+export async function forwardMessage(
+  currentUserId: string,
+  conversationId: string,
+  sourceMessageId: string,
+): Promise<MessageWithReceipts> {
+  const conversation = await assertMembership(conversationId, currentUserId);
 
-  // Quien ya está conectado a la room lo recibe en el acto: eso ES "entregado"
-  // (ver markDelivered en conversation.service.ts). El resto queda en "sent"
-  // hasta que se conecte o pida el historial (ver listMessages más abajo).
-  const io = getIO();
-  const connectedUserIds = await getConnectedUserIds(io, conversationId);
-  const deliveredNow = new Set(connectedUserIds.filter((userId) => userId !== currentUserId));
-  await Promise.all(
-    Array.from(deliveredNow).map((userId) =>
-      markDelivered(conversationId, userId, message.id, message.createdAt, conversation.members),
-    ),
-  );
-
-  const receipts: MessageReceipt[] = conversation.members
-    .filter((member) => member.userId !== currentUserId)
-    .map((member) => ({
-      userId: member.userId,
-      status: deliveredNow.has(member.userId) ? "delivered" : "sent",
-    }));
-
-  const messageWithReceipts: MessageWithReceipts = { ...withReplyPreview(message), receipts };
-  io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
-  await notifyConversationListChanged(conversation.members, conversationId);
-
-  // Web Push para quien no tiene ESTA conversación abierta ahora mismo —
-  // reutiliza `deliveredNow` (arriba) en vez de recalcular "quién está
-  // conectado", porque es exactamente la misma pregunta. A diferencia de la
-  // room de socket, un push llega aunque la pestaña esté cerrada o el
-  // navegador entero cerrado (ver push/README.md) — por eso vale la pena
-  // mandarlo incluso a quien tiene la app abierta pero en OTRA conversación.
-  // No se espera (`void`): un push lento o caído nunca debe demorar ni tumbar
-  // la respuesta de este POST.
-  const offlineMemberIds = conversation.members
-    .map((member) => member.userId)
-    .filter((userId) => userId !== currentUserId && !deliveredNow.has(userId));
-  if (offlineMemberIds.length > 0) {
-    const preview = buildLastMessagePreview(message);
-    const isGroup = conversation.type === ConversationType.GROUP;
-    void PushService.notifyUsers(offlineMemberIds, {
-      title: isGroup ? (conversation.name ?? "Grupo") : message.sender.name,
-      body: isGroup ? `${message.sender.name}: ${preview}` : preview,
-      url: `/conversations/${conversationId}`,
-      tag: conversationId,
-    });
+  const source = await MessageRepository.findById(sourceMessageId);
+  if (!source) {
+    throw new NotFoundError("Message not found");
   }
+  // Nunca vale reenviar algo que no podés ver vos mismo — sin importar que
+  // el destino sea una conversación distinta de la de origen.
+  await assertMembership(source.conversationId, currentUserId);
 
-  return messageWithReceipts;
+  return createAndDeliverMessage(currentUserId, conversationId, conversation, {
+    content: source.content,
+    fileIds: source.files.map((file) => file.fileId),
+    forwardedFromId: source.id,
+    auditAction: ChatAuditAction.FORWARD_MESSAGE,
+  });
 }
 
 export async function listMessages(
@@ -208,7 +285,7 @@ export async function listMessages(
   }
 
   return ordered.map((message) => ({
-    ...withReplyPreview(message),
+    ...withPreviews(message),
     receipts: computeReceipts(conversation.members, message),
   }));
 }
@@ -263,7 +340,7 @@ export async function editMessage(
   });
 
   const messageWithReceipts: MessageWithReceipts = {
-    ...withReplyPreview(updated),
+    ...withPreviews(updated),
     receipts: computeReceipts(conversation.members, updated),
   };
 

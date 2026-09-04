@@ -1,5 +1,12 @@
 import { MouseEvent, useEffect, useRef, useState } from "react";
-import { IconCheck, IconChevronDown, IconCornerUpLeft, IconLoader2, IconX } from "@tabler/icons-react";
+import {
+  IconArrowForwardUp,
+  IconCheck,
+  IconChevronDown,
+  IconCornerUpLeft,
+  IconLoader2,
+  IconX,
+} from "@tabler/icons-react";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
 import { MessageAttachments } from "@/features/messages/components/MessageAttachments";
 import { MessageOptionsMenu } from "@/features/messages/components/MessageOptionsMenu";
@@ -16,10 +23,13 @@ interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
   showSender: boolean;
+  /** Solo importa para el estilo de un mensaje REENVIADO — ver `isFromOtherViaForward` abajo. */
+  isSelfChat: boolean;
   currentUserId: string;
   onEdit: (messageId: string, content: string) => Promise<void>;
   onDelete: (messageId: string) => Promise<void>;
   onReply: (message: Message) => void;
+  onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
 }
 
@@ -31,24 +41,41 @@ export function MessageBubble({
   message,
   isOwn,
   showSender,
+  isSelfChat,
   currentUserId,
   onEdit,
   onDelete,
   onReply,
+  onForward,
   onJumpToMessage,
 }: MessageBubbleProps) {
   const settings = usePublicSettings();
   const isDeleted = Boolean(message.deletedAt);
-  const status = isOwn ? aggregateMessageStatus(message.receipts) : null;
   const isEdited = Boolean(message.editedAt && !isDeleted);
   const hasCaption = isDeleted || Boolean(message.content.trim());
   const hasAttachments = !isDeleted && message.files.length > 0;
 
+  // `isOwn` (prop) = ¿el remitente REAL de este mensaje sos vos? Rige
+  // permisos (canEdit/canDelete) y los recibos — nunca cambia por cómo se ve.
+  // En tu propia conversación SELF, un mensaje reenviado que originalmente
+  // mandó OTRA persona se pinta como si fuera un mensaje ajeno en un grupo
+  // (burbuja a la izquierda, con su nombre arriba) aunque el remitente real
+  // seas vos (sos el único miembro posible de tu propio chat) — así se ve de
+  // un vistazo que ese contenido no lo escribiste vos. Si estás reenviando tu
+  // PROPIO mensaje a tus mensajes guardados, no aplica: se ve como en
+  // cualquier otro chat.
+  const isFromOtherViaForward =
+    isSelfChat && Boolean(message.forwardedFrom) && message.forwardedFrom!.senderId !== currentUserId;
+  const renderAsOwn = isOwn && !isFromOtherViaForward;
+  const status = isOwn ? aggregateMessageStatus(message.receipts) : null;
+
   // A diferencia de editar/eliminar (autoservicio sobre el propio mensaje),
-  // responder está disponible sobre CUALQUIER mensaje ajeno o propio — el
-  // creador de la conversación borrando un mensaje ajeno (moderación) no
-  // tiene disparador en esta UI todavía, aunque el backend ya lo permite.
+  // responder/reenviar están disponibles sobre CUALQUIER mensaje ajeno o
+  // propio — el creador de la conversación borrando un mensaje ajeno
+  // (moderación) no tiene disparador en esta UI todavía, aunque el backend
+  // ya lo permite.
   const canReply = !isDeleted;
+  const canForward = !isDeleted;
   const canEdit =
     isOwn &&
     !isDeleted &&
@@ -60,7 +87,7 @@ export function MessageBubble({
     !isDeleted &&
     Boolean(settings?.allowMessageDeleteForEveryone) &&
     isWithinMessageTimeLimit(message.createdAt, settings?.messageDeleteForEveryoneTimeLimitMinutes ?? null);
-  const showOptionsTrigger = canReply || canEdit || canDelete;
+  const showOptionsTrigger = canReply || canForward || canEdit || canDelete;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -157,7 +184,7 @@ export function MessageBubble({
     <span
       className={cn(
         "flex items-center gap-1 text-[11px] select-none",
-        isOwn ? "text-white/70" : "text-neutral-400 dark:text-neutral-500",
+        renderAsOwn ? "text-white/70" : "text-neutral-400 dark:text-neutral-500",
       )}
     >
       <span>{formatBubbleTime(message.createdAt)}</span>
@@ -175,7 +202,7 @@ export function MessageBubble({
       {...gestureHandlers}
       onDoubleClick={handleRowDoubleClick}
       onContextMenu={handleRowContextMenu}
-      className={cn("relative flex", isOwn ? "justify-end" : "justify-start")}
+      className={cn("relative flex", renderAsOwn ? "justify-end" : "justify-start")}
     >
       {/* Ícono que se revela detrás de la burbuja al arrastrarla (swipe-to-reply,
           mobile) — mismo lenguaje visual que WhatsApp: aparece a la izquierda,
@@ -196,13 +223,13 @@ export function MessageBubble({
         }}
         className={cn(
           "group relative max-w-[75%] min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
-          isOwn
+          renderAsOwn
             ? "bg-brand-blue text-white"
             : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
         )}
       >
         {showOptionsTrigger && !isEditing && (
-          <div className={cn("absolute -top-1", isOwn ? "right-full mr-1" : "left-full ml-1")}>
+          <div className={cn("absolute -top-1", renderAsOwn ? "right-full mr-1" : "left-full ml-1")}>
             <button
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
@@ -217,20 +244,47 @@ export function MessageBubble({
               open={menuOpen}
               onClose={() => setMenuOpen(false)}
               canReply={canReply}
+              canForward={canForward}
               canEdit={canEdit}
               canDelete={canDelete}
               onReply={() => onReply(message)}
+              onForward={() => onForward(message)}
               onEdit={startEditing}
               onDelete={() => setDeleteModalOpen(true)}
-              align={isOwn ? "right" : "left"}
+              align={renderAsOwn ? "right" : "left"}
             />
           </div>
+        )}
+
+        {message.forwardedFrom && !isEditing && (
+          isFromOtherViaForward ? (
+            // "Mensajes guardados" reenviado de OTRA persona: se atribuye,
+            // mismo estilo que el nombre del remitente en un grupo — así se
+            // ve de un vistazo que ese contenido no lo escribiste vos.
+            <p className="mb-0.5 flex items-center gap-1 text-xs font-semibold text-brand-teal-dark dark:text-brand-teal-light">
+              <IconArrowForwardUp size={12} stroke={2} className="shrink-0" />
+              <span className="truncate">{message.forwardedFrom!.senderName}</span>
+            </p>
+          ) : (
+            // Cualquier otro destino (o reenviar tu propio mensaje a vos
+            // mismo): solo se marca que es un reenvío, nunca a quién ni de
+            // qué chat/grupo salió — ver ForwardedFromPreview en message.types.ts.
+            <p
+              className={cn(
+                "mb-1 flex items-center gap-1 text-xs italic",
+                renderAsOwn ? "text-white/70" : "text-neutral-500 dark:text-neutral-400",
+              )}
+            >
+              <IconArrowForwardUp size={13} stroke={2} className="shrink-0" />
+              <span>Reenviado</span>
+            </p>
+          )
         )}
 
         {message.replyTo && !isEditing && (
           <QuotedMessagePreview
             variant="bubble"
-            isOwnBubble={isOwn}
+            isOwnBubble={renderAsOwn}
             senderName={message.replyTo.senderId === currentUserId ? "Vos" : message.replyTo.senderName}
             preview={message.replyTo.preview}
             isDeleted={Boolean(message.replyTo.deletedAt)}
@@ -245,7 +299,7 @@ export function MessageBubble({
         )}
         {hasAttachments && (
           <div className={hasCaption ? "mb-1.5" : undefined}>
-            <MessageAttachments files={message.files} isOwn={isOwn} />
+            <MessageAttachments files={message.files} isOwn={renderAsOwn} />
           </div>
         )}
         {isEditing ? (
@@ -264,7 +318,7 @@ export function MessageBubble({
               rows={2}
               className={cn(
                 "resize-none rounded-lg border bg-transparent px-2 py-1 text-sm outline-none",
-                isOwn ? "border-white/30 placeholder:text-white/60" : "border-black/10 dark:border-white/10",
+                renderAsOwn ? "border-white/30 placeholder:text-white/60" : "border-black/10 dark:border-white/10",
               )}
             />
             {editError && <p className="text-xs text-red-300">{editError}</p>}
@@ -294,7 +348,7 @@ export function MessageBubble({
             className={cn(
               "flow-root whitespace-pre-wrap break-words text-sm",
               isDeleted && "italic text-neutral-400 dark:text-neutral-500",
-              !isDeleted && !isOwn && "text-brand-ink dark:text-white",
+              !isDeleted && !renderAsOwn && "text-brand-ink dark:text-white",
             )}
           >
             {isDeleted ? "Mensaje eliminado" : message.content}

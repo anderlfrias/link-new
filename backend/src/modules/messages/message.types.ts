@@ -11,6 +11,12 @@ export interface CreateMessageInput {
   replyToId?: string;
 }
 
+/// Reenviar un mensaje puntual (de cualquier conversación donde seas
+/// miembro) a `:conversationId`. Ver `forwardMessage` en message.service.ts.
+export interface ForwardMessageInput {
+  messageId: string;
+}
+
 export interface UpdateMessageInput {
   content: string;
 }
@@ -56,10 +62,29 @@ export interface MessageReplyPreview {
   deletedAt: Date | null;
 }
 
+/// Vista resumida de QUIÉN mandó el mensaje original de un reenvío — a
+/// propósito NUNCA incluye nada de la conversación de origen (ni su id, ni su
+/// nombre, ni su tipo): el destino de un reenvío puede tener miembros que no
+/// pertenecen a esa conversación de origen, así que revelarla filtraría de
+/// qué chat/grupo salió el mensaje a gente que no tiene por qué saberlo. Se
+/// resuelve en vivo (no es una foto congelada al momento de reenviar) — mismo
+/// criterio que `MessageReplyPreview`: si el remitente original cambia su
+/// nombre después, este reenvío ya hecho lo refleja la próxima vez que se lea.
+/// Además, el cliente solo muestra `senderName` cuando el DESTINO es la
+/// conversación `SELF` de quien lo reenvía — en cualquier otro destino se
+/// muestra únicamente que el mensaje fue reenviado, sin atribuirlo a nadie
+/// (ver `frontend/src/features/messages/components/MessageBubble.tsx`).
+export interface ForwardedFromPreview {
+  id: string;
+  senderId: string;
+  senderName: string;
+}
+
 export type MessageWithRelations = Message & {
   sender: Pick<User, "id" | "name" | "email" | "avatarFileId">;
   files: (MessageFile & { file: StoredFile })[];
   replyTo: MessageReplyPreview | null;
+  forwardedFrom: ForwardedFromPreview | null;
 };
 
 /// Forma pública de un mensaje: la relación con sus destinatarios (todo

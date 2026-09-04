@@ -8,10 +8,12 @@ import { useMessages } from "@/features/messages/hooks/use-messages";
 import { useTyping } from "@/features/messages/hooks/use-typing";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
 import { Drawer } from "@/components/ui/Drawer";
+import { Modal } from "@/components/ui/Modal";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
 import { ConversationDetailPanel } from "@/features/conversations/components/ConversationDetailPanel";
+import { ForwardMessageModal } from "@/features/messages/components/ForwardMessageModal";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
 import type { Message } from "@/features/messages/types/message.types";
@@ -37,6 +39,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [replyTarget, setReplyTarget] = useState<Message | null>(null);
+  const [forwardTarget, setForwardTarget] = useState<Message | null>(null);
 
   // El propio `send` no sabe nada de "a qué estoy respondiendo" — ese estado
   // es puramente de esta pantalla (qué está armado en el composer ahora
@@ -130,6 +133,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onEditMessage={edit}
           onDeleteMessage={remove}
           onReplyMessage={setReplyTarget}
+          onForwardMessage={setForwardTarget}
         />
         <MessageInput
           conversationId={conversationId}
@@ -185,6 +189,15 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
               onClose={() => setShowDetails(false)}
             />
           </Drawer>
+        )}
+        {forwardTarget && (
+          <Modal onClose={() => setForwardTarget(null)} aria-label="Reenviar mensaje">
+            <ForwardMessageModal
+              message={forwardTarget}
+              currentUserId={currentUserId}
+              onClose={() => setForwardTarget(null)}
+            />
+          </Modal>
         )}
       </div>
     </ImageLightboxProvider>

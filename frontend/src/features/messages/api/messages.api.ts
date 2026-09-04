@@ -40,6 +40,19 @@ export function sendMessage(
   return apiRequest<Message>(basePath(conversationId), { method: "POST", token, body: input });
 }
 
+/** Reenvía `messageId` (de cualquier conversación donde seas miembro) a `conversationId`. */
+export function forwardMessage(
+  token: string,
+  conversationId: string,
+  messageId: string,
+): Promise<Message> {
+  return apiRequest<Message>(`${basePath(conversationId)}/forward`, {
+    method: "POST",
+    token,
+    body: { messageId },
+  });
+}
+
 export function editMessage(
   token: string,
   conversationId: string,

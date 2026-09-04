@@ -17,6 +17,19 @@ const withRelations = {
       sender: { select: { name: true } },
     },
   },
+  // A propósito NUNCA se trae `conversationId`/`conversation` acá — ver el
+  // comentario de `ForwardedFromPreview` en message.types.ts: filtraría de
+  // qué chat/grupo salió un reenvío a miembros del destino que no pertenecen
+  // a esa conversación de origen. Igual que `replyTo`: sin filtrar
+  // `deletedAt` — el remitente sigue existiendo como fila aunque el mensaje
+  // original se borre después.
+  forwardedFrom: {
+    select: {
+      id: true,
+      senderId: true,
+      sender: { select: { name: true } },
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 const fileWithRelations = {
@@ -40,6 +53,7 @@ export function createMessage(data: {
   type?: MessageType;
   fileIds?: string[];
   replyToId?: string;
+  forwardedFromId?: string;
 }) {
   return prisma.$transaction(async (tx) => {
     const message = await tx.message.create({
@@ -50,6 +64,7 @@ export function createMessage(data: {
         content: data.content,
         files: data.fileIds?.length ? { create: data.fileIds.map((fileId) => ({ fileId })) } : undefined,
         replyToId: data.replyToId,
+        forwardedFromId: data.forwardedFromId,
       },
       include: withRelations,
     });

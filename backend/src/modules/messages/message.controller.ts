@@ -14,6 +14,16 @@ export async function create(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export async function forward(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { messageId } = req.body as { messageId: string };
+    const message = await MessageService.forwardMessage(currentUserId(req), req.params.conversationId, messageId);
+    res.status(201).json(message);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const before = typeof req.query.before === "string" ? req.query.before : undefined;

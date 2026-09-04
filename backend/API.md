@@ -451,6 +451,8 @@ Forma de un mensaje:
   ],
   "replyToId": null,
   "replyTo": null,
+  "forwardedFromId": null,
+  "forwardedFrom": null,
   "receipts": [
     { "userId": "otro-user-uuid", "status": "delivered" }
   ]
@@ -473,6 +475,18 @@ Forma de un mensaje:
 
 `preview` es el mismo texto que usa `lastMessagePreview` en la lista de conversaciones (sección 4): el contenido tal cual, `"📎 Archivo adjunto"` si no tiene texto pero sí adjuntos, o `"Mensaje eliminado"` si `deletedAt` no es `null` — esto último puede pasar aunque el mensaje que lo cita nunca cambie: si el original se borra *después*, la cita simplemente empieza a mostrar "Mensaje eliminado" la próxima vez que se lea este mensaje, `replyToId` nunca se toca.
 
+`forwardedFromId`/`forwardedFrom`: si este mensaje es un reenvío (ver 6.1.1), `forwardedFromId` es el id crudo del mensaje original y `forwardedFrom` trae quién lo mandó, resuelto en vivo:
+
+```json
+"forwardedFrom": {
+  "id": "msg-original-uuid",
+  "senderId": "user-uuid",
+  "senderName": "Juan"
+}
+```
+
+**A propósito nunca incluye nada de la conversación de origen** (ni su id, ni su tipo, ni su nombre): el destino de un reenvío puede tener miembros que no pertenecen a esa conversación de origen, así que devolver esos datos filtraría de qué chat o grupo salió el mensaje a gente que no tiene por qué saberlo — es información privada de quien reenvía, no del contenido en sí. Por el mismo motivo, el criterio para el cliente **no** es mostrar siempre `senderName`: solo tiene sentido atribuirlo cuando el destino es tu propia conversación `SELF` ("Mensajes guardados") — ahí el reenvío es privado tuyo, así que ver quién lo escribió originalmente es útil y no expone nada a nadie más. En cualquier otro destino, mostrar solo que el mensaje fue reenviado (sin nombre) — ver `frontend/src/features/messages/components/MessageBubble.tsx`. A diferencia de `replyTo`, un reenvío es una **copia independiente**: `content`/`files` de este mensaje son propios (se copiaron del original al reenviar), no dependen de que el original siga existiendo — solo `forwardedFrom.senderName` se resuelve en vivo, así que si el remitente original cambia su nombre después, este reenvío ya hecho lo refleja la próxima vez que se lea.
+
 Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están en la base (a diferencia de la respuesta de `POST /api/v1/files`, que devuelve `url` ya armada) — para armar la URL de descarga desde acá, prefijá `path` con `/uploads/`, ej. `http://localhost:4000/uploads/chat/....jpg`. Si `deletedAt` no es `null`, el archivo fue eliminado (ver sección 13.2) — el contenido ya no existe, pero el resto de los campos (`originalName`, `size`, etc.) siguen siendo válidos para mostrar un placeholder tipo "archivo eliminado" en vez de intentar cargarlo.
 
 ### 6.1 `POST /` — Enviar mensaje
@@ -486,6 +500,20 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 `replyToId` opcional — responder a un mensaje puntual de la conversación (tipo WhatsApp/Telegram). Solo se valida que el id exista y pertenezca a **esta misma** conversación (`400` si no); a propósito no se exige que siga sin borrar — si alguien lo borra justo mientras vos tenías la cita armada en tu campo de texto, el envío igual funciona (ver `replyTo` más abajo).
 
 → `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
+
+### 6.1.1 `POST /forward` — Reenviar un mensaje
+
+```json
+{ "messageId": "<messageId a reenviar>" }
+```
+
+`:conversationId` en la URL es el **destino** (donde aparece el reenvío) — `messageId` puede ser de **cualquier** conversación donde seas miembro, no hace falta que sea la misma. Requiere ser miembro activo tanto del destino como de la conversación de origen del mensaje (`404`/`403` si no sos miembro de esa — mismas reglas que `assertMembership`, sección 4). `400` si `messageId` no existe o ya fue borrado (no se puede reenviar algo que ya no ves vos mismo).
+
+→ `201` con el mensaje completo, igual forma que `POST /` — `content`/`files` son una **copia** de los del original (no un puntero), y trae `forwardedFrom` resuelto (ver arriba). Emite los mismos eventos que `POST /`: `message:created` a la room del destino, `conversation:updated` a cada miembro del destino.
+
+No hay restricción de tipo de conversación en ninguno de los dos lados — podés reenviar desde/hacia `PRIVATE`, `GROUP` o `SELF` (reenviarte algo a "Mensajes guardados", tipo Telegram, es el caso de uso típico, pero no el único).
+
+No existe (ni hace falta) un endpoint de reenvío a múltiples destinos: el picker del frontend (`ForwardMessageModal.tsx`, multi-select tipo WhatsApp/Telegram — grupos, personas y/o "Mensajes guardados" a la vez) simplemente llama a este mismo endpoint una vez por cada `:conversationId` elegido (`useForwardMessage`, en paralelo vía `Promise.allSettled`), creando primero la conversación `PRIVATE`/`SELF` para los destinos que todavía no existen. Un destino fallando no cancela los demás.
 
 ### 6.2 `GET /` — Listar mensajes
 

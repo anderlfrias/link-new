@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { IconCornerUpLeft, IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconArrowForwardUp, IconCornerUpLeft, IconPencil, IconTrash } from "@tabler/icons-react";
 
 interface MessageOptionsMenuProps {
   open: boolean;
   onClose: () => void;
   canReply: boolean;
+  canForward: boolean;
   canEdit: boolean;
   canDelete: boolean;
   onReply: () => void;
+  onForward: () => void;
   onEdit: () => void;
   onDelete: () => void;
   align: "left" | "right";
@@ -18,15 +20,17 @@ interface MessageOptionsMenuProps {
 /** Mismo patrón que ConversationOptionsMenu.tsx: panel absoluto + mousedown
  * afuera cierra, controlado desde afuera para que tanto el botón "⋮" (hover,
  * desktop) como el long-press (mobile) lo puedan abrir sobre el mismo bubble.
- * "Responder" va primero (mismo orden que WhatsApp/Telegram) — es la única
- * acción disponible sobre CUALQUIER mensaje, propio o ajeno. */
+ * "Responder"/"Reenviar" van primero (mismo orden que WhatsApp/Telegram) —
+ * son las únicas acciones disponibles sobre CUALQUIER mensaje, propio o ajeno. */
 export function MessageOptionsMenu({
   open,
   onClose,
   canReply,
+  canForward,
   canEdit,
   canDelete,
   onReply,
+  onForward,
   onEdit,
   onDelete,
   align,
@@ -44,7 +48,7 @@ export function MessageOptionsMenu({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open, onClose]);
 
-  if (!open || (!canReply && !canEdit && !canDelete)) return null;
+  if (!open || (!canReply && !canForward && !canEdit && !canDelete)) return null;
 
   return (
     <div
@@ -66,6 +70,20 @@ export function MessageOptionsMenu({
         >
           <IconCornerUpLeft size={16} stroke={1.75} />
           Responder
+        </button>
+      )}
+      {canForward && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onForward();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          <IconArrowForwardUp size={16} stroke={1.75} />
+          Reenviar
         </button>
       )}
       {canEdit && (
