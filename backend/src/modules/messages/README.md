@@ -67,7 +67,7 @@ Solo el propio autor (`403` para cualquier otro, incluido el creador de la conve
 
 ### `DELETE /:id` — Borrar
 
-Borrado lógico (`deletedAt`, `deletedById`). Permitido para el propio autor **o** el creador de la conversación (mismo criterio que usa `conversations` para expulsar miembros). Cuando quien borra es el propio autor, además requiere `AppSettings.allowMessageDeleteForEveryone` y, si `messageDeleteForEveryoneTimeLimitMinutes` no es `null`, estar dentro de esa ventana desde `createdAt` (mismo mecanismo que editar, ver [`settings`](../settings/README.md#consumidores)) — **el creador de la conversación borrando un mensaje ajeno nunca pasa por estas dos reglas**, es moderación, no autoservicio. Emite `message:deleted` con `{ conversationId, messageId }` — el cliente decide cómo representarlo (ej. "mensaje eliminado"), este módulo no reescribe el contenido.
+Borrado lógico (`deletedAt`, `deletedById`). Permitido para el propio autor **o** el creador de la conversación (mismo criterio que usa `conversations` para expulsar miembros). Cuando quien borra es el propio autor, además requiere `AppSettings.allowMessageDeleteForEveryone` y, si `messageDeleteForEveryoneTimeLimitMinutes` no es `null`, estar dentro de esa ventana desde `createdAt` (mismo mecanismo que editar, ver [`settings`](../settings/README.md#consumidores)) — **el creador de la conversación borrando un mensaje ajeno nunca pasa por estas dos reglas**, es moderación, no autoservicio. Queda rastro sin importar quién borró: `deletedById` en la propia fila y `DELETE_MESSAGE` en `ChatAuditLog` (con `deletedOwnMessage` en `metadata`, ver Auditoría más abajo). Emite `message:deleted` con `{ conversationId, messageId, deletedAt }` a **toda** la room, incluido quien borró — nunca vuelve a viajar `content`/`files`; el cliente lo usa para pintar ESE mensaje puntual como "mensaje eliminado" en el momento (`MessageBubble.tsx`), sin sacarlo de la vista. `GET /` en cambio lo sigue excluyendo del todo una vez `deletedAt` está seteado — tras recargar/paginar, ya no aparece.
 
 ## Confirmación de entrega y lectura
 
@@ -103,7 +103,7 @@ Definidos en `message.socket.ts` (`MESSAGE_EVENTS`). Requieren el mismo handshak
 |---|---|---|---|
 | `message:created` | servidor → cliente | mensaje completo (con `receipts`) | A la room de la conversación, al enviarse un mensaje. |
 | `message:updated` | servidor → cliente | mensaje completo (con `receipts`) | Al editarse. |
-| `message:deleted` | servidor → cliente | `{ conversationId, messageId }` | Al borrarse. |
+| `message:deleted` | servidor → cliente | `{ conversationId, messageId, deletedAt }` | Al borrarse. |
 | `message:typing_start` | cliente ↔ servidor | `conversationId` (cliente) / `{ conversationId, userId }` (servidor) | Relay efímero — nunca se persiste (ver [backend/README.md](../../../README.md#por-qué-typing-usuario-escribiendo-no-se-almacena-en-la-base-de-datos)). |
 | `message:typing_stop` | cliente ↔ servidor | igual que arriba | — |
 

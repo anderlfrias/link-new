@@ -70,6 +70,6 @@ export function deleteMessage(
   token: string,
   conversationId: string,
   messageId: string,
-): Promise<{ conversationId: string; messageId: string }> {
+): Promise<{ conversationId: string; messageId: string; deletedAt: string }> {
   return apiRequest(`${basePath(conversationId)}/${messageId}`, { method: "DELETE", token });
 }

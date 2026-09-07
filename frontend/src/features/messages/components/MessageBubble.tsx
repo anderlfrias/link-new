@@ -347,7 +347,7 @@ export function MessageBubble({
           <p
             className={cn(
               "flow-root whitespace-pre-wrap break-words text-sm",
-              isDeleted && "italic text-neutral-400 dark:text-neutral-500",
+              isDeleted && (renderAsOwn ? "italic text-white/70" : "italic text-neutral-500 dark:text-neutral-400"),
               !isDeleted && !renderAsOwn && "text-brand-ink dark:text-white",
             )}
           >

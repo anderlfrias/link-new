@@ -559,7 +559,7 @@ Misma forma que devuelve `POST /api/v1/files` (sección 9) más `messageId`/`sen
 
 ### 6.5 `DELETE /:id` — Borrar
 
-Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. Si quien borra es el propio autor, además requiere `AppSettings.allowMessageDeleteForEveryone` y, si `messageDeleteForEveryoneTimeLimitMinutes` no es `null`, estar dentro de esa ventana desde `createdAt` (`403` si alguna falla, ver sección 12) — **el creador de la conversación borrando un mensaje ajeno nunca pasa por estas dos reglas**, es moderación. → `200` `{ "conversationId": "...", "messageId": "..." }`. Emite `message:deleted` con ese mismo payload — el frontend decide cómo mostrarlo (ej. "mensaje eliminado"); el contenido original no se borra de la respuesta de este endpoint, pero tampoco vuelve a aparecer en `GET /` (queda fuera del listado una vez `deletedAt` está seteado). Igual que en 6.3, emite `conversation:updated` a cada miembro solo si el mensaje borrado era el último de la conversación.
+Borrado lógico. Permitido para el propio autor **o** el creador de la conversación. Si quien borra es el propio autor, además requiere `AppSettings.allowMessageDeleteForEveryone` y, si `messageDeleteForEveryoneTimeLimitMinutes` no es `null`, estar dentro de esa ventana desde `createdAt` (`403` si alguna falla, ver sección 12) — **el creador de la conversación borrando un mensaje ajeno nunca pasa por estas dos reglas**, es moderación. Queda auditado en `ChatAuditLog` (`DELETE_MESSAGE`, con `deletedOwnMessage` en `metadata`) y en el propio `Message` (`deletedById`), sin importar quién lo haya borrado. → `200` `{ "conversationId": "...", "messageId": "...", "deletedAt": "..." }`. Emite `message:deleted` con ese mismo payload a **toda** la room, incluido quien borró — nunca vuelve a viajar `content`/`files` por acá, cada cliente conectado lo usa para pintar ese mensaje puntual como "Mensaje eliminado" en el momento, sin sacarlo de la vista (mismo criterio que `MessageBubble.tsx`). Distinto de `GET /`: ese listado sigue excluyéndolo por completo una vez `deletedAt` está seteado, así que tras recargar/paginar el mensaje ya no aparece en absoluto. Igual que en 6.3, emite `conversation:updated` a cada miembro solo si el mensaje borrado era el último de la conversación.
 
 ### 6.6 Eventos de socket de mensajes
 
@@ -567,7 +567,7 @@ Borrado lógico. Permitido para el propio autor **o** el creador de la conversac
 |---|---|---|---|
 | `message:created` | servidor → cliente | mensaje completo (con `receipts`) | Al enviarse |
 | `message:updated` | servidor → cliente | mensaje completo (con `receipts`) | Al editarse |
-| `message:deleted` | servidor → cliente | `{ conversationId, messageId }` | Al borrarse |
+| `message:deleted` | servidor → cliente | `{ conversationId, messageId, deletedAt }` | Al borrarse |
 
 Llegan por la room de la conversación (`conversation:join` primero).
 

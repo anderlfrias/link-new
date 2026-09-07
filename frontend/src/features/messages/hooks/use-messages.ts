@@ -131,9 +131,13 @@ export function useMessages(conversationId: string) {
       setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
     }
 
-    function handleDeleted(payload: { conversationId: string; messageId: string }) {
+    function handleDeleted(payload: { conversationId: string; messageId: string; deletedAt: string }) {
       if (payload.conversationId !== conversationId) return;
-      setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === payload.messageId ? { ...m, deletedAt: payload.deletedAt, content: "", files: [] } : m,
+        ),
+      );
     }
 
     function handleReceiptUpdated(payload: ReceiptUpdatedPayload) {
@@ -176,7 +180,7 @@ export function useMessages(conversationId: string) {
   // El propio socket que emitió el PATCH/DELETE también recibe message:updated/
   // deleted de vuelta por estar en la room de la conversación (ver
   // handleUpdated/handleDeleted arriba) — actualizar acá igual no duplica nada
-  // porque ambos caminos son idempotentes (reemplazar por id / filtrar por id).
+  // porque ambos caminos son idempotentes (reemplazar/parchear por id).
   const edit = useCallback(
     async (messageId: string, content: string) => {
       if (!token) return;
@@ -189,8 +193,10 @@ export function useMessages(conversationId: string) {
   const remove = useCallback(
     async (messageId: string) => {
       if (!token) return;
-      await deleteMessageRequest(token, conversationId, messageId);
-      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      const result = await deleteMessageRequest(token, conversationId, messageId);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, deletedAt: result.deletedAt, content: "", files: [] } : m)),
+      );
     },
     [token, conversationId],
   );

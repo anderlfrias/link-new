@@ -374,7 +374,7 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
     assertWithinTimeLimit(message.createdAt, settings.messageDeleteForEveryoneTimeLimitMinutes, "delete");
   }
 
-  await MessageRepository.softDelete(messageId, currentUserId);
+  const deleted = await MessageRepository.softDelete(messageId, currentUserId);
   await MessageRepository.logAudit({
     userId: currentUserId,
     action: ChatAuditAction.DELETE_MESSAGE,
@@ -383,9 +383,15 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
     metadata: { deletedOwnMessage: isOwnMessage },
   });
 
-  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.DELETED, { conversationId, messageId });
+  // A diferencia de CREATED/UPDATED, el payload NO manda el mensaje completo
+  // (nunca vuelve a viajar `content`/`files` una vez borrado) — solo lo
+  // necesario para que cada cliente conectado (incluido quien borró) lo
+  // marque como "Mensaje eliminado" en el momento, sin sacarlo de la vista.
+  // `GET /` sigue excluyéndolo del historial (ver MessageRepository.listMessages).
+  const payload = { conversationId, messageId, deletedAt: deleted.deletedAt };
+  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.DELETED, payload);
   if (messageId === conversation.lastMessageId) {
     await notifyConversationListChanged(conversation.members, conversationId);
   }
-  return { conversationId, messageId };
+  return payload;
 }
