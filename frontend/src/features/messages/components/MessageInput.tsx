@@ -7,7 +7,7 @@ import {
   IconHeadphones,
   IconLoader2,
   IconMicrophone,
-  IconMoodSmile,
+  IconMoodPlus,
   IconPaperclip,
   IconPhoto,
   IconSend2,
@@ -17,8 +17,10 @@ import {
 } from "@tabler/icons-react";
 import { AttachmentErrorModal } from "@/features/messages/components/AttachmentErrorModal";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
-import { EmojiPicker } from "@/features/messages/components/EmojiPicker";
+import { EmojiGifStickerPicker } from "@/features/messages/components/EmojiGifStickerPicker";
 import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
+import { importGiphyAsset } from "@/features/giphy/api/giphy.api";
+import type { GiphyMediaKind } from "@/features/giphy/types/giphy.types";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
 import { useVoiceRecorder } from "@/features/messages/hooks/use-voice-recorder";
 import { useAuth } from "@/providers/auth-provider";
@@ -30,7 +32,7 @@ import type { Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
   conversationId: string;
-  onSend: (content: string, fileIds?: string[]) => Promise<void> | void;
+  onSend: (content: string, fileIds?: string[], type?: "STICKER") => Promise<void> | void;
   onTyping: () => void;
   onStopTyping: () => void;
   attachmentsState: ReturnType<typeof useMessageAttachments>;
@@ -72,12 +74,14 @@ export function MessageInput({
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [reactionsPickerOpen, setReactionsPickerOpen] = useState(false);
+  const [importingGif, setImportingGif] = useState(false);
+  const [gifError, setGifError] = useState<string | null>(null);
   const [sendingVoiceNote, setSendingVoiceNote] = useState(false);
   const [voiceNoteError, setVoiceNoteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const reactionsPickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { session } = useAuth();
   const publicSettings = usePublicSettings();
@@ -136,15 +140,15 @@ export function MessageInput({
   }, [attachMenuOpen]);
 
   useEffect(() => {
-    if (!emojiPickerOpen) return;
+    if (!reactionsPickerOpen) return;
     function handleClickOutside(event: MouseEvent) {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
-        setEmojiPickerOpen(false);
+      if (reactionsPickerRef.current && !reactionsPickerRef.current.contains(event.target as Node)) {
+        setReactionsPickerOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [emojiPickerOpen]);
+  }, [reactionsPickerOpen]);
 
   const canSend = (Boolean(value.trim()) || fileIds.length > 0) && !sending && !isUploading;
 
@@ -233,6 +237,24 @@ export function MessageInput({
     }
   }
 
+  // Mismo patrón que handleSendRecording: se importa (descarga+guarda en el
+  // backend) primero, y solo después se manda como mensaje — no hay "chip" de
+  // adjunto pendiente en el composer, se manda al toque de elegirlo.
+  async function handleSelectGif(kind: GiphyMediaKind, giphyId: string, originalUrl: string) {
+    if (!session) return;
+    setImportingGif(true);
+    setGifError(null);
+    try {
+      const uploaded = await importGiphyAsset(session.token, kind, giphyId, originalUrl);
+      setReactionsPickerOpen(false);
+      await onSend("", [uploaded.id], kind === "stickers" ? "STICKER" : undefined);
+    } catch (error) {
+      setGifError(error instanceof Error ? error.message : "No se pudo enviar.");
+    } finally {
+      setImportingGif(false);
+    }
+  }
+
   // Igual que WhatsApp/Telegram: el botón de enviar se vuelve micrófono
   // cuando no hay nada más que mandar — apenas escribís algo o adjuntás un
   // archivo, vuelve a ser el botón de enviar.
@@ -267,6 +289,7 @@ export function MessageInput({
           {voiceNoteError ?? "No se pudo acceder al micrófono."}
         </p>
       )}
+      {gifError && <p className="px-4 pt-2 text-xs text-red-500">{gifError}</p>}
       {recorder.status === "recording" ? (
         <div className="flex items-center gap-3 pl-3 pr-5 py-2.5">
           <button
@@ -315,7 +338,7 @@ export function MessageInput({
               <button
                 type="button"
                 onClick={() => {
-                  setEmojiPickerOpen(false);
+                  setReactionsPickerOpen(false);
                   setAttachMenuOpen((prev) => !prev);
                 }}
                 aria-label="Adjuntar"
@@ -336,28 +359,37 @@ export function MessageInput({
               placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
               className="max-h-32 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-sm text-brand-ink outline-none dark:text-white"
             />
-            <div className="relative shrink-0" ref={emojiPickerRef}>
-              {emojiPickerOpen && (
-                <div className="absolute bottom-full right-0 mb-2">
-                  <EmojiPicker
-                    onSelect={(emoji) => {
-                      insertEmoji(emoji);
-                    }}
-                  />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setAttachMenuOpen(false);
-                  setEmojiPickerOpen((prev) => !prev);
-                }}
-                aria-label="Emojis"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
-              >
-                <IconMoodSmile size={20} stroke={1.75} />
-              </button>
-            </div>
+            {session && (
+              <div className="relative shrink-0" ref={reactionsPickerRef}>
+                {reactionsPickerOpen && (
+                  <div className="absolute bottom-full right-0 mb-2">
+                    <EmojiGifStickerPicker
+                      token={session.token}
+                      showGifsAndStickers={Boolean(publicSettings?.allowStickersAndGifs)}
+                      busy={importingGif}
+                      onSelectEmoji={insertEmoji}
+                      onSelectGifSticker={handleSelectGif}
+                    />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachMenuOpen(false);
+                    setReactionsPickerOpen((prev) => !prev);
+                  }}
+                  disabled={importingGif}
+                  aria-label="Emojis, GIFs y stickers"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  {importingGif ? (
+                    <IconLoader2 size={20} stroke={1.75} className="animate-spin" />
+                  ) : (
+                    <IconMoodPlus size={20} stroke={1.75} />
+                  )}
+                </button>
+              </div>
+            )}
           </div>
           {showMicButton ? (
             <button

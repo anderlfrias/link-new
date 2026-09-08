@@ -14,6 +14,11 @@ const schema = yup.object({
   // Opcional a propósito: sin definir, la API y el socket quedan abiertos a
   // cualquier origen (cómodo en dev/LAN). Ver config/cors-origins.ts.
   CORS_ORIGIN: yup.string().optional(),
+  // Opcional a propósito, a diferencia de VAPID_*: sin esta key, /v1/giphy/*
+  // responde 503 en vez de tirar abajo todo el server al arrancar (ver
+  // giphy.service.ts) — así activar/desactivar Giphy no exige coordinar un
+  // restart con esta variable siempre presente.
+  GIPHY_API_KEY: yup.string().optional(),
 });
 
 let env: yup.InferType<typeof schema>;

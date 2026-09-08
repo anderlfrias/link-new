@@ -169,9 +169,9 @@ export function useMessages(conversationId: string) {
   }, [token, conversationId, messages, loadingMore, hasMore]);
 
   const send = useCallback(
-    async (content: string, fileIds?: string[], replyToId?: string) => {
+    async (content: string, fileIds?: string[], replyToId?: string, type?: "STICKER") => {
       if (!token) return;
-      const message = await sendMessageRequest(token, conversationId, { content, fileIds, replyToId });
+      const message = await sendMessageRequest(token, conversationId, { content, fileIds, replyToId, type });
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
     },
     [token, conversationId],

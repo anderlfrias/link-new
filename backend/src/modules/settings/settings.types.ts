@@ -26,6 +26,7 @@ export type UpdateSettingsInput = Partial<
     | "messageEditTimeLimitMinutes"
     | "allowMessageDeleteForEveryone"
     | "messageDeleteForEveryoneTimeLimitMinutes"
+    | "allowStickersAndGifs"
   >
 >;
 
@@ -56,6 +57,10 @@ export interface PublicAppSettingsDTO {
   /// conversation.service.ts#deleteConversation.
   allowConversationDelete: boolean;
   allowGroupDelete: boolean;
+  /// El composer lo necesita para mostrar/ocultar el botón de GIFs/stickers
+  /// sin depender de un fetch aparte; la autoridad real sigue siendo
+  /// giphy.service.ts, que rechaza /v1/giphy/* con 403 si está en false.
+  allowStickersAndGifs: boolean;
 }
 
 /// Las 5 dimensiones de gobierno de grupo que pueden tener un override por

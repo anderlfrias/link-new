@@ -3,7 +3,10 @@ import type { StoredFile } from "@/features/files/types/file.types";
 
 /** Ver backend/API.md, sección 6 (Mensajes). */
 
-export type MessageType = "TEXT" | "SYSTEM";
+/** `STICKER` siempre trae `content: ""` y exactamente un `files[]` — se
+ * renderiza sin fondo de burbuja (ver MessageBubble.tsx). Un GIF, en cambio,
+ * viaja como `TEXT` normal con un adjunto `image/gif` — no tiene tipo propio. */
+export type MessageType = "TEXT" | "SYSTEM" | "STICKER";
 
 export interface MessageSender {
   id: string;
@@ -71,6 +74,8 @@ export interface SendMessageInput {
   content: string;
   fileIds?: string[];
   replyToId?: string;
+  /** Solo `"STICKER"` — ver `MessageType`. Omitido para todo lo demás (texto, GIF, notas de voz, adjuntos). */
+  type?: "STICKER";
 }
 
 export interface EditMessageInput {

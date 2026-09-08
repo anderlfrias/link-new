@@ -49,6 +49,7 @@ interface DraftState {
   messageEditTimeLimitMinutes: string;
   allowMessageDeleteForEveryone: boolean;
   messageDeleteForEveryoneTimeLimitMinutes: string;
+  allowStickersAndGifs: boolean;
 }
 
 /** Una categoría cuenta como "marcada" si TODOS sus patterns están en la lista guardada —
@@ -115,6 +116,7 @@ function toDraft(settings: AdminSettings): DraftState {
       settings.messageDeleteForEveryoneTimeLimitMinutes == null
         ? ""
         : String(settings.messageDeleteForEveryoneTimeLimitMinutes),
+    allowStickersAndGifs: settings.allowStickersAndGifs,
   };
 }
 
@@ -198,6 +200,7 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
       draft.messageDeleteForEveryoneTimeLimitMinutes.trim() === ""
         ? null
         : Number(draft.messageDeleteForEveryoneTimeLimitMinutes),
+    allowStickersAndGifs: draft.allowStickersAndGifs,
   };
 }
 
@@ -503,6 +506,21 @@ export function AdminSettingsPanel() {
               <p className="text-xs text-neutral-400 dark:text-neutral-500">
                 El creador de la conversación siempre puede eliminar mensajes ajenos como moderador, sin importar
                 esta configuración.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">GIFs y stickers</h3>
+            <div className="flex flex-col gap-1">
+              <Checkbox
+                checked={draft.allowStickersAndGifs}
+                onChange={(event) => updateField("allowStickersAndGifs", event.target.checked)}
+                label="Los usuarios pueden buscar y enviar GIFs y stickers (Giphy)"
+              />
+              <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                Requiere además una API key de Giphy configurada en el servidor (GIPHY_API_KEY) — sin eso, el
+                buscador responde error aunque esta opción esté activada.
               </p>
             </div>
           </section>

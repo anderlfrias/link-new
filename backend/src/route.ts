@@ -2,6 +2,7 @@ import { Router } from "express";
 import authRoutes from "./modules/auth/auth.route";
 import conversationRoutes from "./modules/conversations/conversation.route";
 import fileRoutes, { adminFileRouter } from "./modules/files/file.route";
+import giphyRoutes from "./modules/giphy/giphy.route";
 import messageRoutes from "./modules/messages/message.route";
 import pushRoutes from "./modules/push/push.route";
 import { adminSettingsRouter, publicSettingsRouter } from "./modules/settings/settings.route";
@@ -25,6 +26,10 @@ router.use("/v1/files", fileRoutes);
 router.use("/v1/users", userRoutes);
 // Suscripciones de Web Push (notificaciones con la app/pestaña cerrada).
 router.use("/v1/push", pushRoutes);
+// Buscador de GIFs/stickers (Giphy) — recurso plano, no anidado bajo una
+// conversación: el resultado de una búsqueda no pertenece a ninguna en
+// particular, solo el mensaje que termina usándolo (ver giphy/README.md).
+router.use("/v1/giphy", giphyRoutes);
 // Configuración global de la instalación — ver settings/README.md.
 router.use("/v1/admin/settings", adminSettingsRouter);
 router.use("/v1/admin/files", adminFileRouter);

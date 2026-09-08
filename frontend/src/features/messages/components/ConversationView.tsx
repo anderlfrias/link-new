@@ -44,8 +44,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   // El propio `send` no sabe nada de "a qué estoy respondiendo" — ese estado
   // es puramente de esta pantalla (qué está armado en el composer ahora
   // mismo), por eso se resuelve acá y no en use-messages.ts.
-  async function handleSend(content: string, fileIds?: string[]) {
-    await send(content, fileIds, replyTarget?.id);
+  async function handleSend(content: string, fileIds?: string[], type?: "STICKER") {
+    await send(content, fileIds, replyTarget?.id, type);
     setReplyTarget(null);
   }
 

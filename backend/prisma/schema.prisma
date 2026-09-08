@@ -55,9 +55,14 @@ enum ConversationType {
 /// Tipo de mensaje.
 enum MessageType {
   /// Mensaje escrito por un usuario.
-  TEXT   @map("text")
+  TEXT    @map("text")
   /// Mensaje generado por el sistema (ej. "Juan agregó a Pedro").
-  SYSTEM @map("system")
+  SYSTEM  @map("system")
+  /// Sticker elegido desde el buscador de Giphy — siempre `content: ""` y
+  /// exactamente un `fileId` (ver message.service.ts#sendMessage). Se
+  /// renderiza sin fondo de burbuja (ver MessageBubble.tsx en el frontend),
+  /// a diferencia de un GIF (que viaja como TEXT + adjunto normal).
+  STICKER @map("sticker")
 
   @@map("message_type")
 }
@@ -505,6 +510,13 @@ model AppSettings {
   allowMessageDeleteForEveryone Boolean @default(true) @map("allow_message_delete_for_everyone")
   /// Minutos desde el envío durante los que un mensaje puede borrarse para todos. null = sin límite.
   messageDeleteForEveryoneTimeLimitMinutes Int? @map("message_delete_for_everyone_time_limit_minutes")
+
+  /// Interruptor maestro del buscador de GIFs/stickers (Giphy, ver
+  /// modules/giphy/README.md) — controla tanto si el botón aparece en el
+  /// composer como si /v1/giphy/* acepta pedidos (403 si es false, nunca solo
+  /// cosmético). Default true: reproduce "disponible" hasta que un admin lo
+  /// apague; igual requiere GIPHY_API_KEY configurada para funcionar de verdad.
+  allowStickersAndGifs Boolean @default(true) @map("allow_stickers_and_gifs")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

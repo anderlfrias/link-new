@@ -123,6 +123,7 @@ interface CreateAndDeliverParams {
   replyToId?: string;
   forwardedFromId?: string;
   auditAction: ChatAuditAction;
+  type?: MessageType;
 }
 
 /// Núcleo compartido por `sendMessage` y `forwardMessage`: crear la fila,
@@ -140,6 +141,7 @@ async function createAndDeliverMessage(
     conversationId,
     senderId: currentUserId,
     content: params.content,
+    type: params.type,
     fileIds: params.fileIds,
     replyToId: params.replyToId,
     forwardedFromId: params.forwardedFromId,
@@ -232,6 +234,7 @@ export async function sendMessage(
     fileIds,
     replyToId: input.replyToId,
     auditAction: ChatAuditAction.SEND_MESSAGE,
+    type: input.type === "STICKER" ? MessageType.STICKER : undefined,
   });
 }
 

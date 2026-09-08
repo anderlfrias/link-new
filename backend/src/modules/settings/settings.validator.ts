@@ -42,6 +42,7 @@ export const updateSettingsSchema = yup
     messageEditTimeLimitMinutes: yup.number().integer().min(1).nullable(),
     allowMessageDeleteForEveryone: yup.boolean(),
     messageDeleteForEveryoneTimeLimitMinutes: yup.number().integer().min(1).nullable(),
+    allowStickersAndGifs: yup.boolean(),
   })
   .test(
     "at-least-one-field",
@@ -69,5 +70,6 @@ export const updateSettingsSchema = yup
       value.allowMessageEdit !== undefined ||
       value.messageEditTimeLimitMinutes !== undefined ||
       value.allowMessageDeleteForEveryone !== undefined ||
-      value.messageDeleteForEveryoneTimeLimitMinutes !== undefined,
+      value.messageDeleteForEveryoneTimeLimitMinutes !== undefined ||
+      value.allowStickersAndGifs !== undefined,
   );

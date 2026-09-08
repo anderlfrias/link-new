@@ -9,6 +9,13 @@ export interface CreateMessageInput {
   /// Mensaje al que este responde (tipo WhatsApp/Telegram) — debe pertenecer
   /// a la misma conversación, se valida en `sendMessage` (message.service.ts).
   replyToId?: string;
+  /// Omitido (o ausente) = `TEXT`, el caso normal. `"STICKER"` es el único
+  /// valor que un cliente puede pedir explícitamente (nunca `"SYSTEM"` — eso
+  /// lo genera el propio backend, ver conversation.service.ts) — exige
+  /// `content` vacío y exactamente un `fileId` (ver createMessageSchema,
+  /// message.validator.ts, y el sticker importado antes vía
+  /// `POST /api/v1/giphy/import`, ../giphy/README.md).
+  type?: "STICKER";
 }
 
 /// Reenviar un mensaje puntual (de cualquier conversación donde seas

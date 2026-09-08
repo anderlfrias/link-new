@@ -497,6 +497,8 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 
 `content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9), pero no ilimitados: `400` si traés más entradas que `AppSettings.maxFilesPerMessage` (`null` = sin límite, ver sección 12).
 
+`type` opcional — omitido (o ausente) siempre crea `TEXT`, el caso normal. El único otro valor que un cliente puede pedir es `"STICKER"` (nunca `"SYSTEM"`, eso lo genera el propio backend): exige `content` vacío y exactamente un `fileId` (`400` si no), pensado para un sticker recién importado vía `POST /api/v1/giphy/import` (sección 6.1.2). Un GIF, en cambio, **no** usa `type: "STICKER"` — se manda como `TEXT` normal con un `fileId` de tipo `image/gif`, igual que cualquier imagen adjunta.
+
 `replyToId` opcional — responder a un mensaje puntual de la conversación (tipo WhatsApp/Telegram). Solo se valida que el id exista y pertenezca a **esta misma** conversación (`400` si no); a propósito no se exige que siga sin borrar — si alguien lo borra justo mientras vos tenías la cita armada en tu campo de texto, el envío igual funciona (ver `replyTo` más abajo).
 
 → `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
@@ -514,6 +516,18 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 No hay restricción de tipo de conversación en ninguno de los dos lados — podés reenviar desde/hacia `PRIVATE`, `GROUP` o `SELF` (reenviarte algo a "Mensajes guardados", tipo Telegram, es el caso de uso típico, pero no el único).
 
 No existe (ni hace falta) un endpoint de reenvío a múltiples destinos: el picker del frontend (`ForwardMessageModal.tsx`, multi-select tipo WhatsApp/Telegram — grupos, personas y/o "Mensajes guardados" a la vez) simplemente llama a este mismo endpoint una vez por cada `:conversationId` elegido (`useForwardMessage`, en paralelo vía `Promise.allSettled`), creando primero la conversación `PRIVATE`/`SELF` para los destinos que todavía no existen. Un destino fallando no cancela los demás.
+
+### 6.1.2 GIFs y stickers (Giphy)
+
+```
+GET /api/v1/giphy/search?kind=gifs|stickers&q=hola&limit=24&offset=0
+GET /api/v1/giphy/trending?kind=gifs|stickers&limit=24
+POST /api/v1/giphy/import { "kind": "gifs", "giphyId": "xyz", "originalUrl": "https://media.giphy.com/.../giphy.gif" }
+```
+
+Módulo aparte (`/api/v1/giphy`, no anidado bajo `conversations`, ver `modules/giphy/README.md`) que intermedia contra la API de [Giphy](https://developers.giphy.com/) — `search`/`trending` devuelven una forma recortada (`{ id, title, previewUrl, originalUrl, width, height }`, nunca el JSON crudo de Giphy); `import` descarga `originalUrl` tal cual la devolvió `search`/`trending` (validando que el host sea de Giphy, `*.giphy.com` sobre `https`, antes de descargar — nunca confiando ciegamente en el valor) y lo guarda como `StoredFile` propio, devolviendo la misma forma que `POST /api/v1/files` (sección 9). No se vuelve a resolver `giphyId` contra Giphy antes de descargar: la API de Giphy no tiene un "get by id" para stickers, así que ese enfoque (usado en una versión anterior de este endpoint) rompía la importación de cualquier sticker. Con el `id` del `StoredFile` creado en mano, el envío real es el `POST /` de arriba de siempre: `fileIds: [<id>]` a secas para un GIF, o sumando `type: "STICKER"` para un sticker — no hay endpoint de envío distinto.
+
+Requiere `AppSettings.allowStickersAndGifs: true` (`403` si un admin lo desactivó, sección 12) y `GIPHY_API_KEY` configurada en el servidor (`503` si no — variable opcional, a diferencia de las de Web Push).
 
 ### 6.2 `GET /` — Listar mensajes
 
@@ -691,7 +705,7 @@ Borrado lógico, solo quien lo subió (`403` para cualquier otro). → `200` `{ 
 | Enum | Valores | Dónde aparece |
 |---|---|---|
 | `ConversationType` | `PRIVATE`, `GROUP` | `Conversation.type` |
-| `MessageType` | `TEXT`, `SYSTEM` | `Message.type` |
+| `MessageType` | `TEXT`, `SYSTEM`, `STICKER` | `Message.type` |
 | `UserStatus` | `ACTIVE`, `INACTIVE` | `ConversationMember.user.status` |
 | `MessageReceiptStatus` (no es un enum de Prisma, es propio del API) | `sent`, `delivered`, `read` | `receipts[].status`, `lastMessageStatus` |
 | `GroupPermissionLevel` | `ALL_MEMBERS`, `GROUP_ADMINS_ONLY`, `APP_ADMINS_ONLY`, `CREATOR_ONLY` | `AppSettings.whoCanCreateGroups`/`whoCanAddMembers`/`whoCanRemoveMembers`/`whoCanChangeGroupInfo`/`whoCanDeleteGroup`, `ConversationGroupSettings` (mismos campos salvo `whoCanCreateGroups`) |
@@ -749,7 +763,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
 }
 ```
 
-`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`.
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`. `allowStickersAndGifs` (default `true`) es el interruptor maestro del buscador de GIFs/stickers (sección 6.1.2) — `403` en `/v1/giphy/*` si está en `false`, sin importar si `GIPHY_API_KEY` está configurada.
 
 ### 12.2 `GET /settings/public` — cualquier autenticado
 
@@ -766,7 +780,8 @@ Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesi
   "allowMessageDeleteForEveryone": true,
   "messageDeleteForEveryoneTimeLimitMinutes": null,
   "allowConversationDelete": true,
-  "allowGroupDelete": true
+  "allowGroupDelete": true,
+  "allowStickersAndGifs": true
 }
 ```
 

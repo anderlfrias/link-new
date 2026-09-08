@@ -16,6 +16,7 @@ import { useMessageGestures } from "@/features/messages/hooks/use-message-gestur
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { aggregateMessageStatus } from "@/utils/message-status";
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
+import { buildStoredFileUrl } from "@/utils/file-url";
 import { cn } from "@/utils/cn";
 import type { Message } from "@/features/messages/types/message.types";
 
@@ -54,6 +55,9 @@ export function MessageBubble({
   const isEdited = Boolean(message.editedAt && !isDeleted);
   const hasCaption = isDeleted || Boolean(message.content.trim());
   const hasAttachments = !isDeleted && message.files.length > 0;
+  // Un sticker ya borrado se pinta como cualquier otro "Mensaje eliminado"
+  // (tombstone genérico) — el look sin burbuja es solo para uno vivo.
+  const isSticker = message.type === "STICKER" && !isDeleted;
 
   // `isOwn` (prop) = ¿el remitente REAL de este mensaje sos vos? Rige
   // permisos (canEdit/canDelete) y los recibos — nunca cambia por cómo se ve.
@@ -222,10 +226,15 @@ export function MessageBubble({
           transition: isSwiping ? "none" : "transform 200ms ease-out",
         }}
         className={cn(
-          "group relative max-w-[75%] min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
-          renderAsOwn
-            ? "bg-brand-blue text-white"
-            : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
+          "group relative",
+          isSticker
+            ? "max-w-36"
+            : cn(
+                "max-w-[75%] min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
+                renderAsOwn
+                  ? "bg-brand-blue text-white"
+                  : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
+              ),
         )}
       >
         {showOptionsTrigger && !isEditing && (
@@ -297,65 +306,82 @@ export function MessageBubble({
             {message.sender.name}
           </p>
         )}
-        {hasAttachments && (
-          <div className={hasCaption ? "mb-1.5" : undefined}>
-            <MessageAttachments files={message.files} isOwn={renderAsOwn} />
-          </div>
-        )}
-        {isEditing ? (
-          <div className="flex min-w-[180px] flex-col gap-1.5">
-            <textarea
-              ref={editTextareaRef}
-              value={editValue}
-              onChange={(event) => setEditValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void submitEdit();
-                }
-                if (event.key === "Escape") cancelEditing();
-              }}
-              rows={2}
-              className={cn(
-                "resize-none rounded-lg border bg-transparent px-2 py-1 text-sm outline-none",
-                renderAsOwn ? "border-white/30 placeholder:text-white/60" : "border-black/10 dark:border-white/10",
-              )}
+        {isSticker ? (
+          <div className={cn("flex flex-col gap-1", renderAsOwn ? "items-end" : "items-start")}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- tamaño intrínseco de sticker, no una foto de ancho completo */}
+            <img
+              src={buildStoredFileUrl(message.files[0].file.path)}
+              alt="Sticker"
+              className="h-36 w-36 object-contain"
             />
-            {editError && <p className="text-xs text-red-300">{editError}</p>}
-            <div className="flex justify-end gap-1">
-              <button
-                type="button"
-                onClick={cancelEditing}
-                disabled={editPending}
-                aria-label="Cancelar edición"
-                className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/10 disabled:opacity-50"
-              >
-                <IconX size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitEdit()}
-                disabled={editPending || !editValue.trim()}
-                aria-label="Guardar edición"
-                className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/10 disabled:opacity-50"
-              >
-                {editPending ? <IconLoader2 size={14} className="animate-spin" /> : <IconCheck size={14} />}
-              </button>
-            </div>
+            <span className="flex items-center gap-1 px-0.5 text-[11px] text-neutral-400 select-none dark:text-neutral-500">
+              <span>{formatBubbleTime(message.createdAt)}</span>
+              {status && <MessageStatusTicks status={status} />}
+            </span>
           </div>
-        ) : hasCaption ? (
-          <p
-            className={cn(
-              "flow-root whitespace-pre-wrap break-words text-sm",
-              isDeleted && (renderAsOwn ? "italic text-white/70" : "italic text-neutral-500 dark:text-neutral-400"),
-              !isDeleted && !renderAsOwn && "text-brand-ink dark:text-white",
-            )}
-          >
-            {isDeleted ? "Mensaje eliminado" : message.content}
-            <span className="float-right ml-2 mt-[3px]">{footer}</span>
-          </p>
         ) : (
-          <div className="flex justify-end">{footer}</div>
+          <>
+            {hasAttachments && (
+              <div className={hasCaption ? "mb-1.5" : undefined}>
+                <MessageAttachments files={message.files} isOwn={renderAsOwn} />
+              </div>
+            )}
+            {isEditing ? (
+              <div className="flex min-w-[180px] flex-col gap-1.5">
+                <textarea
+                  ref={editTextareaRef}
+                  value={editValue}
+                  onChange={(event) => setEditValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void submitEdit();
+                    }
+                    if (event.key === "Escape") cancelEditing();
+                  }}
+                  rows={2}
+                  className={cn(
+                    "resize-none rounded-lg border bg-transparent px-2 py-1 text-sm outline-none",
+                    renderAsOwn ? "border-white/30 placeholder:text-white/60" : "border-black/10 dark:border-white/10",
+                  )}
+                />
+                {editError && <p className="text-xs text-red-300">{editError}</p>}
+                <div className="flex justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={cancelEditing}
+                    disabled={editPending}
+                    aria-label="Cancelar edición"
+                    className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/10 disabled:opacity-50"
+                  >
+                    <IconX size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitEdit()}
+                    disabled={editPending || !editValue.trim()}
+                    aria-label="Guardar edición"
+                    className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/10 disabled:opacity-50"
+                  >
+                    {editPending ? <IconLoader2 size={14} className="animate-spin" /> : <IconCheck size={14} />}
+                  </button>
+                </div>
+              </div>
+            ) : hasCaption ? (
+              <p
+                className={cn(
+                  "flow-root whitespace-pre-wrap break-words text-sm",
+                  isDeleted && (renderAsOwn ? "italic text-white/70" : "italic text-neutral-500 dark:text-neutral-400"),
+                  !isDeleted && !renderAsOwn && "text-brand-ink dark:text-white",
+                )}
+              >
+                {isDeleted ? "Mensaje eliminado" : message.content}
+                <span className="float-right ml-2 mt-[3px]">{footer}</span>
+              </p>
+            ) : (
+              <div className="flex justify-end">{footer}</div>
+            )}
+          </>
         )}
       </div>
 

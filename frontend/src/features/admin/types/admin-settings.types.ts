@@ -40,6 +40,8 @@ export interface AdminSettings {
   allowMessageDeleteForEveryone: boolean;
   /** Minutos desde el envío durante los que un mensaje puede borrarse para todos. `null` = sin límite. */
   messageDeleteForEveryoneTimeLimitMinutes: number | null;
+  /** Interruptor maestro del buscador de GIFs/stickers (Giphy). */
+  allowStickersAndGifs: boolean;
 }
 
 export type UpdateAdminSettingsPayload = Partial<AdminSettings>;

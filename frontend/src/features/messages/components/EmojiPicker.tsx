@@ -7,14 +7,16 @@ interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
 }
 
-/** Popover del selector de emojis: tabs por categoría + grilla scrolleable,
- * mismo estilo que el menú de adjuntar en MessageInput.tsx. */
+/** Contenido del selector de emojis: tabs por categoría + grilla scrolleable
+ * — sin marco propio (bordes/tamaño/sombra), pensado para vivir como una
+ * pestaña más dentro de `EmojiGifStickerPicker.tsx`, que es quien pone el
+ * marco. Llena el espacio del contenedor flex-col que lo envuelve. */
 export function EmojiPicker({ onSelect }: EmojiPickerProps) {
   const [activeCategory, setActiveCategory] = useState(0);
   const category = EMOJI_CATEGORIES[activeCategory];
 
   return (
-    <div className="flex h-80 w-72 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-black/5 bg-white shadow-lg dark:border-white/10 dark:bg-neutral-900">
+    <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-black/5 px-1.5 py-1.5 dark:border-white/10">
         {EMOJI_CATEGORIES.map((cat, index) => (
           <button

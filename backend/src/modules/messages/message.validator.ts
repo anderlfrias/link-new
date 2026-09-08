@@ -8,11 +8,17 @@ export const createMessageSchema = yup
     content: yup.string().trim().max(4000).default(""),
     fileIds: yup.array().of(yup.string().required()),
     replyToId: yup.string().optional(),
+    type: yup.string().oneOf(["STICKER"]).optional(),
   })
   .test(
     "content-or-attachment",
     "content or fileIds is required",
     (value) => Boolean(value.content) || Boolean(value.fileIds?.length),
+  )
+  .test(
+    "sticker-shape",
+    "a sticker message must have empty content and exactly one fileId",
+    (value) => value.type !== "STICKER" || (!value.content && value.fileIds?.length === 1),
   );
 
 export const updateMessageSchema = yup.object({

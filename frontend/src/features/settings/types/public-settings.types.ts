@@ -15,4 +15,7 @@ export interface PublicAppSettings {
   allowConversationDelete: boolean;
   /** Interruptor maestro: si es false, nadie puede eliminar un grupo sin importar `whoCanDeleteGroup`. */
   allowGroupDelete: boolean;
+  /** Muestra/oculta el botón de GIFs/stickers en el composer — la autoridad
+   * real sigue siendo el backend (/v1/giphy/*, 403 si está en false). */
+  allowStickersAndGifs: boolean;
 }
