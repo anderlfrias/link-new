@@ -8,6 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@dicebear/collection": "^9.4.2",
+    "@dicebear/core": "^9.4.3",
     "@tabler/icons-react": "^3.45.0",
     "boring-avatars": "^2.0.4",
     "clsx": "^2.1.1",

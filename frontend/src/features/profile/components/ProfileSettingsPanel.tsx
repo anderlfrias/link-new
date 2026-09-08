@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import {
   IconAlertCircle,
   IconArrowLeft,
+  IconArrowRight,
+  IconCamera,
   IconCheck,
   IconLoader2,
+  IconPalette,
   IconPencil,
+  IconPhoto,
   IconTrash,
-  IconUpload,
   IconX,
 } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
@@ -16,7 +19,7 @@ import { useProfilePicture } from "@/features/auth/hooks/use-profile-picture";
 import { useUpdateProfilePicture } from "@/features/profile/hooks/use-update-profile-picture";
 import { useUpdateProfileName } from "@/features/profile/hooks/use-update-profile-name";
 import { useUpdateNotificationSound } from "@/features/profile/hooks/use-update-notification-sound";
-import { BoringAvatarPicker } from "@/features/profile/components/BoringAvatarPicker";
+import { AvatarSelectionModal } from "@/features/profile/components/AvatarSelectionModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -31,8 +34,8 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
   const { upload, remove, pending, error } = useUpdateProfilePicture();
   const { updateName, pending: updatingName, error: nameError } = useUpdateProfileName();
   const { setEnabled: setSoundEnabled, pending: updatingSound, error: soundError } = useUpdateNotificationSound();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   const currentName = session?.user.fullName || session?.user.username || "";
   const [editingName, setEditingName] = useState(false);
@@ -46,13 +49,6 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
   }, [currentName]);
 
   if (!session) return null;
-
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    // Permite volver a elegir el mismo archivo después (si lo borró y lo quiere subir de nuevo).
-    event.target.value = "";
-    if (file) upload(file, file.name);
-  }
 
   async function handleRemove() {
     await remove();
@@ -102,14 +98,28 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
         )}
 
         <div className="flex flex-col items-center gap-3 py-4">
-          <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsAvatarModalOpen(true)}
+            disabled={pending}
+            title="Cambiar foto de perfil"
+            className="group relative cursor-pointer rounded-full focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-neutral-900"
+          >
             <Avatar name={currentName} imageUrl={profilePictureUrl} size="xl" />
-            {pending && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30">
+            {pending ? (
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
                 <IconLoader2 className="animate-spin text-white" size={24} />
               </div>
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <IconCamera size={22} className="text-white" stroke={2} />
+                <span className="text-[10px] font-medium text-white">Cambiar</span>
+              </div>
             )}
-          </div>
+            <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-brand-blue text-white shadow-md dark:border-neutral-900">
+              <IconCamera size={14} stroke={2} />
+            </div>
+          </button>
 
           {editingName ? (
             <div className="flex w-full items-center gap-1.5">
@@ -160,28 +170,29 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
         </div>
 
         <div className="flex flex-col gap-2">
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           <Button
             type="button"
             disabled={pending}
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full"
+            onClick={() => setIsAvatarModalOpen(true)}
+            className="w-full gap-2 shadow-sm"
           >
-            <IconUpload size={16} stroke={1.75} />
-            Subir una foto
+            <IconPhoto size={16} stroke={1.75} />
+            Cambiar foto o avatar
           </Button>
 
           {!confirmingRemove ? (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={pending || !profilePictureUrl}
-              onClick={() => setConfirmingRemove(true)}
-              className="w-full"
-            >
-              <IconTrash size={16} stroke={1.75} />
-              Eliminar foto actual
-            </Button>
+            profilePictureUrl ? (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={pending || !profilePictureUrl}
+                onClick={() => setConfirmingRemove(true)}
+                className="w-full"
+              >
+                <IconTrash size={16} stroke={1.75} />
+                Eliminar foto actual
+              </Button>
+            ) : null
           ) : (
             <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm dark:bg-red-500/10">
               <span className="flex-1 text-red-700 dark:text-red-300">¿Eliminar tu foto de perfil?</span>
@@ -199,13 +210,47 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
           )}
         </div>
 
+        {/* Sección de galería de ilustraciones y avatares */}
         <div className="mt-6">
-          <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">O elegí un avatar</h3>
-          <BoringAvatarPicker
-            seed={session.user.internalUserId}
-            onSelect={(blob) => upload(blob, "avatar.png")}
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-brand-ink dark:text-white">Avatares e ilustraciones</h3>
+            <button
+              type="button"
+              onClick={() => setIsAvatarModalOpen(true)}
+              disabled={pending}
+              className="text-xs font-medium text-brand-blue hover:underline dark:text-brand-blue-light"
+            >
+              Ver catálogo
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+            Elegí entre ilustraciones de personas, robots, formas abstractas y estilos retro para tu foto de perfil.
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsAvatarModalOpen(true)}
             disabled={pending}
-          />
+            className="group flex w-full items-center justify-between rounded-xl border border-black/10 bg-black/[0.02] p-3 text-left transition-colors hover:bg-black/5 dark:border-white/10 dark:bg-white/[0.02] dark:hover:bg-white/5"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue-light">
+                <IconPalette size={20} stroke={1.75} />
+              </div>
+              <div>
+                <span className="block text-sm font-medium text-brand-ink dark:text-white">
+                  Galería de ilustraciones
+                </span>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Explorar opciones y personalizar colores
+                </span>
+              </div>
+            </div>
+            <IconArrowRight
+              size={18}
+              stroke={1.75}
+              className="shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 dark:text-neutral-500"
+            />
+          </button>
         </div>
 
         <div className="mt-6">
@@ -218,6 +263,15 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
           />
         </div>
       </div>
+
+      {/* Modal de selección de avatar con pestañas (Ilustraciones, Abstractos, Subir) */}
+      <AvatarSelectionModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        userSeed={session.user.internalUserId}
+        onSelectImage={(blob, filename) => upload(blob, filename)}
+        disabled={pending}
+      />
     </div>
   );
 }
