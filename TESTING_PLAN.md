@@ -141,7 +141,7 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
 | 12 | Feature: Conversations | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-12) | frontend | [x] 2026-09-09 |
 | 13 | Feature: Messages | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-13) | frontend | [x] 2026-09-09 |
 | 14 | Feature: Files, Giphy, Notifications, Profile, Users, Settings | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-14) | frontend | [x] 2026-09-09 |
-| 15 | Auditoría de cobertura + flujos clave | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-15) | frontend | [ ] Pendiente |
+| 15 | Auditoría de cobertura + flujos clave | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-15) | frontend | [x] 2026-09-09 |
 | 16 | CI, piso de cobertura y cierre de política | [testing-plan/03-ci-and-policy.md](testing-plan/03-ci-and-policy.md) | ambos | [ ] Pendiente |
 
 Actualizá esta tabla (marcá `[x]` + fecha) cada vez que una fase completa cierre. Ejemplo:

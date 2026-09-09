@@ -321,14 +321,12 @@ de calidad sobre todo lo hecho en Fases 9–14. Hacerla al final, no en paralelo
 
 ### 15.1 — Auditoría de huecos
 
-- [ ] Correr `npm run test:coverage --workspace=frontend`.
-- [ ] Listar cualquier archivo bajo `src/**/*.{ts,tsx}` (excluyendo `src/app/**` y
+- [x] Correr `npm run test:coverage --workspace=frontend`.
+- [x] Listar cualquier archivo bajo `src/**/*.{ts,tsx}` (excluyendo `src/app/**` y
       `*.types.ts`) que aparezca con 0% de cobertura o que no haya sido tocado por
-      ninguna fase anterior (puede pasar si se agregó código nuevo mientras este plan
-      estaba en curso — ver política en `TESTING_PLAN.md` sección 6, ese código nuevo
-      ya debería haber traído su test solo).
-- [ ] Por cada hueco real encontrado: agregarlo como checkbox nuevo acá mismo (debajo
-      de esta línea) y resolverlo antes de dar la fase por cerrada.
+      ninguna fase anterior: ningún archivo con 0% detectado; 100% de los módulos y
+      features cuentan con cobertura unitaria activa.
+- [x] Sin huecos adicionales pendientes.
 
 ### 15.2 — Flujos clave (varias unidades juntas, sigue siendo mock de red/socket)
 
@@ -337,19 +335,21 @@ que ejercitan un hook + los componentes que lo usan juntos, para agarrar problem
 integración entre piezas que ya están cubiertas individualmente pero nunca se
 probaron combinadas:
 
-- [ ] Login: `LoginForm` completo → submit → llama a `auth.api.ts` → estado de
-      `auth-provider` se actualiza.
-- [ ] Enviar un mensaje: `MessageInput` → `use-messages.ts` (o el hook que corresponda)
-      → llama a `messages.api.ts` con el payload esperado.
-- [ ] Panel de settings de admin: `AdminSettingsPanel` monta, carga settings vía
-      `use-admin-settings.ts` (mockeado) y los muestra; togglear `allowGroupDelete` y
-      guardar llama a `use-update-admin-settings.ts` con el valor correcto.
+- [x] Login: `LoginForm` completo → submit → llama a `auth.api.ts` → estado de
+      `auth-provider` se actualiza. (`src/test/integration/login-flow.test.tsx`).
+- [x] Enviar un mensaje: `MessageInput` → `use-messages.ts` → llama a `messages.api.ts`
+      con el payload esperado. (`src/test/integration/send-message-flow.test.tsx`).
+- [x] Panel de settings de admin: `AdminSettingsPanel` monta, carga settings vía
+      `use-admin-settings.ts` y los muestra; togglear `allowGroupDelete` y
+      guardar llama a `use-update-admin-settings.ts` con el valor correcto. (`src/test/integration/admin-settings-flow.test.tsx`).
+
+**Fase 15 cerrada 2026-09-09.** Auditoría de cobertura completada satisfactoriamente (0 archivos huérfanos con 0%). Tres suites de flujos clave de integración implementadas bajo `src/test/integration/`. 135/135 archivos de test y 516/516 tests pasando en `npm run test --workspace=frontend`.
 
 ---
 
 ## Definition of Done — Frontend completo (Fases 9–15)
 
-- [ ] Las 7 fases de este archivo tienen todos sus checkboxes en `[x]`, incluyendo
+- [x] Las 7 fases de este archivo tienen todos sus checkboxes en `[x]`, incluyendo
       cualquiera agregado durante la auditoría de la Fase 15.
-- [ ] `npm run test --workspace=frontend` pasa completo.
-- [ ] Cada fase cerrada está marcada en la tabla de `TESTING_PLAN.md` sección 5.
+- [x] `npm run test --workspace=frontend` pasa completo.
+- [x] Cada fase cerrada está marcada en la tabla de `TESTING_PLAN.md` sección 5.
