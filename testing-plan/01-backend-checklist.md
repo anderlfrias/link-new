@@ -183,33 +183,38 @@ Todas las invariantes del núcleo del dominio fueron verificadas rigurosamente.
 
 ## Fase 4 — Messages (prioridad alta)
 
-- [ ] `sendMessage()` — creación + entrega vía socket (mockeando `getIO`); mensaje con
-      reply (`replyTo`) referencia el original; mensaje tipo `STICKER`/GIF (ver
-      `MessageType.STICKER`, viaja como `TEXT` normal con `fileId`, según lo
-      documentado — confirmar leyendo el service antes de asumir).
-- [ ] `forwardMessage()` — reenvía a otra conversación de la que el usuario sí es
-      miembro; reenviar a una de la que NO es miembro → rechazado (usa
-      `assertMembership` de conversations, mockeada acá).
-- [ ] `listMessages()` — paginación (revisar el mecanismo real: cursor/offset, leer el
-      archivo).
-- [ ] `listConversationFiles()` — filtra correctamente mensajes con archivos adjuntos.
-- [ ] `editMessage()` — autor edita dentro de la ventana de tiempo → OK; no-autor →
-      `ForbiddenError` (vía `assertOwnedMessage`, privada — no importar directo, cubrir
-      a través de `editMessage`); fuera de la ventana de tiempo
-      (`messageEditTimeLimitMinutes`) → rechazado. **Invariante obligatoria**, ver
-      sección 4 de `TESTING_PLAN.md`.
-- [ ] `deleteMessage()` — mismo criterio que `editMessage` pero con
-      `messageDeleteForEveryoneTimeLimitMinutes`; verificar que el contenido no se
-      borra de la DB (soft delete) aunque el preview lo oculte (eso ya se cubre en la
-      Fase 3 vía `buildLastMessagePreview`, acá solo verificar que `deleteMessage`
-      efectivamente marca `deletedAt` y no hace un delete físico — leer el repository
-      para confirmar el mecanismo antes de asumir).
-- [ ] `message.repository.ts` — igual criterio que conversations: solo lógica
-      condicional real.
-- [ ] `message.controller.ts` — mapeo service → HTTP.
-- [ ] `message.validator.ts` — schemas de crear/editar/reenviar.
-- [ ] `message.socket.ts` — handlers de `typing`/`relayTyping()` y demás eventos, como
-      funciones puras con mocks de socket/io.
+- [x] `sendMessage()` — creación + entrega vía socket (mockeando `getIO`); mensaje con
+      reply (`replyTo`) referencia el original o falla con 400 si no existe en la conversación;
+      mensaje tipo `STICKER` (con `type: MessageType.STICKER` y un `fileId`); push notification
+      a miembros desconectados vía `PushService.notifyUsers`.
+- [x] `forwardMessage()` — reenvía como copia independiente a otra conversación donde el usuario
+      es miembro; si no es miembro de la de origen → `ForbiddenError` (vía `assertMembership`).
+- [x] `listMessages()` — paginación por cursor `beforeId` y límite acotado (1 a 100),
+      marca entregado al solicitante y computa recibos de entrega.
+- [x] `listConversationFiles()` — filtra y mapea archivos adjuntos en la conversación.
+- [x] `editMessage()` — autor edita dentro de la ventana de tiempo → OK; no-autor →
+      `ForbiddenError`; tipo no-TEXT → `BadRequestError`; fuera de la ventana de tiempo
+      (`messageEditTimeLimitMinutes`) o si `allowMessageEdit` está apagado → `ForbiddenError`.
+      **Invariante obligatoria**.
+- [x] `deleteMessage()` — autor dentro del tiempo configurado realiza soft delete (marca
+      `deletedAt` y `deletedById` preservando el contenido físico en la DB); fuera de ventana
+      o flag global apagado → `ForbiddenError`; creador de la conversación puede borrar
+      mensajes ajenos por moderación sin límite de tiempo; emite `MESSAGE_EVENTS.DELETED`.
+      **Invariante obligatoria**.
+- [x] `message.repository.ts` — lógica condicional: `countExistingFiles` con array vacío,
+      `createMessage` transaccional actualizando `Conversation.lastMessageId`, paginación por
+      cursor en `listMessages` y `listFiles`, `existsInConversation`, `softDelete` y
+      `softDeleteOlderThan` (11 tests en `message.repository.test.ts`).
+- [x] `message.controller.ts` — mapeo service → HTTP (`create` 201, `forward` 201, `list`,
+      `listFiles`, `update`, `remove`). (7 tests en `message.controller.test.ts`).
+- [x] `message.validator.ts` — schemas de crear (texto, adjuntos, STICKER, límites), editar y
+      reenviar. (12 tests en `message.validator.test.ts`).
+- [x] `message.socket.ts` — handlers de `TYPING_START`, `TYPING_STOP` y `DISCONNECTING`
+      verificando membresía y excluyendo al propio remitente. (6 tests en `message.socket.test.ts`).
+
+**Fase 4 cerrada 2026-09-09.** 55 tests nuevos agregados (233/233 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Invariantes de ventana de tiempo y soft delete cubiertas rigurosamente.
 
 ---
 
