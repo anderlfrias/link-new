@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageBubble } from "./MessageBubble";
 import type { Message } from "@/features/messages/types/message.types";
@@ -7,6 +7,17 @@ import type { Message } from "@/features/messages/types/message.types";
 const mockUsePublicSettings = vi.fn();
 vi.mock("@/providers/public-settings-provider", () => ({
   usePublicSettings: () => mockUsePublicSettings(),
+}));
+
+vi.mock("@/features/messages/providers/image-lightbox-provider", () => ({
+  useImageLightbox: () => ({ open: vi.fn(), close: vi.fn(), isOpen: false }),
+}));
+
+const mockCopyTextToClipboard = vi.fn();
+const mockCopyImageToClipboard = vi.fn();
+vi.mock("@/utils/clipboard", () => ({
+  copyTextToClipboard: (...args: unknown[]) => mockCopyTextToClipboard(...args),
+  copyImageToClipboard: (...args: unknown[]) => mockCopyImageToClipboard(...args),
 }));
 
 const baseMessage: Message = {
@@ -37,6 +48,8 @@ describe("MessageBubble", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCopyTextToClipboard.mockResolvedValue(true);
+    mockCopyImageToClipboard.mockResolvedValue(true);
     mockUsePublicSettings.mockReturnValue({
       allowMessageEdit: true,
       messageEditTimeLimitMinutes: null,
@@ -333,5 +346,237 @@ describe("MessageBubble", () => {
     const img = screen.getByRole("img", { name: "Sticker" });
     expect(img).toBeInTheDocument();
     expect(img).toHaveAttribute("src", expect.stringContaining("stickers/test.webp"));
+  });
+
+  it("click derecho sobre un mensaje de texto abre el menú y permite copiar el texto al portapapeles", async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("min-width: 1024px"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(
+      <MessageBubble
+        message={baseMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByText("Mensaje original"));
+
+    const copyBtn = screen.getByRole("menuitem", { name: "Copiar" });
+    expect(copyBtn).toBeInTheDocument();
+
+    fireEvent.click(copyBtn);
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith("Mensaje original");
+    expect(await screen.findByText("Texto copiado al portapapeles")).toBeInTheDocument();
+  });
+
+  it("click derecho sobre un mensaje con imagen muestra opción de copiar imagen y copia la imagen", async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("min-width: 1024px"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const imageMessage: Message = {
+      ...baseMessage,
+      content: "",
+      files: [
+        {
+          id: "mf-img-1",
+          messageId: "msg-1",
+          fileId: "f-img-1",
+          createdAt: "2026-09-09T10:00:00Z",
+          file: {
+            id: "f-img-1",
+            path: "chat/photo.jpg",
+            originalName: "foto.jpg",
+            mimeType: "image/jpeg",
+            size: 2048,
+            extension: "jpg",
+            provider: "LOCAL",
+            checksum: null,
+            createdById: "user-1",
+            createdAt: "2026-09-09T10:00:00Z",
+            deletedAt: null,
+          },
+        },
+      ],
+    };
+
+    render(
+      <MessageBubble
+        message={imageMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const img = screen.getByRole("img", { name: "foto.jpg" });
+    fireEvent.contextMenu(img);
+
+    const copyImageBtn = screen.getByRole("menuitem", { name: "Copiar imagen" });
+    expect(copyImageBtn).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^Copiar$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(copyImageBtn);
+    expect(mockCopyImageToClipboard).toHaveBeenCalledWith(expect.stringContaining("uploads/chat/photo.jpg"));
+    expect(await screen.findByText("Imagen copiada al portapapeles")).toBeInTheDocument();
+  });
+
+  it("mensaje con texto Y foto muestra ambas opciones: 'Copiar texto' y 'Copiar imagen'", async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("min-width: 1024px"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const mixedMessage: Message = {
+      ...baseMessage,
+      content: "Foto del reporte mensual",
+      files: [
+        {
+          id: "mf-img-2",
+          messageId: "msg-1",
+          fileId: "f-img-2",
+          createdAt: "2026-09-09T10:00:00Z",
+          file: {
+            id: "f-img-2",
+            path: "chat/reporte.png",
+            originalName: "reporte.png",
+            mimeType: "image/png",
+            size: 4096,
+            extension: "png",
+            provider: "LOCAL",
+            checksum: null,
+            createdById: "user-1",
+            createdAt: "2026-09-09T10:00:00Z",
+            deletedAt: null,
+          },
+        },
+      ],
+    };
+
+    render(
+      <MessageBubble
+        message={mixedMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByText("Foto del reporte mensual"));
+
+    const copyTextBtn = screen.getByRole("menuitem", { name: "Copiar texto" });
+    const copyImageBtn = screen.getByRole("menuitem", { name: "Copiar imagen" });
+    expect(copyTextBtn).toBeInTheDocument();
+    expect(copyImageBtn).toBeInTheDocument();
+
+    fireEvent.click(copyTextBtn);
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith("Foto del reporte mensual");
+    expect(await screen.findByText("Texto copiado al portapapeles")).toBeInTheDocument();
+  });
+
+  it("click derecho sobre un sticker permite copiar la imagen del sticker", async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("min-width: 1024px"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const stickerMessage: Message = {
+      ...baseMessage,
+      type: "STICKER",
+      content: "",
+      files: [
+        {
+          id: "mf-1",
+          messageId: "msg-1",
+          fileId: "f-1",
+          createdAt: "2026-09-09T10:00:00Z",
+          file: {
+            id: "f-1",
+            path: "stickers/test.webp",
+            originalName: "test.webp",
+            mimeType: "image/webp",
+            size: 1024,
+            extension: "webp",
+            provider: "LOCAL",
+            checksum: null,
+            createdById: "user-1",
+            createdAt: "2026-09-09T10:00:00Z",
+            deletedAt: null,
+          },
+        },
+      ],
+    };
+
+    render(
+      <MessageBubble
+        message={stickerMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const img = screen.getByRole("img", { name: "Sticker" });
+    fireEvent.contextMenu(img);
+
+    const copyImageBtn = screen.getByRole("menuitem", { name: "Copiar imagen" });
+    expect(copyImageBtn).toBeInTheDocument();
+
+    fireEvent.click(copyImageBtn);
+    expect(mockCopyImageToClipboard).toHaveBeenCalledWith(expect.stringContaining("stickers/test.webp"));
+    expect(await screen.findByText("Imagen copiada al portapapeles")).toBeInTheDocument();
   });
 });

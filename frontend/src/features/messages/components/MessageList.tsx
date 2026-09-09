@@ -196,7 +196,7 @@ export function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="min-w-0 flex-1 space-y-2 overflow-y-auto px-4 py-4"
+        className="min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-4 py-4"
         style={chatBackgroundStyle}
       >
         {/* Indicador de inicio de la conversación */}

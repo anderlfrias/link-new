@@ -17,6 +17,8 @@ import { usePublicSettings } from "@/providers/public-settings-provider";
 import { aggregateMessageStatus } from "@/utils/message-status";
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
 import { buildStoredFileUrl } from "@/utils/file-url";
+import { copyImageToClipboard, copyTextToClipboard } from "@/utils/clipboard";
+import { isImageMimeType } from "@/utils/file-format";
 import { cn } from "@/utils/cn";
 import type { Message } from "@/features/messages/types/message.types";
 
@@ -91,9 +93,16 @@ export function MessageBubble({
     !isDeleted &&
     Boolean(settings?.allowMessageDeleteForEveryone) &&
     isWithinMessageTimeLimit(message.createdAt, settings?.messageDeleteForEveryoneTimeLimitMinutes ?? null);
-  const showOptionsTrigger = canReply || canForward || canEdit || canDelete;
+  const canCopyText = !isDeleted && Boolean(message.content.trim());
+  const imageFiles = message.files.filter((f) => !f.file.deletedAt && isImageMimeType(f.file.mimeType));
+  const canCopyImage = !isDeleted && (isSticker || imageFiles.length > 0);
+  const showOptionsTrigger =
+    canReply || canForward || canEdit || canDelete || canCopyText || canCopyImage;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null);
+  const [contextImageUrl, setContextImageUrl] = useState<string | null>(null);
+  const [copiedFeedback, setCopiedFeedback] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
   const [editPending, setEditPending] = useState(false);
@@ -105,7 +114,10 @@ export function MessageBubble({
 
   const { handlers: gestureHandlers, swipeOffset, isSwiping } = useMessageGestures({
     disabled: !showOptionsTrigger,
-    onLongPress: () => setMenuOpen(true),
+    onLongPress: () => {
+      setAnchorPosition(null);
+      setMenuOpen(true);
+    },
     onSwipeReply: () => onReply(message),
   });
 
@@ -127,15 +139,53 @@ export function MessageBubble({
   }
 
   // La vía "real" en desktop: click derecho en cualquier parte de la fila
-  // abre el mismo menú que el botón "⋮" (Responder/Editar/Eliminar), en vez
-  // del menú nativo del navegador. Nunca en mobile — ahí el long-press ya
-  // cubre exactamente este mismo rol, y un `contextmenu` disparado por un
-  // long-press táctil no debe interferir con ese gesto.
+  // abre el mismo menú que el botón "⋮" (Responder/Editar/Eliminar/Copiar), en vez
+  // del menú nativo del navegador. Si se hizo click derecho sobre una imagen,
+  // se memoriza su URL para copiar específicamente esa foto. Registra coordenadas
+  // de pantalla para calcular que el cuadro no se salga de la pantalla ni genere scroll.
   function handleRowContextMenu(event: MouseEvent<HTMLDivElement>) {
     if (!showOptionsTrigger || isEditing) return;
     if (!window.matchMedia("(min-width: 1024px)").matches) return;
     event.preventDefault();
+    const target = event.target as HTMLElement | null;
+    const clickedImg = target?.closest("img");
+    if (clickedImg?.src) {
+      setContextImageUrl(clickedImg.src);
+    } else {
+      setContextImageUrl(null);
+    }
+    setAnchorPosition({ x: event.clientX, y: event.clientY });
     setMenuOpen(true);
+  }
+
+  function getTargetImageUrl(): string | null {
+    if (contextImageUrl) return contextImageUrl;
+    if (isSticker && message.files[0]?.file?.path) {
+      return buildStoredFileUrl(message.files[0].file.path);
+    }
+    if (imageFiles.length > 0 && imageFiles[0]?.file?.path) {
+      return buildStoredFileUrl(imageFiles[0].file.path);
+    }
+    return null;
+  }
+
+  async function handleCopyText() {
+    if (!message.content) return;
+    const ok = await copyTextToClipboard(message.content);
+    if (ok) {
+      setCopiedFeedback("Texto copiado al portapapeles");
+      setTimeout(() => setCopiedFeedback(null), 2000);
+    }
+  }
+
+  async function handleCopyImage() {
+    const url = getTargetImageUrl();
+    if (!url) return;
+    const ok = await copyImageToClipboard(url);
+    if (ok) {
+      setCopiedFeedback("Imagen copiada al portapapeles");
+      setTimeout(() => setCopiedFeedback(null), 2000);
+    }
   }
 
   useEffect(() => {
@@ -237,11 +287,23 @@ export function MessageBubble({
               ),
         )}
       >
+        {copiedFeedback && (
+          <div
+            role="status"
+            className="pointer-events-none fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-neutral-900/90 px-4 py-1.5 text-xs font-medium text-white shadow-xl backdrop-blur-sm dark:bg-white/95 dark:text-neutral-900"
+          >
+            <IconCheck size={14} stroke={2.5} className="text-emerald-400 dark:text-emerald-600" />
+            <span>{copiedFeedback}</span>
+          </div>
+        )}
         {showOptionsTrigger && !isEditing && (
           <div className={cn("absolute -top-1", renderAsOwn ? "right-full mr-1" : "left-full ml-1")}>
             <button
               type="button"
-              onClick={() => setMenuOpen((prev) => !prev)}
+              onClick={() => {
+                setAnchorPosition(null);
+                setMenuOpen((prev) => !prev);
+              }}
               aria-label="Opciones del mensaje"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -251,15 +313,23 @@ export function MessageBubble({
             </button>
             <MessageOptionsMenu
               open={menuOpen}
-              onClose={() => setMenuOpen(false)}
+              onClose={() => {
+                setMenuOpen(false);
+                setAnchorPosition(null);
+              }}
+              anchorPosition={anchorPosition}
               canReply={canReply}
               canForward={canForward}
               canEdit={canEdit}
               canDelete={canDelete}
+              canCopyText={canCopyText}
+              canCopyImage={canCopyImage}
               onReply={() => onReply(message)}
               onForward={() => onForward(message)}
               onEdit={startEditing}
               onDelete={() => setDeleteModalOpen(true)}
+              onCopyText={() => void handleCopyText()}
+              onCopyImage={() => void handleCopyImage()}
               align={renderAsOwn ? "right" : "left"}
             />
           </div>

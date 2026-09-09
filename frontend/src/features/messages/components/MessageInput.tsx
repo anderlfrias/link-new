@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IconCheck,
   IconFileText,
@@ -28,6 +28,7 @@ import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { formatDuration } from "@/utils/format-duration";
 import { buildMessagePreview } from "@/utils/message-preview";
+import { extractImageFilesFromClipboard } from "@/utils/clipboard";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
@@ -175,6 +176,17 @@ export function MessageInput({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void submit();
+    }
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const imageFiles = extractImageFilesFromClipboard(event.clipboardData);
+    if (imageFiles.length > 0) {
+      // Si se pegan imágenes desde el portapapeles (ej. captura de pantalla o imagen copiada),
+      // prevenimos la acción por defecto del textarea y las adjuntamos automáticamente.
+      event.preventDefault();
+      event.stopPropagation();
+      addFiles(imageFiles);
     }
   }
 
@@ -356,6 +368,7 @@ export function MessageInput({
                 onTyping();
               }}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
               className="max-h-32 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-sm text-brand-ink outline-none dark:text-white"
             />

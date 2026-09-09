@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, useRef, useState } from "react";
+import { DragEvent, useEffect, useRef, useState } from "react";
 import { IconBookmark, IconLoader2, IconCloudUpload } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversation } from "@/features/conversations/hooks/use-conversation";
@@ -16,6 +16,7 @@ import { ConversationDetailPanel } from "@/features/conversations/components/Con
 import { ForwardMessageModal } from "@/features/messages/components/ForwardMessageModal";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
+import { extractImageFilesFromClipboard } from "@/utils/clipboard";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface ConversationViewProps {
@@ -75,6 +76,31 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
       attachmentsState.addFiles(event.dataTransfer.files);
     }
   }
+
+  // Soporte para pegar imágenes en cualquier lugar de la vista del chat (ej. tras hacer screenshot
+  // o copiar imagen sin tener que haber hecho foco previamente en el textarea).
+  useEffect(() => {
+    function handleGlobalPaste(event: globalThis.ClipboardEvent) {
+      const activeEl = document.activeElement;
+      // Si el foco está en un input o textarea (ej. buscador, o el propio composer que ya tiene su handler),
+      // dejamos que el elemento maneje el paste o evitamos duplicar la acción.
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")
+      ) {
+        return;
+      }
+
+      const files = extractImageFilesFromClipboard(event.clipboardData);
+      if (files.length > 0) {
+        event.preventDefault();
+        attachmentsState.addFiles(files);
+      }
+    }
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => window.removeEventListener("paste", handleGlobalPaste);
+  }, [attachmentsState]);
 
   if (conversationStatus === "loading" || conversationStatus === "idle") {
     return (

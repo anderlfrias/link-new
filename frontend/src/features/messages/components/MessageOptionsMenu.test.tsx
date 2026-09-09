@@ -92,4 +92,157 @@ describe("MessageOptionsMenu", () => {
     expect(screen.queryByRole("menuitem", { name: /Editar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Eliminar/i })).not.toBeInTheDocument();
   });
+
+  it("renders 'Copiar' when only canCopyText is true and triggers callback", () => {
+    const onClose = vi.fn();
+    const onCopyText = vi.fn();
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        canCopyText={true}
+        canCopyImage={false}
+        onCopyText={onCopyText}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="right"
+      />,
+    );
+
+    const copyBtn = screen.getByRole("menuitem", { name: "Copiar" });
+    expect(copyBtn).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Copiar imagen/i })).not.toBeInTheDocument();
+
+    fireEvent.click(copyBtn);
+    expect(onCopyText).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders 'Copiar imagen' when only canCopyImage is true and triggers callback", () => {
+    const onClose = vi.fn();
+    const onCopyImage = vi.fn();
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        canCopyText={false}
+        canCopyImage={true}
+        onCopyImage={onCopyImage}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+      />,
+    );
+
+    const copyImageBtn = screen.getByRole("menuitem", { name: "Copiar imagen" });
+    expect(copyImageBtn).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^Copiar$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(copyImageBtn);
+    expect(onCopyImage).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders both 'Copiar texto' and 'Copiar imagen' when both are true", () => {
+    const onClose = vi.fn();
+    const onCopyText = vi.fn();
+    const onCopyImage = vi.fn();
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={true}
+        canForward={true}
+        canEdit={false}
+        canDelete={false}
+        canCopyText={true}
+        canCopyImage={true}
+        onCopyText={onCopyText}
+        onCopyImage={onCopyImage}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="right"
+      />,
+    );
+
+    const copyTextBtn = screen.getByRole("menuitem", { name: "Copiar texto" });
+    const copyImageBtn = screen.getByRole("menuitem", { name: "Copiar imagen" });
+
+    expect(copyTextBtn).toBeInTheDocument();
+    expect(copyImageBtn).toBeInTheDocument();
+
+    fireEvent.click(copyTextBtn);
+    expect(onCopyText).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(copyImageBtn);
+    expect(onCopyImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders with fixed positioning when anchorPosition is provided and adjusts if near viewport edges", () => {
+    window.innerHeight = 600;
+    window.innerWidth = 800;
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={vi.fn()}
+        canReply={true}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+        anchorPosition={{ x: 750, y: 550 }}
+      />,
+    );
+
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveStyle({ position: "fixed" });
+    // Dado que x=750 + 176 > 800 - 16, debe ajustarse hacia la izquierda (800 - 16 = 784, 750 - 176 = 574)
+    expect(menu.style.left).toBe("574px");
+    // Dado que y=550 + 240 > 600 - 16, debe ajustarse hacia arriba (550 - 240 = 310)
+    expect(menu.style.top).toBe("310px");
+  });
+
+  it("closes the menu on window scroll", () => {
+    const onClose = vi.fn();
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={true}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="right"
+      />,
+    );
+
+    fireEvent.scroll(window);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

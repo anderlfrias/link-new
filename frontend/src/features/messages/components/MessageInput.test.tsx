@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageInput } from "./MessageInput";
 import type { Message } from "@/features/messages/types/message.types";
@@ -256,4 +256,81 @@ describe("MessageInput", () => {
     await user.click(acceptBtn);
     expect(dismissFn).toHaveBeenCalledWith("err-1");
   });
+
+  it("adjunta automáticamente una imagen al pegar en el textarea", () => {
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    const mockImageFile = new File(["fake-image-bytes"], "captura.png", { type: "image/png" });
+
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => mockImageFile,
+          },
+        ],
+        files: [],
+      },
+    });
+
+    fireEvent(textarea, pasteEvent);
+
+    expect(defaultAttachmentsState.addFiles).toHaveBeenCalledTimes(1);
+    expect(defaultAttachmentsState.addFiles).toHaveBeenCalledWith([expect.objectContaining({
+      name: "captura.png",
+      type: "image/png",
+    })]);
+    expect(pasteEvent.defaultPrevented).toBe(true);
+  });
+
+  it("no intercepta el pegado en el textarea si solo contiene texto plano", () => {
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            kind: "string",
+            type: "text/plain",
+            getAsFile: () => null,
+          },
+        ],
+        files: [],
+      },
+    });
+
+    fireEvent(textarea, pasteEvent);
+
+    expect(defaultAttachmentsState.addFiles).not.toHaveBeenCalled();
+    expect(pasteEvent.defaultPrevented).toBe(false);
+  });
 });
+

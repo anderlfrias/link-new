@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationView } from "./ConversationView";
 import type { Message } from "@/features/messages/types/message.types";
@@ -121,6 +121,7 @@ describe("ConversationView", () => {
   const mockLoadMore = vi.fn();
   const mockNotifyTyping = vi.fn();
   const mockNotifyStopped = vi.fn();
+  const mockAddFiles = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -151,7 +152,7 @@ describe("ConversationView", () => {
     });
     mockUseMessageAttachments.mockReturnValue({
       attachments: [],
-      addFiles: vi.fn(),
+      addFiles: mockAddFiles,
       removeAttachment: vi.fn(),
       reset: vi.fn(),
       isUploading: false,
@@ -224,5 +225,33 @@ describe("ConversationView", () => {
     await user.type(textarea, "¡Hola María! Todo bien.{Enter}");
 
     expect(mockSend).toHaveBeenCalledWith("¡Hola María! Todo bien.", undefined, undefined, undefined);
+  });
+
+  it("adjunta una imagen al disparar el evento de pegado global en la conversación", () => {
+    render(<ConversationView conversationId="conv-1" />);
+
+    const mockImageFile = new File(["bytes"], "foto.png", { type: "image/png" });
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => mockImageFile,
+          },
+        ],
+        files: [],
+      },
+    });
+
+    fireEvent(window, pasteEvent);
+
+    expect(mockAddFiles).toHaveBeenCalledTimes(1);
+    expect(mockAddFiles).toHaveBeenCalledWith([expect.objectContaining({
+      name: "foto.png",
+      type: "image/png",
+    })]);
+    expect(pasteEvent.defaultPrevented).toBe(true);
   });
 });
