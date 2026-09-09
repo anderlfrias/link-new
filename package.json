@@ -14,7 +14,8 @@
     "prisma:sync": "npm run prisma:sync --workspace=backend",
     "start": "concurrently \"npm:start:backend\" \"npm:start:frontend\"",
     "start:backend": "npm run start --workspace=backend",
-    "start:frontend": "npm run start --workspace=frontend"
+    "start:frontend": "npm run start --workspace=frontend",
+    "test": "npm run test --workspace=backend && npm run test --workspace=frontend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

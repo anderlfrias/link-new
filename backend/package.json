@@ -7,7 +7,10 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "build": "tsc",
-    "prisma:sync": "npx prisma db push && npx prisma generate"
+    "prisma:sync": "npx prisma db push && npx prisma generate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",
@@ -34,9 +37,13 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^20.14.9",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.1",
     "@types/web-push": "^3.6.4",
+    "@vitest/coverage-v8": "^5.0.0",
     "prisma": "^7.9.0",
+    "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^5.0.0"
   }
 }

@@ -239,13 +239,28 @@ Fase 1 con el pipeline roto, todo lo que se escriba después hereda el problema.
 
 ## Definition of Done — Fase 0
 
-- [ ] `backend/vitest.config.ts` creado, `npm run test --workspace=backend` corre sin
-      que `config/env.ts` tire el proceso.
-- [ ] `frontend/vitest.config.ts` + `src/test/setup.ts` creados, `npm run test --workspace=frontend` corre.
-- [ ] Scripts `test`/`test:watch`/`test:coverage` en ambos `package.json` + script `test`
+- [x] `backend/vitest.config.ts` creado, `npm run test --workspace=backend` corre sin
+      que `config/env.ts` tire el proceso. (11 tests, verde)
+- [x] `frontend/vitest.config.ts` + `src/test/setup.ts` creados, `npm run test --workspace=frontend` corre. (4 tests, verde)
+- [x] Scripts `test`/`test:watch`/`test:coverage` en ambos `package.json` + script `test`
       en el `package.json` de la raíz.
-- [ ] `.gitignore` actualizado con las carpetas `coverage/`.
-- [ ] `backend/src/utils/errors.test.ts` y `frontend/src/utils/cn.test.ts` existen y
+- [x] `.gitignore` actualizado con las carpetas `coverage/`.
+- [x] `backend/src/utils/errors.test.ts` y `frontend/src/utils/cn.test.ts` existen y
       pasan.
-- [ ] Marcada la Fase 0 como hecha en la tabla de `TESTING_PLAN.md` (sección 5).
-- [ ] Commit hecho (sugerido: `test: setup de vitest en backend y frontend`).
+- [x] Marcada la Fase 0 como hecha en la tabla de `TESTING_PLAN.md` (sección 5). (2026-09-09)
+- [x] Commit hecho.
+
+### Nota para la Fase 1 en adelante
+
+`npm install` en `backend/` y en `frontend/` **no se pueden correr en paralelo**: es
+un monorepo con npm workspaces, ambos escriben sobre el mismo `node_modules` de la
+raíz, y correrlos a la vez produce un error `ENOTEMPTY` al pisarse. Si una fase futura
+necesita instalar una dependencia nueva en cada workspace, hacerlo en dos llamadas
+secuenciales, no en paralelo.
+
+También apareció un warning (no bloqueante) de Vite en cada corrida:
+`ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1)`. No se resolvió a
+propósito: forzar `"type": "module"` en `backend/package.json` para silenciarlo
+arriesga romper `ts-node src/server.ts` / `node dist/server.js`, que asumen CommonJS
+(ver `backend/tsconfig.json`). No tocar esto salvo que se aborde como su propia tarea,
+separada de testing.
