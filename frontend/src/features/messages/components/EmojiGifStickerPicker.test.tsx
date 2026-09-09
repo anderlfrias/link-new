@@ -1,0 +1,107 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { EmojiGifStickerPicker } from "./EmojiGifStickerPicker";
+import { getTrendingGiphy, searchGiphy } from "@/features/giphy/api/giphy.api";
+import type { GiphySearchResult } from "@/features/giphy/types/giphy.types";
+
+vi.mock("@/features/giphy/api/giphy.api", () => ({
+  getTrendingGiphy: vi.fn(),
+  searchGiphy: vi.fn(),
+}));
+
+describe("EmojiGifStickerPicker", () => {
+  const mockGifs: GiphySearchResult[] = [
+    {
+      id: "g-1",
+      title: "Happy Cat",
+      previewUrl: "https://giphy.com/preview-1.gif",
+      originalUrl: "https://giphy.com/orig-1.gif",
+      width: 200,
+      height: 200,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getTrendingGiphy).mockResolvedValue(mockGifs);
+    vi.mocked(searchGiphy).mockResolvedValue(mockGifs);
+  });
+
+  it("renders only Emojis tab when showGifsAndStickers is false", () => {
+    render(
+      <EmojiGifStickerPicker
+        token="tok"
+        showGifsAndStickers={false}
+        busy={false}
+        onSelectEmoji={vi.fn()}
+        onSelectGifSticker={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Emojis" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "GIFs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stickers" })).not.toBeInTheDocument();
+  });
+
+  it("renders all tabs when showGifsAndStickers is true", () => {
+    render(
+      <EmojiGifStickerPicker
+        token="tok"
+        showGifsAndStickers={true}
+        busy={false}
+        onSelectEmoji={vi.fn()}
+        onSelectGifSticker={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Emojis" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "GIFs" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stickers" })).toBeInTheDocument();
+  });
+
+  it("switches to GIFs tab, fetches trending gifs and selects gif on click", async () => {
+    const onSelectGifSticker = vi.fn();
+    render(
+      <EmojiGifStickerPicker
+        token="tok"
+        showGifsAndStickers={true}
+        busy={false}
+        onSelectEmoji={vi.fn()}
+        onSelectGifSticker={onSelectGifSticker}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "GIFs" }));
+
+    expect(screen.getByPlaceholderText("Buscar GIFs")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(getTrendingGiphy).toHaveBeenCalledWith("tok", "gifs");
+      expect(screen.getByAltText("Happy Cat")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByAltText("Happy Cat"));
+    expect(onSelectGifSticker).toHaveBeenCalledWith("gifs", "g-1", "https://giphy.com/orig-1.gif");
+  });
+
+  it("disables gif buttons when busy is true", async () => {
+    render(
+      <EmojiGifStickerPicker
+        token="tok"
+        showGifsAndStickers={true}
+        busy={true}
+        onSelectEmoji={vi.fn()}
+        onSelectGifSticker={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "GIFs" }));
+
+    await waitFor(() => {
+      expect(screen.getByAltText("Happy Cat")).toBeInTheDocument();
+    });
+
+    const gifButton = screen.getByAltText("Happy Cat").closest("button");
+    expect(gifButton).toBeDisabled();
+  });
+});

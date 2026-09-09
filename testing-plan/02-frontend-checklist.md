@@ -233,38 +233,38 @@ Ciclo de vida de conversaciones (listado, detalle, grupos, configuración, roles
 `frontend/src/features/messages/` — la feature con más componentes del frontend,
 tiene sentido que sea su propia fase separada de conversations.
 
-- [ ] `api/messages.api.ts`
-- [ ] `providers/image-lightbox-provider.tsx`
-- [ ] `hooks/use-messages.ts`
-- [ ] `hooks/use-typing.ts`
-- [ ] `hooks/use-forward-message.ts`
-- [ ] `hooks/use-message-attachments.ts`
-- [ ] `hooks/use-conversation-files.ts`
-- [ ] `hooks/use-voice-recorder.ts` — grabación de audio: mockear la Web Audio
+- [x] `api/messages.api.ts`
+- [x] `providers/image-lightbox-provider.tsx`
+- [x] `hooks/use-messages.ts`
+- [x] `hooks/use-typing.ts`
+- [x] `hooks/use-forward-message.ts`
+- [x] `hooks/use-message-attachments.ts`
+- [x] `hooks/use-conversation-files.ts`
+- [x] `hooks/use-voice-recorder.ts` — grabación de audio: mockear la Web Audio
       API/`MediaRecorder` (jsdom no la implementa) o, si el mock es demasiado
       complejo, limitar el test a la máquina de estados del hook (idle/recording/
       stopped) inyectando un `MediaRecorder` fake por parámetro/mock de módulo.
-- [ ] `hooks/use-message-gestures.ts`
-- [ ] `components/MessageList.tsx`
-- [ ] `components/MessageBubble.tsx` — mensaje borrado → mismo texto fijo que
+- [x] `hooks/use-message-gestures.ts`
+- [x] `components/MessageList.tsx`
+- [x] `components/MessageBubble.tsx` — mensaje borrado → mismo texto fijo que
       `message-preview.ts` (Fase 9), sin importar el `content` original (mismo
       criterio que `MessageBubble` documentado en el comentario de
       `conversation.service.ts` del backend — ver invariante en `TESTING_PLAN.md`
       sección 4).
-- [ ] `components/MessageInput.tsx`
-- [ ] `components/MessageOptionsMenu.tsx`
-- [ ] `components/MessageAttachments.tsx`
-- [ ] `components/AttachmentPreviewChip.tsx`
-- [ ] `components/AttachmentErrorModal.tsx`
-- [ ] `components/DeleteMessageConfirmModal.tsx`
-- [ ] `components/ForwardMessageModal.tsx`
-- [ ] `components/QuotedMessagePreview.tsx`
-- [ ] `components/TypingIndicator.tsx`
-- [ ] `components/VoiceNotePlayer.tsx`
-- [ ] `components/EmojiPicker.tsx`
-- [ ] `components/EmojiGifStickerPicker.tsx` — mockear `features/giphy/api/giphy.api.ts`
+- [x] `components/MessageInput.tsx`
+- [x] `components/MessageOptionsMenu.tsx`
+- [x] `components/MessageAttachments.tsx`
+- [x] `components/AttachmentPreviewChip.tsx`
+- [x] `components/AttachmentErrorModal.tsx`
+- [x] `components/DeleteMessageConfirmModal.tsx`
+- [x] `components/ForwardMessageModal.tsx`
+- [x] `components/QuotedMessagePreview.tsx`
+- [x] `components/TypingIndicator.tsx`
+- [x] `components/VoiceNotePlayer.tsx`
+- [x] `components/EmojiPicker.tsx`
+- [x] `components/EmojiGifStickerPicker.tsx` — mockear `features/giphy/api/giphy.api.ts`
       para no depender de la Fase 14.
-- [ ] `components/ConversationView.tsx` — el componente contenedor de toda la feature;
+- [x] `components/ConversationView.tsx` — el componente contenedor de toda la feature;
       dejarlo para el final de esta fase (depende de casi todo lo de arriba, más fácil
       de testear una vez que las piezas ya están cubiertas individualmente).
 
