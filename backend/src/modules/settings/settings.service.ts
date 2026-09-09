@@ -15,6 +15,10 @@ import {
 /// revisarse (invalidación cross-proceso).
 let cached: AppSettings | null = null;
 
+export function _resetCacheForTesting(): void {
+  cached = null;
+}
+
 export async function getSettings(): Promise<AppSettings> {
   if (!cached) {
     cached = await SettingsRepository.getOrCreate();

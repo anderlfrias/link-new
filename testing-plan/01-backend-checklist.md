@@ -252,24 +252,26 @@ Validación de tipos MIME, límites de tamaño, notas de voz, avatares, almacena
 
 ## Fase 6 — Settings & permisos de grupo
 
-- [ ] `settings.service.ts#getSettings` / `getPublicSettings` — el segundo expone solo
+- [x] `settings.service.ts#getSettings` / `getPublicSettings` — el segundo expone solo
       el subconjunto público (verificar que campos sensibles/admin-only no aparecen en
-      el resultado de `getPublicSettings`).
-- [ ] `settings.service.ts#updateSettings` — actualiza y persiste vía repository
-      (mockeado).
-- [ ] `settings.service.ts#resolveEffectiveGroupSettings` — merge de `AppSettings`
+      el resultado de `getPublicSettings`). (tests en `settings.service.test.ts`).
+- [x] `settings.service.ts#updateSettings` — actualiza y persiste vía repository
+      (mockeado). (tests en `settings.service.test.ts`).
+- [x] `settings.service.ts#resolveEffectiveGroupSettings` — merge de `AppSettings`
       globales + override de grupo: cuando el grupo no tiene override, prevalece el
       valor global; cuando sí lo tiene y el flag está en la lista de
       `getGroupOverrideAllowedFlags()`, prevalece el override; si el flag NO está en
-      esa lista permitida, el override se ignora (si esto es lo que hace el código —
-      confirmarlo leyendo la función antes de escribir el test, no asumir).
-- [ ] `settings.service.ts#getGroupOverrideAllowedFlags` — devuelve exactamente el set
-      esperado de flags overrideables.
-- [ ] `settings.repository.ts` — opcional salvo lógica condicional real.
-- [ ] `settings.controller.ts` — mapeo service → HTTP, incluyendo que la ruta pública
-      (`/settings/public`) no exige rol admin y la de `/admin/settings` sí.
-- [ ] `settings.validator.ts` — schema de `updateGroupSettingsSchema` y el de
-      `PATCH /admin/settings`.
+      esa lista permitida, el override se ignora. (tests en `settings.service.test.ts`).
+- [x] `settings.service.ts#getGroupOverrideAllowedFlags` — devuelve exactamente el set
+      esperado de flags overrideables. (tests en `settings.service.test.ts`).
+- [x] `settings.repository.ts` — `getOrCreate` singleton y `update`. (2 tests en `settings.repository.test.ts`).
+- [x] `settings.controller.ts` — mapeo service → HTTP, incluyendo que la ruta pública
+      (`/settings/public`) no exige rol admin y la de `/admin/settings` sí. (14 tests en `settings.controller.test.ts`).
+- [x] `settings.validator.ts` — schema de `PATCH /admin/settings` (`updateSettingsSchema` con MIME types, limits, enums) y `updateGroupSettingsSchema` probado en fase 3. (11 tests en `settings.validator.test.ts`).
+
+**Fase 6 cerrada 2026-09-09.** 36 tests nuevos agregados (307/307 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Políticas globales de gobierno, flags de override por grupo, DTO público sin datos sensibles y guardias de rol admin cubiertos rigurosamente.
 
 ---
 
