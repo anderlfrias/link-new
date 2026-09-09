@@ -140,7 +140,7 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
 | 11 | Feature: Auth & Admin | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-11) | frontend | [x] 2026-09-09 |
 | 12 | Feature: Conversations | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-12) | frontend | [x] 2026-09-09 |
 | 13 | Feature: Messages | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-13) | frontend | [x] 2026-09-09 |
-| 14 | Feature: Files, Giphy, Notifications, Profile, Users, Settings | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-14) | frontend | [ ] Pendiente |
+| 14 | Feature: Files, Giphy, Notifications, Profile, Users, Settings | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-14) | frontend | [x] 2026-09-09 |
 | 15 | Auditoría de cobertura + flujos clave | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-15) | frontend | [ ] Pendiente |
 | 16 | CI, piso de cobertura y cierre de política | [testing-plan/03-ci-and-policy.md](testing-plan/03-ci-and-policy.md) | ambos | [ ] Pendiente |
 

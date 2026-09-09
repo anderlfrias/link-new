@@ -275,38 +275,40 @@ tiene sentido que sea su propia fase separada de conversations.
 ## Fase 14 — Feature: Files, Giphy, Notifications, Profile, Users, Settings
 
 **Files** (`frontend/src/features/files/`)
-- [ ] `api/files.api.ts`
-- [ ] `components/FileTypeIcon.tsx`
+- [x] `api/files.api.ts` (3 tests).
+- [x] `components/FileTypeIcon.tsx` (1 test).
 
 **Giphy** (`frontend/src/features/giphy/`)
-- [ ] `api/giphy.api.ts`
+- [x] `api/giphy.api.ts` (3 tests).
 
 **Notifications** (`frontend/src/features/notifications/`)
-- [ ] `api/push.api.ts`
-- [ ] `utils/vapid-key.ts` — `urlBase64ToUint8Array()`: casos con/sin padding.
-- [ ] `hooks/use-push-notifications.ts` — mockear la Push API del browser
+- [x] `api/push.api.ts` (3 tests).
+- [x] `utils/vapid-key.ts` — `urlBase64ToUint8Array()`: casos con/sin padding. (3 tests).
+- [x] `hooks/use-push-notifications.ts` — mockear la Push API del browser
       (`navigator.serviceWorker`, `PushManager` — no existen en jsdom, hay que
-      stubearlas a mano en el test).
-- [ ] `components/NotificationsBanner.tsx`
+      stubearlas a mano en el test). (3 tests).
+- [x] `components/NotificationsBanner.tsx` (3 tests).
 
 **Profile** (`frontend/src/features/profile/`)
-- [ ] `hooks/use-update-profile-name.ts`
-- [ ] `hooks/use-update-profile-picture.ts`
-- [ ] `hooks/use-update-notification-sound.ts`
-- [ ] `components/ProfileSettingsPanel.tsx`
-- [ ] `components/AvatarCustomizerView.tsx`
-- [ ] `components/AvatarSelectionModal.tsx`
-- [ ] `components/AvatarIllustrationPicker.tsx`
-- [ ] `components/BoringAvatarPicker.tsx`
+- [x] `hooks/use-update-profile-name.ts` (2 tests).
+- [x] `hooks/use-update-profile-picture.ts` (3 tests).
+- [x] `hooks/use-update-notification-sound.ts` (2 tests).
+- [x] `components/ProfileSettingsPanel.tsx` (4 tests).
+- [x] `components/AvatarCustomizerView.tsx` (2 tests).
+- [x] `components/AvatarSelectionModal.tsx` (2 tests).
+- [x] `components/AvatarIllustrationPicker.tsx` (2 tests).
+- [x] `components/BoringAvatarPicker.tsx` (1 test).
 
 **Users** (`frontend/src/features/users/`)
-- [ ] `api/users.api.ts`
-- [ ] `hooks/use-users.ts`
-- [ ] `components/ContactRow.tsx`
-- [ ] `components/NewChatModal.tsx`
+- [x] `api/users.api.ts` (1 test).
+- [x] `hooks/use-users.ts` (4 tests).
+- [x] `components/ContactRow.tsx` (2 tests).
+- [x] `components/NewChatModal.tsx` (4 tests).
 
 **Settings** (`frontend/src/features/settings/`)
-- [ ] `api/public-settings.api.ts`
+- [x] `api/public-settings.api.ts` (1 test).
+
+**Fase 14 cerrada 2026-09-09.** 20 archivos de test creados, 49 tests nuevos agregados (132/132 archivos y 513/513 tests en verde en `npm run test --workspace=frontend`, 909 tests totales en monorepo). Typecheck limpio (`npx tsc --noEmit -p frontend/tsconfig.json`). Modales de avatares, customizador SVG/PNG, banners de notificación y flujo completo de nuevo chat y grupo cubiertos unitariamente.
 
 ---
 
