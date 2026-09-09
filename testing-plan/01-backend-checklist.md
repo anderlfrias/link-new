@@ -222,26 +222,29 @@ Invariantes de ventana de tiempo y soft delete cubiertas rigurosamente.
 
 ## Fase 5 — Files & Storage
 
-- [ ] `file.service.ts` — validación de mime type contra
+- [x] `file.service.ts` — validación de mime type contra
       `backend/src/constants/allowed-file-types.constant.ts`; archivo que excede
       `ABSOLUTE_MAX_UPLOAD_BYTES` o el límite configurable
       (`AppSettings.maxUploadSizeMb`) → rechazado. Nota de sync: si tocás esta
       validación, la Fase 14 (frontend) tiene el espejo cliente — dejar comentado en
       el test que ambos lados deben coincidir (ver invariante en `TESTING_PLAN.md`
-      sección 4).
-- [ ] `file.repository.ts#aggregateFilesForAdmin` — vía la función pública (el helper
+      sección 4). (19 tests en `file.service.test.ts`).
+- [x] `file.repository.ts#aggregateFilesForAdmin` — vía la función pública (el helper
       `buildAdminFileWhere` es privado, no se importa directo): filtro por categoría,
-      por rango de fechas, sin filtros (trae todo).
-- [ ] `file.controller.ts` — mapeo service → HTTP, incluyendo el flujo de upload
-      (`multer` ya parseó `req.file`, no hace falta testear multer en sí).
-- [ ] `backend/src/storage/local-disk.storage.ts` — **este sí conviene testear con I/O
+      por rango de fechas, sin filtros (trae todo). (8 tests en `file.repository.test.ts`).
+- [x] `file.controller.ts` — mapeo service → HTTP, incluyendo el flujo de upload
+      (`multer` ya parseó `req.file`, no hace falta testear multer en sí). (7 tests en `file.controller.test.ts`).
+- [x] `backend/src/storage/local-disk.storage.ts` — **este sí conviene testear con I/O
       real** (no es una dependencia externa, es filesystem local determinístico): usar
       un directorio temporal (`fs.mkdtempSync(path.join(os.tmpdir(), ...))`) en vez de
       `UPLOADS_ROOT` real; guardar un archivo y verificar que existe con el contenido
       correcto; borrar y verificar que desaparece. Limpiar el directorio temporal en
-      `afterEach`.
-- [ ] `backend/src/storage/index.ts` — si expone algo más que un re-export (ej.
-      selección de provider), testear esa lógica; si es solo wiring, opcional.
+      `afterEach`. (4 tests en `local-disk.storage.test.ts`).
+- [x] `backend/src/storage/index.ts` — wiring puro exportando singleton `storage = new LocalDiskStorage()`.
+
+**Fase 5 cerrada 2026-09-09.** 38 tests nuevos agregados (271/271 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Validación de tipos MIME, límites de tamaño, notas de voz, avatares, almacenamiento local determinístico y agregación admin cubiertos rigurosamente.
 
 ---
 

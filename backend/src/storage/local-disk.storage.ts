@@ -9,15 +9,21 @@ const UPLOADS_ROOT = path.join(__dirname, "..", "..", "uploads");
 /// montado en app.ts. `relativePath` siempre lo construye `file.service.ts`
 /// (nunca un valor del cliente), así que no hay riesgo de path traversal aquí.
 export class LocalDiskStorage implements StorageProvider {
+  private readonly rootDir: string;
+
+  constructor(rootDir: string = UPLOADS_ROOT) {
+    this.rootDir = rootDir;
+  }
+
   async save(buffer: Buffer, relativePath: string): Promise<SavedFile> {
-    const absolutePath = path.join(UPLOADS_ROOT, relativePath);
+    const absolutePath = path.join(this.rootDir, relativePath);
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, buffer);
     return { path: relativePath, size: buffer.length };
   }
 
   async delete(relativePath: string): Promise<void> {
-    const absolutePath = path.join(UPLOADS_ROOT, relativePath);
+    const absolutePath = path.join(this.rootDir, relativePath);
     await fs.rm(absolutePath, { force: true });
   }
 

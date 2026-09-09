@@ -131,7 +131,7 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
 | 2 | Auth | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-2) | backend | [x] 2026-09-09 |
 | 3 | Conversations | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-3) | backend | [x] 2026-09-09 |
 | 4 | Messages | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-4) | backend | [x] 2026-09-09 |
-| 5 | Files & Storage | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-5) | backend | [ ] Pendiente |
+| 5 | Files & Storage | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-5) | backend | [x] 2026-09-09 |
 | 6 | Settings & permisos de grupo | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-6) | backend | [ ] Pendiente |
 | 7 | Users, Push, Giphy | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-7) | backend | [ ] Pendiente |
 | 8 | Socket gateway & Presence | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-8) | backend | [ ] Pendiente |
