@@ -579,4 +579,42 @@ describe("MessageBubble", () => {
     expect(mockCopyImageToClipboard).toHaveBeenCalledWith(expect.stringContaining("stickers/test.webp"));
     expect(await screen.findByText("Imagen copiada al portapapeles")).toBeInTheDocument();
   });
+
+  it("renderiza enlaces interactivos para URLs, correos y teléfonos dentro del contenido del mensaje", () => {
+    const messageWithLinks: Message = {
+      ...baseMessage,
+      id: "msg-links",
+      content: "Consulta https://example.org, escribe a dr.perez@example.com o llama al (809) 588-4444.",
+    };
+
+    render(
+      <MessageBubble
+        message={messageWithLinks}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const urlLink = screen.getByRole("link", { name: "https://example.org" });
+    expect(urlLink).toBeInTheDocument();
+    expect(urlLink).toHaveAttribute("href", "https://example.org");
+    expect(urlLink).toHaveAttribute("target", "_blank");
+    expect(urlLink).toHaveAttribute("rel", "noopener noreferrer");
+
+    const emailLink = screen.getByRole("link", { name: "dr.perez@example.com" });
+    expect(emailLink).toBeInTheDocument();
+    expect(emailLink).toHaveAttribute("href", "mailto:dr.perez@example.com");
+
+    const phoneLink = screen.getByRole("link", { name: "(809) 588-4444" });
+    expect(phoneLink).toBeInTheDocument();
+    expect(phoneLink).toHaveAttribute("href", "tel:8095884444");
+  });
 });
+

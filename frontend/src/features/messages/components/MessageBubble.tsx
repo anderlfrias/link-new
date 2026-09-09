@@ -19,6 +19,7 @@ import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
 import { buildStoredFileUrl } from "@/utils/file-url";
 import { copyImageToClipboard, copyTextToClipboard } from "@/utils/clipboard";
 import { isImageMimeType } from "@/utils/file-format";
+import { FormattedMessageText } from "@/features/messages/components/FormattedMessageText";
 import { cn } from "@/utils/cn";
 import type { Message } from "@/features/messages/types/message.types";
 
@@ -146,8 +147,11 @@ export function MessageBubble({
   function handleRowContextMenu(event: MouseEvent<HTMLDivElement>) {
     if (!showOptionsTrigger || isEditing) return;
     if (!window.matchMedia("(min-width: 1024px)").matches) return;
-    event.preventDefault();
     const target = event.target as HTMLElement | null;
+    // Si el usuario hace clic derecho sobre un enlace, dejamos que el navegador
+    // muestre su menú nativo (copiar dirección de enlace, abrir en nueva pestaña, etc.)
+    if (target?.closest("a")) return;
+    event.preventDefault();
     const clickedImg = target?.closest("img");
     if (clickedImg?.src) {
       setContextImageUrl(clickedImg.src);
@@ -445,7 +449,11 @@ export function MessageBubble({
                   !isDeleted && !renderAsOwn && "text-brand-ink dark:text-white",
                 )}
               >
-                {isDeleted ? "Mensaje eliminado" : message.content}
+                {isDeleted ? (
+                  "Mensaje eliminado"
+                ) : (
+                  <FormattedMessageText content={message.content} isOwn={renderAsOwn} />
+                )}
                 <span className="float-right ml-2 mt-[3px]">{footer}</span>
               </p>
             ) : (
