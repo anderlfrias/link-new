@@ -128,7 +128,7 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
 |---|---|---|---|---|
 | 0 | Infraestructura de testing | [testing-plan/00-infrastructure-setup.md](testing-plan/00-infrastructure-setup.md) | ambos | [x] 2026-09-09 |
 | 1 | Fundamentos (utils, middlewares, config) | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-1) | backend | [x] 2026-09-09 |
-| 2 | Auth | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-2) | backend | [ ] Pendiente |
+| 2 | Auth | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-2) | backend | [x] 2026-09-09 |
 | 3 | Conversations | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-3) | backend | [ ] Pendiente |
 | 4 | Messages | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-4) | backend | [ ] Pendiente |
 | 5 | Files & Storage | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-5) | backend | [ ] Pendiente |

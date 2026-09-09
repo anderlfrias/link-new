@@ -98,23 +98,37 @@ las fases siguientes en vez de reinventarlo por archivo.
 Ver invariante obligatoria en `TESTING_PLAN.md` sección 4 sobre el mensaje 403 genérico
 de EXTERNAL_AUTH: no te la saltees.
 
-- [ ] `backend/src/modules/auth/jwt.ts` — `sign`/`verify` (nombres exactos: leer el
-      archivo) round-trip; `mapTokenToUser` mapea el payload a la forma esperada;
-      `buildFullName` con nombre/apellido presentes/ausentes.
-- [ ] `backend/src/modules/auth/auth.service.ts#login` — mockeando `fetch` global:
+- [x] `backend/src/modules/auth/jwt.ts` — `verifyToken` round-trip con tokens firmados
+      vía `jsonwebtoken` (secret de test); `mapTokenToUser` mapea el payload a `MappedUser`
+      extrayendo roles y permissions planos; `buildFullName` con combinaciones de
+      nombre/apellidos presentes y ausentes. (11 tests en `jwt.test.ts`).
+- [x] `backend/src/modules/auth/auth.service.ts#login` — mockeando `fetch` global:
       credenciales correctas → devuelve token; EXTERNAL_AUTH responde 403 → mensaje genérico
-      (**no** debe distinguir "user no existe" de "password incorrecta" en el mensaje);
-      `fetch` tira (red caída) o hace timeout (mock que nunca resuelve +
-      `AbortController`) → `ServiceUnavailableError`; EXTERNAL_AUTH responde con body no-JSON
-      → no explota, se resuelve según el status HTTP igual.
-- [ ] `backend/src/modules/auth/auth.repository.ts` — solo si `upsertUserFromExternalUser` u
-      otra función tiene lógica condicional real (ej. decidir crear vs. actualizar).
-      Si es un wrapper 1:1 de Prisma, opcional (ver criterio general en
-      `TESTING_PLAN.md` sección 3).
-- [ ] `backend/src/modules/auth/auth.controller.ts` — mapea el resultado/errores del
-      service a códigos HTTP correctos (mockeando `auth.service`).
-- [ ] `backend/src/modules/auth/auth.validator.ts` — schemas de login/perfil/preferencias:
-      payload válido pasa, campos faltantes o de tipo incorrecto rechazan.
+      (**no** distingue "user no existe" de "password incorrecta" en el mensaje);
+      `fetch` tira (red caída) o timeout → `ServiceUnavailableError`; EXTERNAL_AUTH responde
+      con body no-JSON (HTML/texto plano) → no explota y resuelve según el status HTTP.
+      Además cubiertos `upsertUsuario`, `getOwnProfilePictureUrl`, `setProfilePicture`,
+      `removeProfilePicture`, `updateOwnName`, `updateNotificationSoundEnabled` y
+      `getAppUsers` con arrays directos o envueltos y descarte de entradas mal formadas.
+      (18 tests en `auth.service.test.ts`).
+- [x] `backend/src/modules/auth/auth.repository.ts` — sí tiene lógica condicional real:
+      `upsertUserFromExternalUser` crea usuario nuevo si no existe, o actualiza `username` y
+      solo toca `name` si `syncProfileWithIntegration === true` (conservando el nombre
+      local si es false); `setLocalAvatar`/`setLocalName` desactivan la sincronización;
+      `findAvatarPath` resuelve o devuelve null. (9 tests en `auth.repository.test.ts`).
+- [x] `backend/src/modules/auth/auth.controller.ts` — mapeo del service a HTTP usando
+      `createMockRequest`, `createMockResponse` y `createMockNext` de `http-mocks.ts`:
+      login exitoso vs. campos faltantes (400) vs. error de autenticación propagado;
+      redirección en `getProfilePicture`; multipart validation en `updateProfilePicture`;
+      status 204 en `deleteProfilePicture`; actualización de perfil y preferencias.
+      (10 tests en `auth.controller.test.ts`).
+- [x] `backend/src/modules/auth/auth.validator.ts` — schemas de perfil y preferencias
+      (`updateProfileSchema`, `updatePreferencesSchema`): trim, validación de longitudes,
+      requeridos y tipos correctos. (7 tests en `auth.validator.test.ts`).
+
+**Fase 2 cerrada 2026-09-09.** 55 tests nuevos agregados (96/96 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Se enriqueció `http-mocks.ts` con `res.send`, `res.redirect` y `res.end` para controladores.
 
 ---
 
