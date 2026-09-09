@@ -43,51 +43,55 @@ Todo lo de acá son funciones puras o casi puras. Es la fase con mejor relación
 esfuerzo/valor de todo el frontend — sin mocks de React, sin providers, tests
 rápidos de escribir. Recomendado como primera fase de frontend.
 
-- [ ] `frontend/src/utils/cn.ts` (ya cubierto como smoke test en la Fase 0 — solo
+- [x] `frontend/src/utils/cn.ts` (ya cubierto como smoke test en la Fase 0 — solo
       ampliar casos si hace falta, ej. clases condicionales, merge de conflictos de
-      Tailwind vía `tailwind-merge`).
-- [ ] `frontend/src/utils/compress-image.ts`
-- [ ] `frontend/src/utils/conversation-display.ts` — `getConversationDisplayName()`/
+      Tailwind vía `tailwind-merge`). (4 tests).
+- [x] `frontend/src/utils/compress-image.ts` (5 tests).
+- [x] `frontend/src/utils/conversation-display.ts` — `getConversationDisplayName()`/
       `getOtherMembers()`/`getConversationAvatarUrl()`: casos 1-a-1 vs. grupo, chat
-      consigo mismo (self chat).
-- [ ] `frontend/src/utils/dicebear-renderer.ts`
-- [ ] `frontend/src/utils/download-file.ts`
-- [ ] `frontend/src/utils/file-format.ts`
-- [ ] `frontend/src/utils/file-url.ts`
-- [ ] `frontend/src/utils/format-date.ts`
-- [ ] `frontend/src/utils/format-duration.ts`
-- [ ] `frontend/src/utils/group-permissions.ts` — si duplica alguna regla de
+      consigo mismo (self chat). (12 tests).
+- [x] `frontend/src/utils/dicebear-renderer.ts` (3 tests).
+- [x] `frontend/src/utils/download-file.ts` (2 tests).
+- [x] `frontend/src/utils/file-format.ts` (6 tests).
+- [x] `frontend/src/utils/file-url.ts` (2 tests).
+- [x] `frontend/src/utils/format-date.ts` (7 tests).
+- [x] `frontend/src/utils/format-duration.ts` (3 tests).
+- [x] `frontend/src/utils/group-permissions.ts` — si duplica alguna regla de
       `allowGroupDelete` u otro flag maestro del backend (ver invariante en
-      `TESTING_PLAN.md` sección 4), cubrir el mismo caso acá también.
-- [ ] `frontend/src/utils/message-edit-window.ts` — contraparte frontend de
+      `TESTING_PLAN.md` sección 4), cubrir el mismo caso acá también. (4 tests).
+- [x] `frontend/src/utils/message-edit-window.ts` — contraparte frontend de
       `assertWithinTimeLimit()` del backend (Fase 4): mismo criterio de ventana de
-      tiempo, casos dentro/fuera de ventana.
-- [ ] `frontend/src/utils/message-preview.ts` — contraparte frontend de
+      tiempo, casos dentro/fuera de ventana. (3 tests).
+- [x] `frontend/src/utils/message-preview.ts` — contraparte frontend de
       `buildLastMessagePreview()` del backend (Fase 3): mensaje borrado → mismo texto
-      fijo, sin importar el `content`.
-- [ ] `frontend/src/utils/message-status.ts` — contraparte frontend de
-      `aggregateReceiptStatus()`.
-- [ ] `frontend/src/utils/mime-type-pattern.ts` — ver nota de sync cliente/servidor en
+      fijo, sin importar el `content`. (4 tests).
+- [x] `frontend/src/utils/message-status.ts` — contraparte frontend de
+      `aggregateReceiptStatus()`. (4 tests).
+- [x] `frontend/src/utils/mime-type-pattern.ts` — ver nota de sync cliente/servidor en
       Fase 5 del backend y Fase 14 acá: mismos patrones MIME que
-      `allowed-file-types.constant.ts` del backend.
-- [ ] `frontend/src/utils/notification-sound.ts`
-- [ ] `frontend/src/utils/svg-to-png.ts`
-- [ ] `frontend/src/lib/api-client.ts#apiRequest` — el más importante de esta fase,
+      `allowed-file-types.constant.ts` del backend. (3 tests).
+- [x] `frontend/src/utils/notification-sound.ts` (2 tests).
+- [x] `frontend/src/utils/svg-to-png.ts` (1 test).
+- [x] `frontend/src/lib/api-client.ts#apiRequest` — el más importante de esta fase,
       todo el resto del frontend depende de él: query params se serializan
       correctamente y omiten `undefined`; `body` FormData se manda tal cual (sin
       `Content-Type` manual, el browser lo setea); `body` objeto se serializa a JSON
       con `Content-Type: application/json`; header `Authorization: Bearer <token>`
       solo si se pasó `token`; `response.ok === false` → lanza `ApiError` con el
       `error` del body (o `statusText` si no hay body parseable); status 204 →
-      devuelve `undefined`; `responseType: "blob"` → devuelve blob en vez de JSON.
-- [ ] `frontend/src/lib/env.ts` — falta `NEXT_PUBLIC_API_URL` o
+      devuelve `undefined`; `responseType: "blob"` → devuelve blob en vez de JSON. (8 tests).
+- [x] `frontend/src/lib/env.ts` — falta `NEXT_PUBLIC_API_URL` o
       `NEXT_PUBLIC_SOCKET_URL` → throw (para este test puntual hace falta simular
       `process.env` vacío, algo distinto al resto de la fase — puede necesitar
       `vi.resetModules()` + reimport dinámico dentro del test para que el módulo se
-      re-evalúe con el env alterado).
-- [ ] `frontend/src/lib/socket-client.ts` — si expone lógica más allá de instanciar
+      re-evalúe con el env alterado). (3 tests).
+- [x] `frontend/src/lib/socket-client.ts` — si expone lógica más allá de instanciar
       `socket.io-client` (ej. reconexión, autenticación del handshake), testear esa
-      lógica; si es solo instanciación, opcional.
+      lógica; si es solo instanciación, opcional. (3 tests).
+
+**Fase 9 cerrada 2026-09-09.** 75 tests nuevos agregados (79/79 tests en verde en
+`npm run test --workspace=frontend`, 475/475 tests totales en monorepo), typecheck limpio (`npx tsc --noEmit -p frontend/tsconfig.json`).
+Funciones puras de formateo, preview, permisos, imágenes, cliente HTTP y socket client cubiertas rigurosamente.
 
 ---
 
