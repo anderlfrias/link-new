@@ -21,6 +21,9 @@ de ida y vuelta a esta sección):
 - **`jsonwebtoken`**: no mockear la librería en sí — es determinística y barata; usar
   un secret de test real (ya seteado en `vitest.config.ts`, Fase 0) y firmar/verificar
   tokens de verdad en el test.
+- **req/res/next de Express**: usar `createMockRequest`/`createMockResponse`/
+  `createMockNext` de `backend/src/test/http-mocks.ts` (agregado en la Fase 1) en vez
+  de armarlos a mano en cada archivo.
 
 ---
 
@@ -32,38 +35,59 @@ Base de todo lo demás: son los archivos que casi todas las rutas atraviesan. Si
 sorpresas de dominio, pero de alto impacto si se rompen (un bug acá afecta TODAS las
 rutas, no un módulo).
 
-- [ ] `backend/src/utils/errors.ts` — cada clase (`AppError`, `BadRequestError`,
+- [x] `backend/src/utils/errors.ts` — cada clase (`AppError`, `BadRequestError`,
       `ForbiddenError`, `NotFoundError`, `ServiceUnavailableError`, `UnauthorizedError`):
-      `statusCode` y `name` correctos, `message` se propaga.
-- [ ] `backend/src/middlewares/auth.middleware.ts` — `authenticate`: sin header → 401
-      `UnauthorizedError`; header sin `"Bearer "` → 401; token inválido → 401; token
-      expirado (forzar un JWT ya vencido) → 401 "Token expired" específicamente (hay
-      un branch dedicado para `TokenExpiredError`); token válido → `req.user` seteado
-      con el resultado de `mapTokenToUser`. `requireRoles(...roles)`: usuario sin
-      ninguno de los roles pedidos → 403; con al menos uno → pasa.
-- [ ] `backend/src/middlewares/current-user.middleware.ts` — leé el archivo antes de
-      escribir el test; cubrí el caso "usuario no existe todavía en la DB local" si
-      aplica (según lo que haga, puede depender de un repositorio a mockear).
-- [ ] `backend/src/middlewares/validate.middleware.ts` — body que cumple el schema
-      `yup` pasa sin tocar `res`; body inválido → 400 con el detalle de qué campo
-      falló (no un mensaje genérico).
-- [ ] `backend/src/middlewares/rate-limit.middleware.ts` — si exporta una factory de
-      config (no un limiter ya instanciado corriendo), testear que los valores
-      (ventana, máximo, mensaje) son los esperados. Si es solo instancias de
-      `express-rate-limit` sin lógica propia, marcar como opcional y anotar por qué
-      se salteó.
-- [ ] `backend/src/middlewares/error.middleware.ts` — un `AppError` conocido (ej.
-      `NotFoundError`) responde con su `statusCode` y `message`; un `Error` genérico
-      no reconocido responde 500 con un mensaje genérico, **sin filtrar el stack ni el
-      mensaje interno** al cliente.
-- [ ] `backend/src/config/cors-origins.ts` — origin en la lista permitida → callback
-      sin error; origin no permitido → callback con error; `CORS_ORIGIN` sin definir
-      (caso "abierto a cualquier origen", documentado en `config/env.ts`) → todo
-      origin pasa.
+      `statusCode` y `name` correctos, `message` se propaga. *(cubierto como smoke
+      test de la Fase 0 — `backend/src/utils/errors.test.ts`, 11 tests.)*
+- [x] `backend/src/middlewares/auth.middleware.ts` — `authenticate`: sin header → 401
+      `UnauthorizedError`; header sin `"Bearer "` → 401; token con formato inválido →
+      401 "Invalid token"; token firmado con otro secret → 401 "Invalid token"; token
+      expirado → 401 "Token expired" (branch dedicado para `TokenExpiredError`,
+      distinto del genérico); token válido → `req.user` igual a
+      `mapTokenToUser(payload)`. `requireRoles(...roles)`: sin `req.user`, o sin
+      ninguno de los roles pedidos → 403 `ForbiddenError`; con al menos uno → pasa.
+      Los tokens se firman de verdad con `jsonwebtoken` (mismo secret que
+      `vitest.config.ts`), sin mockear la librería.
+- [x] `backend/src/middlewares/current-user.middleware.ts` — sin `req.user` (no corrió
+      `authenticate` antes) → 401, no llega a consultar la DB; email sin perfil local
+      → 401 "User not found"; usuario encontrado → `req.user.internalUserId` seteado;
+      error de Prisma → se propaga tal cual a `next()`, no se swallowea. Prisma
+      mockeado directo (`vi.mock("../config/prisma")`) porque este middleware no pasa
+      por un repositorio.
+- [x] `backend/src/middlewares/validate.middleware.ts` — body válido → pasa sin tocar
+      `res`, `req.body` queda con el resultado ya validado; `stripUnknown: true`
+      efectivamente borra campos no declarados; body inválido → `next(BadRequestError)`
+      con el detalle (nunca deja pasar un `ValidationError` de yup crudo);
+      `abortEarly: false` → junta todos los errores de validación, no solo el primero.
+- [x] `backend/src/middlewares/rate-limit.middleware.ts` — SÍ tiene lógica propia real
+      (los `keyGenerator` de `loginIpRateLimiter`/`loginUserRateLimiter`: fallback
+      `cf-connecting-ip` → `req.ip`, y normalización de `user` a minúsculas/trim con
+      fallback a un bucket genérico). Se testeó vía `supertest` montando cada limiter
+      en una app mínima: cupo por usuario/IP independiente, normalización colapsa al
+      mismo bucket, mensaje/status 429 al superar el límite. Ojo con
+      `skipSuccessfulRequests: true` — el handler de prueba tiene que devolver un
+      status ≥ 400 (se usó 401) o el contador nunca avanza.
+- [x] `backend/src/middlewares/error.middleware.ts` — un `AppError` conocido (ej.
+      `NotFoundError`) responde con su `statusCode` y `message`; `MulterError` → 400
+      con el mensaje de multer; un `Error` genérico no reconocido responde 500 con un
+      mensaje fijo, **sin filtrar el mensaje ni el stack interno** al cliente.
+- [x] `backend/src/config/cors-origins.ts` — corrección sobre la nota original de este
+      checklist: no expone un callback propio (esa lógica de matching es de la
+      librería `cors`, no se retestea acá). Lo que sí es unitario y se testeó: el
+      valor exportado `corsOrigin` — sin `CORS_ORIGIN` → `true` (abierto); con
+      `CORS_ORIGIN` → array de orígenes separado por comas y trimeado. Requirió
+      `vi.resetModules()` + `import()` dinámico por test porque el valor se calcula
+      una sola vez al importar el módulo.
 
 No testear `backend/src/config/env.ts` directamente (side-effect de `process.exit` es
 justamente lo que la Fase 0 ya neutralizó con env vars dummy — envolverlo en un test
 propio no suma nada).
+
+**Fase 1 cerrada 2026-09-09.** 41/41 tests en verde (`npm run test --workspace=backend`),
+typecheck limpio (`npx tsc --noEmit` en `backend/`). Se agregó
+`backend/src/test/http-mocks.ts` (helpers `createMockRequest`/`createMockResponse`/
+`createMockNext`) para no repetir el boilerplate de mockear req/res/next — reusar en
+las fases siguientes en vez de reinventarlo por archivo.
 
 ---
 
