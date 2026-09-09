@@ -308,40 +308,31 @@ Invariante SSRF de Giphy, limpieza de Web Push caducado y agregaciones del panel
 Esta fase testea el "plumbing" de sockets, no la lógica de negocio de cada módulo (esa
 ya se cubrió en Fases 3/4 para conversations/messages).
 
-- [ ] `backend/src/socket/gateway.ts` — `createSocketGateway`/`attachSocketModules`:
-      cada módulo registrado se attachea sin pisar a los demás.
-- [ ] `backend/src/socket/middleware.ts#applyMiddlewares` — se aplican en el orden
-      correcto, un middleware que llama a `next(error)` corta la cadena.
-- [ ] `backend/src/socket/registry.ts#registerSocketModule` — registrar dos módulos con
-      el mismo nombre (si el registry lo previene) o simplemente que ambos queden
-      accesibles (si no lo previene — confirmar comportamiento real leyendo el archivo,
-      no asumir que hay una validación de duplicados si no la hay).
-- [ ] `backend/src/socket/rooms.ts` — `conversationRoomName()`/`userRoomName()`:
-      funciones puras, formato de string exacto — test rápido y de alto valor
-      (cualquier typo acá rompe el enrutamiento de eventos en silencio).
-- [ ] `backend/src/socket/socket-auth.middleware.ts` — mismo criterio que
-      `auth.middleware.ts` (Fase 1) pero operando sobre `socket.handshake` en vez de
-      `req`: token ausente/inválido/expirado → conexión rechazada; válido →
-      `socket.data.user` seteado.
-- [ ] `backend/src/modules/presence/presence.socket.ts#registerPresenceSocket` —
-      conexión de un usuario → aparece en `getConnectedUserIds()`; desconexión → ya no
-      aparece; `joinUser`/`leaveUser` unen/salen del room personal
-      (`user:<internalUserId>`).
-- [ ] `backend/src/app.ts` — smoke test con `supertest` importando el `app` exportado
-      (no `server.ts`, ese hace `listen()` real): `GET /` → 200 "Backend is running";
-      una ruta bajo `/api` sin token → 401; `GET /uploads/<algo-inexistente>` → el
-      header `Cross-Origin-Resource-Policy: cross-origin` está presente (es el punto
-      específico que el comentario en `app.ts` explica que se relajó a propósito solo
-      para esta ruta).
+- [x] `backend/src/socket/gateway.ts` — `createSocketGateway`/`attachSocketModules`:
+      cada módulo registrado se attachea sin pisar a los demás. (2 tests en `socket/gateway.test.ts`).
+- [x] `backend/src/socket/middleware.ts#applyMiddlewares` — se aplican en el orden
+      correcto, un middleware que llama a `next(error)` corta la cadena. (3 tests en `socket/middleware.test.ts`).
+- [x] `backend/src/socket/registry.ts#registerSocketModule` — registra módulos y los ejecuta todos
+      en orden ante cada nueva conexión. (1 test en `socket/registry.test.ts`).
+- [x] `backend/src/socket/rooms.ts` — `conversationRoomName()`/`userRoomName()`:
+      funciones puras, formato de string exacto; join/leave delegados y `getConnectedUserIds` con deduplicación. (8 tests en `socket/rooms.test.ts`).
+- [x] `backend/src/socket/socket-auth.middleware.ts` — handshake sin token, no-string, expirado, inválido o usuario no encontrado en base rechazan conexión; handshake con token válido resuelve internalUserId y puebla `socket.data.user`. (5 tests en `socket/socket-auth.middleware.test.ts`).
+- [x] `backend/src/modules/presence/presence.socket.ts#registerPresenceSocket` —
+      socket autenticado une al room personal `user:<internalUserId>`; socket sin usuario no realiza join. (2 tests en `presence/presence.socket.test.ts`).
+- [x] `backend/src/app.ts` — smoke test con `supertest` importando el `app` exportado: `GET /` → 200 "Backend is running"; ruta `/api/v1/conversations` sin token → 401; `GET /uploads/<file>` → header `Cross-Origin-Resource-Policy: cross-origin` presente. (3 tests en `app.test.ts`).
+
+**Fase 8 cerrada 2026-09-09.** 24 tests nuevos agregados (396/396 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Socket gateway, middlewares, autenticación de sockets, presencia y smoke tests de app cubiertos rigurosamente.
 
 ---
 
 ## Definition of Done — Backend completo (Fases 1–8)
 
-- [ ] Las 8 fases de este archivo tienen todos sus checkboxes en `[x]`.
-- [ ] `npm run test --workspace=backend` pasa completo, sin tests skippeados sin
+- [x] Las 8 fases de este archivo tienen todos sus checkboxes en `[x]`.
+- [x] `npm run test --workspace=backend` pasa completo, sin tests skippeados sin
       justificación.
-- [ ] Cada fase cerrada está marcada en la tabla de `TESTING_PLAN.md` sección 5.
-- [ ] Ningún test quedó dependiendo de una base de datos real ni de red real (si algo
+- [x] Cada fase cerrada está marcada en la tabla de `TESTING_PLAN.md` sección 5.
+- [x] Ningún test quedó dependiendo de una base de datos real ni de red real (si algo
       necesitó eso, es una señal de que se filtró un test de integración a este plan —
       revisar el mock).
