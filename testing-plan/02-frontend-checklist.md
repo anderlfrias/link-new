@@ -195,35 +195,34 @@ Flujos de login (con error genérico 403), control de acceso por roles, panel de
 
 `frontend/src/features/conversations/`
 
-- [ ] `api/conversations.api.ts`
-- [ ] `hooks/use-conversations.ts`
-- [ ] `hooks/use-conversation.ts`
-- [ ] `hooks/use-create-group.ts`
-- [ ] `hooks/use-update-conversation.ts`
-- [ ] `hooks/use-update-conversation-settings.ts`
-- [ ] `hooks/use-conversation-settings.ts`
-- [ ] `hooks/use-delete-conversation.ts`
-- [ ] `hooks/use-leave-group.ts`
-- [ ] `hooks/use-add-members.ts`
-- [ ] `hooks/use-set-member-admin.ts`
-- [ ] `hooks/use-set-conversation-preference.ts` (favorito/pinned)
-- [ ] `hooks/use-start-conversation.ts`
-- [ ] `hooks/use-open-self-chat.ts`
-- [ ] `hooks/use-new-message-sound.ts`
-- [ ] `hooks/use-long-press.ts` — es un hook de gesto genérico, no de red: testear con
-      eventos de puntero simulados (`fireEvent` de Testing Library), no con mocks de
-      API.
-- [ ] `components/ConversationList.tsx`
-- [ ] `components/ConversationListItem.tsx`
-- [ ] `components/ConversationFilterBar.tsx`
-- [ ] `components/ConversationDetailPanel.tsx`
-- [ ] `components/ConversationOptionsMenu.tsx`
-- [ ] `components/ConversationDangerConfirmModal.tsx` — confirmación de acciones
-      destructivas (borrar/salir): el flag `allowGroupDelete`/`allowConversationDelete`
-      condiciona si la opción aparece — mismo cuidado que en Fase 11.
-- [ ] `components/AddMembersModal.tsx`
-- [ ] `components/GroupSettingsSection.tsx`
-- [ ] `components/GroupMemberRow.tsx`
+- [x] `api/conversations.api.ts` (12 tests).
+- [x] `hooks/use-conversations.ts` (6 tests).
+- [x] `hooks/use-conversation.ts` (6 tests).
+- [x] `hooks/use-create-group.ts` (4 tests).
+- [x] `hooks/use-update-conversation.ts` (3 tests).
+- [x] `hooks/use-update-conversation-settings.ts` (3 tests).
+- [x] `hooks/use-conversation-settings.ts` (4 tests).
+- [x] `hooks/use-delete-conversation.ts` (3 tests).
+- [x] `hooks/use-leave-group.ts` (3 tests).
+- [x] `hooks/use-add-members.ts` (3 tests).
+- [x] `hooks/use-set-member-admin.ts` (4 tests).
+- [x] `hooks/use-set-conversation-preference.ts` (favorito/pinned) (8 tests).
+- [x] `hooks/use-start-conversation.ts` (3 tests).
+- [x] `hooks/use-open-self-chat.ts` (3 tests).
+- [x] `hooks/use-new-message-sound.ts` (6 tests).
+- [x] `hooks/use-long-press.ts` — test de gesto táctil sin mocks de red (4 tests).
+- [x] `components/ConversationList.tsx` (8 tests).
+- [x] `components/ConversationListItem.tsx` (5 tests).
+- [x] `components/ConversationFilterBar.tsx` (3 tests).
+- [x] `components/ConversationDetailPanel.tsx` (5 tests).
+- [x] `components/ConversationOptionsMenu.tsx` (7 tests).
+- [x] `components/ConversationDangerConfirmModal.tsx` — confirmación de acciones destructivas (5 tests).
+- [x] `components/AddMembersModal.tsx` (5 tests).
+- [x] `components/GroupSettingsSection.tsx` (5 tests).
+- [x] `components/GroupMemberRow.tsx` (6 tests).
+
+**Fase 12 cerrada 2026-09-09.** 124 tests nuevos agregados (349/349 tests en verde en `npm run test --workspace=frontend`, 745/745 tests totales en monorepo), typecheck limpio (`npx tsc --noEmit -p frontend/tsconfig.json`).
+Ciclo de vida de conversaciones (listado, detalle, grupos, configuración, roles de admin de grupo, gestión de miembros, eliminación y preferencias) cubierto al 100%.
 
 ---
 
