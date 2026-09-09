@@ -280,32 +280,24 @@ Políticas globales de gobierno, flags de override por grupo, DTO público sin d
 ## Fase 7 — Users, Push, Giphy
 
 **Users**
-- [ ] `user.service.ts` — lógica de negocio propia del módulo (leer el archivo; si es
-      mayormente delegación al repository, priorizar los casos con lógica real).
-- [ ] `user.repository.ts#findAllForAdmin` / `#countAllForAdmin` — vía las funciones
-      públicas (el helper de armado de `where`, si es privado, no se importa directo):
-      filtros combinados, paginación por `beforeId`/`limit`.
-- [ ] `user.controller.ts` — mapeo service → HTTP.
+- [x] `user.service.ts` — sincronización con EXTERNAL_AUTH (`AuthService.syncAppUsers`), listado paginado para administración con agregación de storage usado (`sumStorageForUsers`) y grupos administrados (`countGroupAdminForUsers`). (3 tests en `user.service.test.ts`).
+- [x] `user.repository.ts#findAllForAdmin` / `#countAllForAdmin` — búsqueda combinada en nombre, email y username, paginación por cursor `beforeId`/`limit`, búsqueda de directorio de contactos activa, agregación de storage y membresías admin. (10 tests en `user.repository.test.ts`).
+- [x] `user.controller.ts` — mapeo service → HTTP para directorio público (`list`) y panel de administración (`listAdmin`). (6 tests en `user.controller.test.ts`).
 
 **Push**
-- [ ] `push.service.ts` — mockear la librería `web-push` (`vi.mock("web-push")`); envío
-      exitoso vs. suscripción inválida/expirada (¿el código limpia la suscripción vieja
-      de la DB en ese caso? confirmar leyendo el archivo).
-- [ ] `push.repository.ts` — opcional salvo lógica condicional real.
-- [ ] `push.controller.ts` — `subscribe()` guarda la suscripción; `getVapidPublicKey()`
-      devuelve la key configurada.
+- [x] `push.service.ts` — mock de `web-push` (`webpush.sendNotification`, `WebPushError`); envío exitoso, retorno inmediato ante lista vacía, limpieza automática de suscripciones caducadas (404/410) en DB y tolerancia sin fallas ante errores transitorios. (7 tests en `push.service.test.ts`).
+- [x] `push.repository.ts` — upsert por endpoint (clave natural de dispositivo), eliminación por endpoint y búsqueda por userIds. (3 tests en `push.repository.test.ts`).
+- [x] `push.controller.ts` — `subscribe()` valida claves y guarda la suscripción (204); `unsubscribe()` elimina (204); `getPublicKey()` expone VAPID public key. (7 tests en `push.controller.test.ts`).
 
 **Giphy**
-- [ ] `giphy.service.ts#importGiphyAsset` — **`originalUrl` con host que NO matchea
-      `*.giphy.com` (https) → rechazado antes de intentar descargar.** Invariante
-      obligatoria, ver sección 4 de `TESTING_PLAN.md` — este es el caso de seguridad
-      más importante de todo el módulo, no lo trates como un edge case más.
-- [ ] `giphy.service.ts#searchGiphy` / `#getTrendingGiphy` — mockeando `fetch` a la API
-      de Giphy; `GIPHY_API_KEY` no configurada → 503 (`ServiceUnavailableError`) **sin
-      tumbar el server** (a diferencia de las VAPID keys, que si faltan cortan el
-      arranque — es opcional a propósito, ver `config/env.ts`).
-- [ ] `giphy.controller.ts` — mapeo a HTTP, incluyendo el 503 de arriba.
-- [ ] `giphy.validator.ts` — schema de búsqueda/import.
+- [x] `giphy.service.ts#importGiphyAsset` — **invariante de seguridad SSRF:** revalidación estricta de `originalUrl` exigiendo protocolo HTTPS y host perteneciente a `*.giphy.com` (o `giphy.com`), rechazando dominios externos, spoofing, urls malformadas, tipos no-imagen y archivos que excedan el límite de subida. (tests en `giphy.service.test.ts`).
+- [x] `giphy.service.ts#searchGiphy` / `#getTrendingGiphy` — mock de `fetch` a la API de Giphy, mapeo de renditions (`fixed_width` / `original`), filtrado de incompletos, 503 (`ServiceUnavailableError`) si `GIPHY_API_KEY` falta o Giphy no responde, y 403 (`ForbiddenError`) si `allowStickersAndGifs` está apagado globalmente. (tests en `giphy.service.test.ts`).
+- [x] `giphy.controller.ts` — validación de `kind` (`gifs` / `stickers`), validación de query requerida, paginación y mapeo a HTTP. (9 tests en `giphy.controller.test.ts`).
+- [x] `giphy.validator.ts` — schema de importación de assets `importGiphyAssetSchema` con `kind`, `giphyId`, y `originalUrl` como URL válida. (5 tests en `giphy.validator.test.ts`).
+
+**Fase 7 cerrada 2026-09-09.** 65 tests nuevos agregados (372/372 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Invariante SSRF de Giphy, limpieza de Web Push caducado y agregaciones del panel admin de usuarios cubiertos rigurosamente.
 
 ---
 

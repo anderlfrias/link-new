@@ -133,7 +133,7 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
 | 4 | Messages | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-4) | backend | [x] 2026-09-09 |
 | 5 | Files & Storage | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-5) | backend | [x] 2026-09-09 |
 | 6 | Settings & permisos de grupo | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-6) | backend | [x] 2026-09-09 |
-| 7 | Users, Push, Giphy | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-7) | backend | [ ] Pendiente |
+| 7 | Users, Push, Giphy | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-7) | backend | [x] 2026-09-09 |
 | 8 | Socket gateway & Presence | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-8) | backend | [ ] Pendiente |
 | 9 | Utils & lib (funciones puras) | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-9) | frontend | [ ] Pendiente |
 | 10 | Providers & UI compartida | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-10) | frontend | [ ] Pendiente |

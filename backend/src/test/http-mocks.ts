@@ -5,6 +5,8 @@ export function createMockRequest(overrides: Partial<Request> = {}): Request {
   return {
     headers: {},
     body: {},
+    query: {},
+    params: {},
     ...overrides,
   } as Request;
 }
