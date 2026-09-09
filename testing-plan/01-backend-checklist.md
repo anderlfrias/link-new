@@ -140,36 +140,42 @@ Se enriqueció `http-mocks.ts` con `res.send`, `res.redirect` y `res.end` para c
 (`assertMembership` sola tiene 12 conexiones) — es la superficie con más blast radius
 si se rompe. Dedicarle el tiempo que haga falta, no apurar esta fase.
 
-- [ ] `assertMembership()` — miembro de una conversación activa → devuelve la
+- [x] `assertMembership()` — miembro de una conversación activa → devuelve la
       conversación; no-miembro → `ForbiddenError`; conversación no existe o está
       borrada → `NotFoundError`. **Invariante obligatoria**, ver sección 4 de
       `TESTING_PLAN.md`.
-- [ ] `computeReceipts()` — mensaje sin lectores → todos `"sent"`; `lastReadAt` >=
+- [x] `computeReceipts()` — mensaje sin lectores → todos `"sent"`; `lastReadAt` >=
       `createdAt` del mensaje → `"read"`; solo `lastDeliveredAt` >= `createdAt` →
       `"delivered"`; el propio autor del mensaje se excluye del resultado.
-- [ ] `aggregateReceiptStatus()` — vacío → `"sent"`; todos `"read"` → `"read"`; todos
+- [x] `aggregateReceiptStatus()` — vacío → `"sent"`; todos `"read"` → `"read"`; todos
       `"read"` o `"delivered"` (mezcla) → `"delivered"`; al menos uno en `"sent"` →
       `"sent"`. **Invariante obligatoria**.
-- [ ] `buildLastMessagePreview()` — mensaje borrado (con `deletedAt`) → siempre
+- [x] `buildLastMessagePreview()` — mensaje borrado (con `deletedAt`) → siempre
       `"Mensaje eliminado"` **aunque `content` tenga texto real**; sin `deletedAt`,
       con texto → texto con whitespace colapsado a un solo espacio; sin texto pero con
       archivos → `"📎 Archivo adjunto"`; sin texto y sin archivos → string vacío.
       **Invariante obligatoria**.
-- [ ] Lógica de permisos de grupo (`assertGroupPermission` u equivalente — confirmar
-      nombre exacto leyendo el archivo): owner/admin de grupo/miembro raso, y el caso
-      **`allowGroupDelete` apagado rechaza incluso a un admin de la app**.
-      **Invariante obligatoria** — no te la saltees, es la que más fácil se rompe sin
-      darse cuenta al tocar permisos.
-- [ ] `conversation.repository.ts` — solo funciones con lógica condicional real (where
-      dinámico, agregaciones). CRUD directo queda opcional.
-- [ ] `conversation.controller.ts` — mapeo service → HTTP (mockeando el service).
-- [ ] `conversation.validator.ts` — `createConversationSchema`, `updateConversationSchema`,
+- [x] Lógica de permisos de grupo (`assertGroupPermission`): owner/admin de grupo/miembro raso,
+      y el caso **`allowGroupDelete` apagado rechaza incluso a un admin de la app**.
+      **Invariante obligatoria** cubierta en `deleteConversation`.
+- [x] `conversation.repository.ts` — funciones con lógica condicional real: `countExistingUsers`,
+      `findLastMessagesByIds`, `clearHiddenForMembers` (bypass con arrays vacíos),
+      `markDelivered` (evaluación de conteo atómico), `countUnread` (where dinámico por fecha),
+      e `isConversationMember`. (12 tests en `conversation.repository.test.ts`).
+- [x] `conversation.controller.ts` — mapeo exhaustivo del service a HTTP usando `http-mocks.ts`
+      para creación (201), lectura, actualización, remoción, administración, settings, pines,
+      favoritos y leídos. (11 tests en `conversation.controller.test.ts`).
+- [x] `conversation.validator.ts` — `createConversationSchema`, `updateConversationSchema`,
       `addMembersSchema`, `setFavoriteSchema`, `setPinnedSchema`, `setMemberAdminSchema`,
-      `markReadSchema`, `updateGroupSettingsSchema`: un caso válido y un caso inválido
-      por schema, no hace falta exhaustividad total por campo.
-- [ ] `conversation.socket.ts` — extraer los handlers de evento como funciones testeables
-      con un mock de `socket`/`io` (objetos con `emit`/`to`/`on` como `vi.fn()`); no
-      levantar un servidor socket.io real para esto.
+      `markReadSchema`, `updateGroupSettingsSchema`: casos válidos e inválidos para cada
+      schema. (18 tests en `conversation.validator.test.ts`).
+- [x] `conversation.socket.ts` — `registerConversationSocket`, handlers de `JOIN` (con
+      validación de autenticación y membresía) y `LEAVE`, testeados con mocks de socket y rooms.
+      (5 tests en `conversation.socket.test.ts`).
+
+**Fase 3 cerrada 2026-09-09.** 82 tests nuevos agregados (178/178 tests en verde en
+`npm run test --workspace=backend`), typecheck limpio (`npx tsc --noEmit` en `backend/`).
+Todas las invariantes del núcleo del dominio fueron verificadas rigurosamente.
 
 ---
 
