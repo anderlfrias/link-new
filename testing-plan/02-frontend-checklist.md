@@ -105,39 +105,42 @@ arriba si todavía no existe — varios de estos providers se anidan
 reusar.
 
 **Providers** (`frontend/src/providers/`)
-- [ ] `theme-provider.tsx` — `ThemeProvider`/`useTheme`: toggle entre temas, persiste
-      la preferencia (revisar mecanismo: `localStorage`, cookie, etc.).
-- [ ] `auth-provider.tsx` — `useAuth()` es el nodo más conectado de todo el frontend
+- [x] `theme-provider.tsx` — `ThemeProvider`/`useTheme`: toggle entre temas, persiste
+      la preferencia (revisar mecanismo: `localStorage`, cookie, etc.). (5 tests).
+- [x] `auth-provider.tsx` — `useAuth()` es el nodo más conectado de todo el frontend
       (24 conexiones) — dedicarle tiempo: estado autenticado/no autenticado, login
-      exitoso actualiza el estado, logout limpia el estado.
-- [ ] `public-settings-provider.tsx` — expone `getPublicSettings()` mockeado a través
-      del contexto.
-- [ ] `profile-picture-provider.tsx`
-- [ ] `socket-provider.tsx` — conecta/desconecta el socket (mockeado, no un socket
-      real) según el estado de auth.
-- [ ] `app-providers.tsx` — smoke test: renderiza sin explotar envolviendo un `children`
-      de prueba.
+      exitoso actualiza el estado, logout limpia el estado. (7 tests).
+- [x] `public-settings-provider.tsx` — expone `getPublicSettings()` mockeado a través
+      del contexto. (4 tests).
+- [x] `profile-picture-provider.tsx` (5 tests).
+- [x] `socket-provider.tsx` — conecta/desconecta el socket (mockeado, no un socket
+      real) según el estado de auth. (2 tests).
+- [x] `app-providers.tsx` — smoke test: renderiza sin explotar envolviendo un `children`
+      de prueba. (1 test).
 
 **UI compartida** (`frontend/src/components/ui/`)
-- [ ] `Avatar.tsx` — `hashToIndex()`/paleta de color determinística por usuario.
-- [ ] `Badge.tsx`
-- [ ] `Button.tsx` — variantes, estado `disabled` no dispara `onClick`.
-- [ ] `Checkbox.tsx`
-- [ ] `Drawer.tsx` — abre/cierra, cierra al click afuera o Escape si lo maneja.
-- [ ] `Input.tsx`
-- [ ] `MessageStatusTicks.tsx` — recibe cada `MessageReceiptStatus` y renderiza el
-      ícono correspondiente (sent/delivered/read).
-- [ ] `Modal.tsx`
-- [ ] `Select.tsx`
-- [ ] `ThemeToggle.tsx`
+- [x] `Avatar.tsx` — `hashToIndex()`/paleta de color determinística por usuario. (6 tests).
+- [x] `Badge.tsx` (4 tests).
+- [x] `Button.tsx` — variantes, estado `disabled` no dispara `onClick`. (5 tests).
+- [x] `Checkbox.tsx` (3 tests).
+- [x] `Drawer.tsx` — abre/cierra, cierra al click afuera o Escape si lo maneja. (4 tests).
+- [x] `Input.tsx` (4 tests).
+- [x] `MessageStatusTicks.tsx` — recibe cada `MessageReceiptStatus` y renderiza el
+      ícono correspondiente (sent/delivered/read). (5 tests).
+- [x] `Modal.tsx` (4 tests).
+- [x] `Select.tsx` (3 tests).
+- [x] `ThemeToggle.tsx` (3 tests).
 
 **Layout & brand**
-- [ ] `frontend/src/components/layout/ConversationHeader.tsx`
-- [ ] `frontend/src/components/layout/DesktopSidebar.tsx`
-- [ ] `frontend/src/components/layout/EmptyConversationState.tsx`
-- [ ] `frontend/src/components/layout/MobileChatListScreen.tsx`
-- [ ] `frontend/src/components/layout/UserMenu.tsx`
-- [ ] `frontend/src/components/brand/Logo.tsx`
+- [x] `frontend/src/components/layout/ConversationHeader.tsx` (3 tests).
+- [x] `frontend/src/components/layout/DesktopSidebar.tsx` (6 tests).
+- [x] `frontend/src/components/layout/EmptyConversationState.tsx` (1 test).
+- [x] `frontend/src/components/layout/MobileChatListScreen.tsx` (5 tests).
+- [x] `frontend/src/components/layout/UserMenu.tsx` (5 tests).
+- [x] `frontend/src/components/brand/Logo.tsx` (2 tests).
+
+**Fase 10 cerrada 2026-09-09.** Helper `renderWithProviders()` y factories de mock creados (`test-utils.tsx`). 87 tests nuevos agregados (166/166 tests en verde en `npm run test --workspace=frontend`, 562/562 tests totales en monorepo), typecheck limpio (`npx tsc --noEmit -p frontend/tsconfig.json`).
+Contextos de React (Auth, Theme, Socket, PublicSettings, ProfilePicture), componentes atómicos y layouts de sidebar/header cubiertos rigurosamente.
 
 ---
 
