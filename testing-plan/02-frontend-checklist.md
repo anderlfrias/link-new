@@ -149,39 +149,43 @@ Contextos de React (Auth, Theme, Socket, PublicSettings, ProfilePicture), compon
 ## Fase 11 — Feature: Auth & Admin
 
 **Auth** (`frontend/src/features/auth/`)
-- [ ] `api/auth.api.ts`
-- [ ] `components/LoginForm.tsx` — submit con credenciales llama a la API correcta;
+- [x] `api/auth.api.ts` (6 tests).
+- [x] `components/LoginForm.tsx` — submit con credenciales llama a la API correcta;
       error de login (403 genérico del backend, ver invariante en `TESTING_PLAN.md`
-      sección 4) se muestra al usuario sin distinguir motivo.
-- [ ] `hooks/use-profile-picture.ts`
-- [ ] `hooks/use-require-role.ts` — contraparte frontend de `requireRoles` del backend
+      sección 4) se muestra al usuario sin distinguir motivo. (5 tests).
+- [x] `hooks/use-profile-picture.ts` (1 test).
+- [x] `hooks/use-require-role.ts` — contraparte frontend de `requireRoles` del backend
       (Fase 1): usuario sin el rol requerido → comportamiento esperado (redirect,
       render de `ForbiddenScreen`, lo que el hook realmente haga — confirmar leyendo
-      el archivo).
+      el archivo). (4 tests).
 
 **Admin** (`frontend/src/features/admin/`)
-- [ ] `api/admin-files.api.ts`
-- [ ] `api/admin-settings.api.ts`
-- [ ] `api/admin-users.api.ts`
-- [ ] `utils/build-usage-labels.ts`
-- [ ] `hooks/use-admin-files.ts`
-- [ ] `hooks/use-admin-settings.ts`
-- [ ] `hooks/use-admin-users.ts`
-- [ ] `hooks/use-delete-admin-file.ts`
-- [ ] `hooks/use-update-admin-settings.ts`
-- [ ] `components/AdminShell.tsx`
-- [ ] `components/AdminSettingsPanel.tsx` — el flag `allowGroupDelete` y demás
+- [x] `api/admin-files.api.ts` (2 tests).
+- [x] `api/admin-settings.api.ts` (2 tests).
+- [x] `api/admin-users.api.ts` (1 test).
+- [x] `utils/build-usage-labels.ts` (3 tests).
+- [x] `hooks/use-admin-files.ts` (3 tests).
+- [x] `hooks/use-admin-settings.ts` (3 tests).
+- [x] `hooks/use-admin-users.ts` (3 tests).
+- [x] `hooks/use-delete-admin-file.ts` (3 tests).
+- [x] `hooks/use-update-admin-settings.ts` (3 tests).
+- [x] `components/AdminShell.tsx` (1 test).
+- [x] `components/AdminSettingsPanel.tsx` — el flag `allowGroupDelete` y demás
       overrides de grupo (ver invariante en `TESTING_PLAN.md` sección 4): el panel no
-      debe permitir un estado de UI que sugiera que hay excepciones para admin de app.
-- [ ] `components/AdminFilesPanel.tsx`
-- [ ] `components/AdminFileRow.tsx`
-- [ ] `components/DeleteFileConfirmModal.tsx`
-- [ ] `components/FileTypeMultiSelect.tsx` — ver nota de sync cliente/servidor
+      debe permitir un estado de UI que sugiera que hay excepciones para admin de app. (4 tests).
+- [x] `components/AdminFilesPanel.tsx` (1 test).
+- [x] `components/AdminFileRow.tsx` (3 tests).
+- [x] `components/DeleteFileConfirmModal.tsx` (3 tests).
+- [x] `components/FileTypeMultiSelect.tsx` — ver nota de sync cliente/servidor
       (Fase 9 y Fase 5 backend): el patrón ingresado manualmente se valida con el
-      mismo regex que espera el backend.
-- [ ] `components/AdminUsersPanel.tsx`
-- [ ] `components/AdminUserRow.tsx`
-- [ ] `components/ForbiddenScreen.tsx`
+      mismo regex que espera el backend. (3 tests).
+- [x] `components/AdminUsersPanel.tsx` (2 tests).
+- [x] `components/AdminUserRow.tsx` (2 tests).
+- [x] `components/ForbiddenScreen.tsx` (1 test).
+
+**Fase 11 cerrada 2026-09-09.** 59 tests nuevos agregados (225/225 tests en verde en
+`npm run test --workspace=frontend`, 621/621 tests totales en monorepo), typecheck limpio (`npx tsc --noEmit -p frontend/tsconfig.json`).
+Flujos de login (con error genérico 403), control de acceso por roles, panel de administración con gestión de archivos, usuarios y configuraciones globales (respetando la invariante de switch maestro `allowGroupDelete`) cubiertos rigurosamente.
 
 ---
 

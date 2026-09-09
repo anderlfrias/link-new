@@ -137,7 +137,7 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
 | 8 | Socket gateway & Presence | [testing-plan/01-backend-checklist.md](testing-plan/01-backend-checklist.md#fase-8) | backend | [x] 2026-09-09 |
 | 9 | Utils & lib (funciones puras) | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-9) | frontend | [x] 2026-09-09 |
 | 10 | Providers & UI compartida | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-10) | frontend | [x] 2026-09-09 |
-| 11 | Feature: Auth & Admin | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-11) | frontend | [ ] Pendiente |
+| 11 | Feature: Auth & Admin | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-11) | frontend | [x] 2026-09-09 |
 | 12 | Feature: Conversations | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-12) | frontend | [ ] Pendiente |
 | 13 | Feature: Messages | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-13) | frontend | [ ] Pendiente |
 | 14 | Feature: Files, Giphy, Notifications, Profile, Users, Settings | [testing-plan/02-frontend-checklist.md](testing-plan/02-frontend-checklist.md#fase-14) | frontend | [ ] Pendiente |
