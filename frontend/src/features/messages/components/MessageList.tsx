@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { IconLoader2 } from "@tabler/icons-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { IconChevronDown, IconLoader2 } from "@tabler/icons-react";
 import { MessageBubble } from "@/features/messages/components/MessageBubble";
 import { TypingIndicator } from "@/features/messages/components/TypingIndicator";
 import { formatDateSeparator } from "@/utils/format-date";
@@ -26,7 +26,7 @@ interface MessageListProps {
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
-const LOAD_MORE_THRESHOLD = 80;
+const LOAD_MORE_THRESHOLD = 140;
 /** Cuánto queda "encendida" la burbuja al saltar a un mensaje citado (ver `jumpToMessage`) — suficiente para que el ojo la encuentre sin sentirse pegajoso. */
 const HIGHLIGHT_DURATION_MS = 1500;
 
@@ -54,8 +54,15 @@ export function MessageList({
   onForwardMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const prevLengthRef = useRef(0);
-  const stickToBottomRef = useRef(true);
+  const prevScrollHeightRef = useRef<number>(0);
+  const prevScrollTopRef = useRef<number>(0);
+  const prevFirstMessageIdRef = useRef<string | null>(null);
+  const prevLastMessageIdRef = useRef<string | null>(null);
+  const isNearBottomRef = useRef(true);
+
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [newMessagesBelow, setNewMessagesBelow] = useState(0);
+
   const messageElementsRef = useRef(new Map<string, HTMLDivElement>());
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,38 +87,87 @@ export function MessageList({
     };
   }, []);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const grew = messages.length > prevLengthRef.current;
-    prevLengthRef.current = messages.length;
-    if (grew && stickToBottomRef.current) {
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [messages]);
-
+  // Al estar listos los mensajes en la carga inicial, posicionar al final
   useEffect(() => {
     if (status === "ready" && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      isNearBottomRef.current = true;
+      setShowScrollBottom(false);
+      setNewMessagesBelow(0);
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
+      prevScrollTopRef.current = containerRef.current.scrollTop;
+      prevFirstMessageIdRef.current = messages[0]?.id ?? null;
+      prevLastMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
     }
   }, [status]);
+
+  // Anclaje de scroll en layout antes de que el navegador pinte el DOM
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || messages.length === 0) return;
+
+    const firstId = messages[0]?.id;
+    const lastId = messages[messages.length - 1]?.id;
+
+    // Caso 1: Se cargaron mensajes anteriores al inicio del array
+    if (prevFirstMessageIdRef.current && firstId !== prevFirstMessageIdRef.current) {
+      const heightDiff = container.scrollHeight - prevScrollHeightRef.current;
+      if (heightDiff > 0) {
+        container.scrollTop = prevScrollTopRef.current + heightDiff;
+      }
+    }
+    // Caso 2: Nuevo mensaje agregado al final del array
+    else if (prevLastMessageIdRef.current && lastId !== prevLastMessageIdRef.current) {
+      if (isNearBottomRef.current) {
+        container.scrollTop = container.scrollHeight;
+      } else {
+        setNewMessagesBelow((prev) => prev + 1);
+      }
+    }
+    // Caso 3: Carga inicial
+    else if (!prevFirstMessageIdRef.current && status === "ready") {
+      container.scrollTop = container.scrollHeight;
+    }
+
+    prevFirstMessageIdRef.current = firstId ?? null;
+    prevLastMessageIdRef.current = lastId ?? null;
+    prevScrollHeightRef.current = container.scrollHeight;
+    prevScrollTopRef.current = container.scrollTop;
+  }, [messages, status]);
 
   function handleScroll() {
     const container = containerRef.current;
     if (!container) return;
 
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    stickToBottomRef.current = distanceFromBottom < STICK_TO_BOTTOM_THRESHOLD;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const isNearBottom = distanceFromBottom < STICK_TO_BOTTOM_THRESHOLD;
+    isNearBottomRef.current = isNearBottom;
 
-    if (container.scrollTop < LOAD_MORE_THRESHOLD && hasMore && !loadingMore) {
-      const previousHeight = container.scrollHeight;
-      onLoadMore();
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight - previousHeight;
-        }
-      });
+    prevScrollHeightRef.current = scrollHeight;
+    prevScrollTopRef.current = scrollTop;
+
+    // Mostrar botón flotante si el usuario subió más de 180px desde el fondo
+    setShowScrollBottom(distanceFromBottom > 180);
+
+    // Si vuelve cerca del fondo, resetear el contador de nuevos mensajes
+    if (isNearBottom) {
+      setNewMessagesBelow(0);
     }
+
+    // Cargar mensajes más antiguos al llegar al umbral superior
+    if (scrollTop < LOAD_MORE_THRESHOLD && hasMore && !loadingMore && messages.length > 0) {
+      onLoadMore();
+    }
+  }
+
+  function scrollToBottom() {
+    const container = containerRef.current;
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    setNewMessagesBelow(0);
+    isNearBottomRef.current = true;
+    setShowScrollBottom(false);
   }
 
   if (status === "loading" || status === "idle") {
@@ -136,76 +192,114 @@ export function MessageList({
   let lastDateKey = "";
 
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className="min-w-0 flex-1 space-y-2 overflow-y-auto px-4 py-4"
-      style={chatBackgroundStyle}
-    >
-      {loadingMore && (
-        <div className="flex justify-center py-2">
-          <IconLoader2 className="animate-spin text-brand-blue" size={18} />
-        </div>
-      )}
-
-      {messages.length === 0 && (
-        <div className="flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400">
-          Todavía no hay mensajes. Escribí el primero.
-        </div>
-      )}
-
-      {messages.map((message, index) => {
-        const dateKey = new Date(message.createdAt).toDateString();
-        const showDateSeparator = dateKey !== lastDateKey;
-        lastDateKey = dateKey;
-
-        const previousMessage = messages[index - 1];
-        const isOwn = message.senderId === currentUserId;
-        const showSender =
-          conversationType === "GROUP" &&
-          !isOwn &&
-          (showDateSeparator || previousMessage?.senderId !== message.senderId);
-
-        return (
-          <div
-            key={message.id}
-            ref={(element) => {
-              if (element) messageElementsRef.current.set(message.id, element);
-              else messageElementsRef.current.delete(message.id);
-            }}
-            className={cn(
-              "rounded-2xl transition-colors duration-300",
-              highlightedId === message.id && "bg-brand-blue/10 dark:bg-brand-blue/15",
-            )}
-          >
-            {showDateSeparator && (
-              <div className="my-3 flex justify-center">
-                <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
-                  {formatDateSeparator(message.createdAt)}
-                </span>
-              </div>
-            )}
-            <MessageBubble
-              message={message}
-              isOwn={isOwn}
-              showSender={showSender}
-              isSelfChat={conversationType === "SELF"}
-              currentUserId={currentUserId}
-              onEdit={onEditMessage}
-              onDelete={onDeleteMessage}
-              onReply={onReplyMessage}
-              onForward={onForwardMessage}
-              onJumpToMessage={jumpToMessage}
-            />
+    <div className="relative flex-1 min-h-0 min-w-0 flex flex-col">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="min-w-0 flex-1 space-y-2 overflow-y-auto px-4 py-4"
+        style={chatBackgroundStyle}
+      >
+        {/* Indicador de inicio de la conversación */}
+        {!hasMore && messages.length > 0 && (
+          <div className="my-4 flex justify-center">
+            <span className="rounded-full bg-black/5 dark:bg-white/10 px-3.5 py-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+              Inicio de la conversación
+            </span>
           </div>
-        );
-      })}
+        )}
 
-      {isTyping && (
-        <div className="pt-1">
-          <TypingIndicator />
-        </div>
-      )}
+        {/* Indicador de carga de mensajes anteriores */}
+        {loadingMore && (
+          <div className="my-2 flex items-center justify-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+            <IconLoader2 className="h-4 w-4 animate-spin text-brand-blue" />
+            <span>Cargando mensajes anteriores...</span>
+          </div>
+        )}
+
+        {messages.length === 0 && (
+          <div className="flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400">
+            Todavía no hay mensajes. Escribí el primero.
+          </div>
+        )}
+
+        {messages.map((message, index) => {
+          const dateKey = new Date(message.createdAt).toDateString();
+          const showDateSeparator = dateKey !== lastDateKey;
+          lastDateKey = dateKey;
+
+          const previousMessage = messages[index - 1];
+          const isOwn = message.senderId === currentUserId;
+          const showSender =
+            conversationType === "GROUP" &&
+            !isOwn &&
+            (showDateSeparator || previousMessage?.senderId !== message.senderId);
+
+          return (
+            <div
+              key={message.id}
+              ref={(element) => {
+                if (element) messageElementsRef.current.set(message.id, element);
+                else messageElementsRef.current.delete(message.id);
+              }}
+              className={cn(
+                "rounded-2xl transition-colors duration-300",
+                highlightedId === message.id && "bg-brand-blue/10 dark:bg-brand-blue/15",
+              )}
+            >
+              {showDateSeparator && (
+                <div className="my-3 flex justify-center">
+                  <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
+                    {formatDateSeparator(message.createdAt)}
+                  </span>
+                </div>
+              )}
+              <MessageBubble
+                message={message}
+                isOwn={isOwn}
+                showSender={showSender}
+                isSelfChat={conversationType === "SELF"}
+                currentUserId={currentUserId}
+                onEdit={onEditMessage}
+                onDelete={onDeleteMessage}
+                onReply={onReplyMessage}
+                onForward={onForwardMessage}
+                onJumpToMessage={jumpToMessage}
+              />
+            </div>
+          );
+        })}
+
+        {isTyping && (
+          <div className="pt-1">
+            <TypingIndicator />
+          </div>
+        )}
+      </div>
+
+      {/* Botón flotante para bajar a los mensajes más recientes */}
+      <div
+        className={cn(
+          "absolute bottom-4 right-6 z-10 transition-all duration-300 ease-out",
+          showScrollBottom
+            ? "opacity-100 translate-y-0 pointer-events-auto scale-100"
+            : "opacity-0 translate-y-3 pointer-events-none scale-90",
+        )}
+      >
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          aria-label="Bajar a los mensajes más recientes"
+          title="Bajar a los mensajes más recientes"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/95 dark:bg-neutral-800/95 text-neutral-700 dark:text-neutral-200 shadow-md hover:shadow-xl border border-neutral-200/80 dark:border-neutral-700 backdrop-blur-sm transition-all duration-200 hover:scale-110 active:scale-95 hover:text-brand-blue dark:hover:text-brand-blue-light focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+        >
+          <IconChevronDown size={22} stroke={2.2} />
+          {newMessagesBelow > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand-blue px-1.5 text-[11px] font-bold text-white shadow-md animate-scale-in">
+              {newMessagesBelow > 99 ? "99+" : newMessagesBelow}
+            </span>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

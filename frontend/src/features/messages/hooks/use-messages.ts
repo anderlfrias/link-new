@@ -66,6 +66,9 @@ export function useMessages(conversationId: string) {
   useEffect(() => {
     if (!token) return;
     setStatus("loading");
+    setMessages([]);
+    setHasMore(true);
+    setLoadingMore(false);
     listMessages(token, conversationId, { limit: PAGE_SIZE })
       .then((data) => {
         setMessages(data);
@@ -157,15 +160,23 @@ export function useMessages(conversationId: string) {
     };
   }, [socket, conversationId, token]);
 
-  const loadMore = useCallback(() => {
+  const loadMore = useCallback(async () => {
     if (!token || loadingMore || !hasMore || messages.length === 0) return;
     setLoadingMore(true);
-    listMessages(token, conversationId, { before: messages[0].id, limit: PAGE_SIZE })
-      .then((older) => {
-        setMessages((prev) => [...older, ...prev]);
-        setHasMore(older.length === PAGE_SIZE);
-      })
-      .finally(() => setLoadingMore(false));
+    try {
+      const oldestId = messages[0].id;
+      const older = await listMessages(token, conversationId, { before: oldestId, limit: PAGE_SIZE });
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newOlder = older.filter((m) => !existingIds.has(m.id));
+        return [...newOlder, ...prev];
+      });
+      setHasMore(older.length === PAGE_SIZE);
+    } catch (error) {
+      console.error("Error al cargar mensajes anteriores:", error);
+    } finally {
+      setLoadingMore(false);
+    }
   }, [token, conversationId, messages, loadingMore, hasMore]);
 
   const send = useCallback(
