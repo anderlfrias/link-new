@@ -1,3 +1,4 @@
+import { ConversationType } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../config/prisma", () => ({
@@ -37,9 +38,12 @@ import {
   clearHiddenForMembers,
   countExistingUsers,
   countUnread,
+  createConversation,
   findLastMessagesByIds,
   isConversationMember,
+  listForUser,
   markDelivered,
+  markRead,
 } from "./conversation.repository";
 
 describe("conversation.repository", () => {
@@ -185,6 +189,77 @@ describe("conversation.repository", () => {
 
       const isMember = await isConversationMember("c-1", "u-1");
       expect(isMember).toBe(false);
+    });
+  });
+
+  describe("listForUser", () => {
+    it("filtra por hiddenAt de la propia membresía (no de la conversación) y visibilidad PRIVATE/GROUP", async () => {
+      vi.mocked(prisma.conversation.findMany).mockResolvedValue([]);
+
+      await listForUser("u-1");
+
+      expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            deletedAt: null,
+            // hiddenAt va DENTRO del mismo `some` que userId a propósito (ver
+            // comentario en el archivo fuente) — no es "algún miembro oculto",
+            // es "mi propia fila de membresía no está oculta".
+            members: { some: { userId: "u-1", hiddenAt: null } },
+            // Una PRIVATE sin mensajes todavía no existe para nadie; GROUP sí
+            // aparece de una.
+            OR: [{ type: ConversationType.GROUP }, { lastMessageId: { not: null } }],
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("createConversation (repository)", () => {
+    it("marca isAdmin: true solo para el miembro que coincide con createdById", async () => {
+      vi.mocked(prisma.conversation.create).mockResolvedValue({} as any);
+
+      await createConversation({
+        type: ConversationType.GROUP,
+        createdById: "u-creator",
+        memberIds: ["u-creator", "u-member-1", "u-member-2"],
+      });
+
+      expect(prisma.conversation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            members: {
+              create: [
+                { userId: "u-creator", isAdmin: true },
+                { userId: "u-member-1", isAdmin: false },
+                { userId: "u-member-2", isAdmin: false },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe("markRead", () => {
+    it("incluye lastReadMessageId en el update cuando se pasa uno", async () => {
+      vi.mocked(prisma.conversationMember.update).mockResolvedValue({} as any);
+
+      await markRead("c-1", "u-1", "m-5");
+
+      expect(prisma.conversationMember.update).toHaveBeenCalledWith({
+        where: { conversationId_userId: { conversationId: "c-1", userId: "u-1" } },
+        data: { lastReadAt: expect.any(Date), lastReadMessageId: "m-5" },
+      });
+    });
+
+    it("omite lastReadMessageId del update cuando no se pasa (no lo pisa con undefined)", async () => {
+      vi.mocked(prisma.conversationMember.update).mockResolvedValue({} as any);
+
+      await markRead("c-1", "u-1");
+
+      const call = vi.mocked(prisma.conversationMember.update).mock.calls[0][0] as any;
+      expect(call.data).not.toHaveProperty("lastReadMessageId");
     });
   });
 });

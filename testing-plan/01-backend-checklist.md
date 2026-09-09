@@ -327,6 +327,50 @@ Socket gateway, middlewares, autenticación de sockets, presencia y smoke tests 
 
 ---
 
+---
+
+## Adenda — hallazgos de auditoría (2026-09-09)
+
+Una auditoría posterior al cierre de las Fases 1–8 (correr toda la suite + typecheck +
+revisar con subagentes las invariantes obligatorias y los archivos de cobertura baja)
+encontró gaps puntuales, ya cerrados acá — fuera de la numeración de fases porque
+todas ya estaban marcadas `[x]`:
+
+- [x] `backend/src/modules/auth/auth.service.ts` — la Fase 2 había dejado sin testear
+      toda la lógica de sincronización de avatar: `fetchExternalUserProfilePicture`
+      (`getProfilePicture`/`getProfilePictureByUsername`, parseo de data URI, manejo
+      de `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND`), `syncAvatar`
+      (`syncProfilePicture`/`syncContactAvatar` — dedup por checksum para no
+      reescribir sin cambios, nunca lanza) y `syncAppUsers` (upsert en lote, tolera
+      que un usuario puntual falle sin romper el resto). Cobertura del archivo pasó de
+      49% a 95% líneas.
+- [x] `backend/src/workers/message-retention.worker.ts` — **nunca estuvo en ningún
+      ítem de este checklist** (omisión del plan original al redactarlo, no de la
+      ejecución de ninguna fase). Tiene lógica real: deshabilitado por default
+      (`messageRetentionDays == null` → no hace nada), cálculo de fecha de corte a
+      partir de días, sweep inmediato al arrancar + de nuevo en cada intervalo. Ahora
+      100% de cobertura (`message-retention.worker.test.ts`, con `vi.useFakeTimers()`
+      y `vi.advanceTimersByTimeAsync()` para no depender de tiempo real).
+- [x] `backend/src/modules/conversations/conversation.repository.ts#listForUser` — el
+      propio comentario del código marca como no-obvio el anidamiento de `hiddenAt`
+      dentro del `some` de members (no "algún miembro oculto", sino "mi propia
+      membresía no oculta"); ahora tiene test dedicado que verifica el `where` exacto.
+      También se agregó test de `createConversation` (repo) — la regla de
+      creador-auto-admin (`isAdmin: userId === createdById`) — y de `markRead` (el
+      spread condicional de `lastReadMessageId`, mismo patrón que `countUnread`).
+- [x] `backend/src/modules/conversations/conversation.service.ts` —
+      `setConversationFavorite` nunca se llamaba en ningún test (el `describe` decía
+      cubrir favorite+pinned pero solo ejercitaba pinned); se agregaron los caminos de
+      éxito y ramas de permiso/límite que faltaban en `updateGroupSettings`,
+      `addMembers`, `updateConversation` (incluyendo los dos `logAudit` independientes
+      de `CHANGE_NAME`/`CHANGE_IMAGE`), `setMemberAdminStatus` (usuario no-miembro,
+      estado ya idéntico al pedido) y las validaciones de `createConversation` (mínimo/
+      máximo de miembros del grupo, `name` requerido, miembros inexistentes).
+      Cobertura del archivo pasó de 72% a 91% líneas.
+
+**442/442 tests en verde** (`npm run test --workspace=backend`), typecheck limpio.
+Cobertura global del backend: 84.4% → 93.4% líneas (piso configurado: 75%).
+
 ## Definition of Done — Backend completo (Fases 1–8)
 
 - [x] Las 8 fases de este archivo tienen todos sus checkboxes en `[x]`.

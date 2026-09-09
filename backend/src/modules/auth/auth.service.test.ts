@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import env from "../../config/env";
 import {
@@ -32,15 +33,21 @@ import {
   setLocalAvatar,
   setLocalName,
   setNotificationSoundEnabled,
+  updateAvatarFileId,
   upsertUserFromExternalUser,
 } from "./auth.repository";
 import * as FileService from "../files/file.service";
 import {
   getAppUsers,
   getOwnProfilePictureUrl,
+  getProfilePicture,
+  getProfilePictureByUsername,
   login,
   removeProfilePicture,
   setProfilePicture,
+  syncAppUsers,
+  syncContactAvatar,
+  syncProfilePicture,
   updateNotificationSoundEnabled,
   updateOwnName,
   upsertUsuario,
@@ -327,6 +334,292 @@ describe("auth.service", () => {
 
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network failed")));
       await expect(getAppUsers("token")).rejects.toThrow(ServiceUnavailableError);
+    });
+  });
+
+  describe("getProfilePicture / getProfilePictureByUsername (fetchExternalUserProfilePicture)", () => {
+    it("devuelve buffer y contentType parseando el data URI de EXTERNAL_AUTH", async () => {
+      const buffer = Buffer.from("contenido-jpeg");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve(`data:image/jpeg;base64,${buffer.toString("base64")}`),
+        }),
+      );
+
+      const result = await getProfilePicture("token-abc");
+
+      expect(result.contentType).toBe("image/jpeg");
+      expect(result.buffer).toEqual(buffer);
+      expect(fetch).toHaveBeenCalledWith(
+        `${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture`,
+        expect.objectContaining({ headers: { Authorization: "token-abc" } }),
+      );
+    });
+
+    it("nunca manda el prefijo 'Bearer ' en el header Authorization (EXTERNAL_AUTH decodifica el header tal cual)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("data:image/png;base64,abc") }),
+      );
+
+      await getProfilePicture("raw-token-sin-bearer");
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ headers: { Authorization: "raw-token-sin-bearer" } }),
+      );
+    });
+
+    it("getProfilePictureByUsername pega a la URL con el username, para traer la foto de un tercero", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("data:image/png;base64,abc") }),
+      );
+
+      await getProfilePictureByUsername("token-abc", "juan.perez");
+
+      expect(fetch).toHaveBeenCalledWith(
+        `${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture/juan.perez`,
+        expect.anything(),
+      );
+    });
+
+    it("parsea el data URI cuando viene envuelto en comillas de JSON", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('"data:image/png;base64,iVBORw0KGgo="') }),
+      );
+
+      const result = await getProfilePicture("token");
+      expect(result.contentType).toBe("image/png");
+    });
+
+    it("lanza NotFoundError si EXTERNAL_AUTH responde con code USER_NOT_FOUND o PROFILE_PICTURE_NOT_FOUND", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve(JSON.stringify({ code: "USER_NOT_FOUND" })),
+        }),
+      );
+      await expect(getProfilePicture("token")).rejects.toThrow(NotFoundError);
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve(JSON.stringify({ code: "PROFILE_PICTURE_NOT_FOUND" })),
+        }),
+      );
+      await expect(getProfilePictureByUsername("token", "juan")).rejects.toThrow(NotFoundError);
+    });
+
+    it("lanza ServiceUnavailableError ante cualquier otro status de error, cuerpo no-data-URI, o fetch caído", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve("") }),
+      );
+      await expect(getProfilePicture("token")).rejects.toThrow(ServiceUnavailableError);
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("no-es-un-data-uri") }),
+      );
+      await expect(getProfilePicture("token")).rejects.toThrow(ServiceUnavailableError);
+
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+      await expect(getProfilePicture("token")).rejects.toThrow(ServiceUnavailableError);
+    });
+  });
+
+  describe("syncProfilePicture / syncContactAvatar (syncAvatar) — nunca lanza, fire-and-forget", () => {
+    it("no pega a EXTERNAL_AUTH si enabled es false", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      await syncProfilePicture("u-1", null, "token", false);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(updateAvatarFileId).not.toHaveBeenCalled();
+    });
+
+    it("cachea el avatar si el checksum de lo recién bajado difiere del ya guardado", async () => {
+      const buffer = Buffer.from("nueva-imagen");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve(`data:image/png;base64,${buffer.toString("base64")}`),
+        }),
+      );
+      vi.mocked(FileService.getFileChecksum).mockResolvedValue("checksum-completamente-distinto");
+      vi.mocked(FileService.storeAvatar).mockResolvedValue({ id: "stored-new" } as any);
+
+      await syncProfilePicture("u-1", "old-avatar-file-id", "token", true);
+
+      expect(FileService.getFileChecksum).toHaveBeenCalledWith("old-avatar-file-id");
+      expect(FileService.storeAvatar).toHaveBeenCalledWith("u-1", buffer, "image/png");
+      expect(updateAvatarFileId).toHaveBeenCalledWith("u-1", "stored-new");
+    });
+
+    it("NO recachea si el checksum coincide con el ya guardado (evita reescribir sin cambios)", async () => {
+      const buffer = Buffer.from("misma-imagen-de-siempre");
+      const checksum = createHash("sha256").update(buffer).digest("hex");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve(`data:image/png;base64,${buffer.toString("base64")}`),
+        }),
+      );
+      vi.mocked(FileService.getFileChecksum).mockResolvedValue(checksum);
+
+      await syncProfilePicture("u-1", "current-avatar-file-id", "token", true);
+
+      expect(FileService.storeAvatar).not.toHaveBeenCalled();
+      expect(updateAvatarFileId).not.toHaveBeenCalled();
+    });
+
+    it("si no había avatar cacheado antes, cachea directo sin comparar checksum", async () => {
+      const buffer = Buffer.from("primera-foto");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve(`data:image/png;base64,${buffer.toString("base64")}`),
+        }),
+      );
+      vi.mocked(FileService.storeAvatar).mockResolvedValue({ id: "stored-1" } as any);
+
+      await syncProfilePicture("u-1", null, "token", true);
+
+      expect(FileService.getFileChecksum).not.toHaveBeenCalled();
+      expect(FileService.storeAvatar).toHaveBeenCalled();
+    });
+
+    it("limpia avatarFileId si EXTERNAL_AUTH ya no tiene foto (404) y había una cacheada", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve(JSON.stringify({ code: "PROFILE_PICTURE_NOT_FOUND" })),
+        }),
+      );
+
+      await syncProfilePicture("u-1", "old-avatar-file-id", "token", true);
+
+      expect(updateAvatarFileId).toHaveBeenCalledWith("u-1", null);
+    });
+
+    it("no hace nada si EXTERNAL_AUTH no tiene foto y tampoco había una cacheada antes", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve(JSON.stringify({ code: "PROFILE_PICTURE_NOT_FOUND" })),
+        }),
+      );
+
+      await syncProfilePicture("u-1", null, "token", true);
+
+      expect(updateAvatarFileId).not.toHaveBeenCalled();
+    });
+
+    it("nunca lanza (fire-and-forget) aunque EXTERNAL_AUTH falle con un error no-404", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("EXTERNAL_AUTH caído")));
+
+      await expect(syncProfilePicture("u-1", null, "token", true)).resolves.toBeUndefined();
+    });
+
+    it("syncContactAvatar usa getProfilePictureByUsername (no el propio token del actor)", async () => {
+      const buffer = Buffer.from("foto-de-un-contacto");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          text: () => Promise.resolve(`data:image/png;base64,${buffer.toString("base64")}`),
+        }),
+      );
+      vi.mocked(FileService.storeAvatar).mockResolvedValue({ id: "stored-contact" } as any);
+
+      await syncContactAvatar("u-1", null, "juan.perez", "token");
+
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/v1/profile/picture/juan.perez"), expect.anything());
+      expect(FileService.storeAvatar).toHaveBeenCalled();
+    });
+  });
+
+  describe("syncAppUsers — nunca rompe el directorio completo por un fallo puntual", () => {
+    it("hace fallback silencioso al directorio local si getAppUsers falla", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("EXTERNAL_AUTH caído")));
+
+      await expect(syncAppUsers("token")).resolves.toBeUndefined();
+      expect(upsertUserFromExternalUser).not.toHaveBeenCalled();
+    });
+
+    it("upsertea cada usuario devuelto por EXTERNAL_AUTH y sincroniza su avatar si no tiene uno cacheado", async () => {
+      const mockUsers = [{ id: "ext-1", email: "a@b.com", username: "juan", fullName: "Juan Perez" }];
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(mockUsers)) })
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 404,
+            text: () => Promise.resolve(JSON.stringify({ code: "PROFILE_PICTURE_NOT_FOUND" })),
+          }),
+      );
+      vi.mocked(upsertUserFromExternalUser).mockResolvedValue({
+        id: "internal-1",
+        avatarFileId: null,
+        syncProfileWithIntegration: true,
+      } as any);
+
+      await syncAppUsers("token");
+
+      expect(upsertUserFromExternalUser).toHaveBeenCalledWith(mockUsers[0]);
+      expect(fetch).toHaveBeenCalledTimes(2); // 1) directorio, 2) intento de foto del contacto
+    });
+
+    it("no intenta sincronizar avatar si el usuario ya tiene uno cacheado", async () => {
+      const mockUsers = [{ id: "ext-1", email: "a@b.com", username: "juan", fullName: "Juan Perez" }];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(mockUsers)) }),
+      );
+      vi.mocked(upsertUserFromExternalUser).mockResolvedValue({
+        id: "internal-1",
+        avatarFileId: "existing-avatar",
+        syncProfileWithIntegration: true,
+      } as any);
+
+      await syncAppUsers("token");
+
+      expect(fetch).toHaveBeenCalledTimes(1); // solo la llamada del directorio, sin segunda llamada de foto
+    });
+
+    it("no rompe el sync completo si un usuario puntual falla al upsertear", async () => {
+      const mockUsers = [
+        { id: "ext-1", email: "a@b.com", username: "juan", fullName: "Juan Perez" },
+        { id: "ext-2", email: "c@d.com", username: "maria", fullName: "Maria Lopez" },
+      ];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(mockUsers)) }),
+      );
+      vi.mocked(upsertUserFromExternalUser)
+        .mockRejectedValueOnce(new Error("DB error para juan"))
+        .mockResolvedValueOnce({ id: "internal-2", avatarFileId: "x", syncProfileWithIntegration: false } as any);
+
+      await expect(syncAppUsers("token")).resolves.toBeUndefined();
+      expect(upsertUserFromExternalUser).toHaveBeenCalledTimes(2);
     });
   });
 });

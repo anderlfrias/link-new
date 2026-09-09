@@ -365,6 +365,63 @@ describe("conversation.service", () => {
       ).rejects.toThrow("Only admins can create group conversations");
     });
 
+    it("GROUP: rechaza si hay menos de dos otros miembros", async () => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 10,
+      } as any);
+
+      await expect(
+        createConversation("u-1", { type: ConversationType.GROUP, memberIds: ["u-2"], name: "Group" }, []),
+      ).rejects.toThrow("A group conversation requires at least two other members");
+    });
+
+    it("GROUP: rechaza si supera maxGroupMembers (contando al propio creador)", async () => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 2,
+      } as any);
+
+      await expect(
+        createConversation(
+          "u-1",
+          { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "Group" },
+          [],
+        ),
+      ).rejects.toThrow("A group conversation cannot have more than 2 members");
+    });
+
+    it("GROUP: rechaza si no se manda name (o viene vacío)", async () => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 10,
+      } as any);
+
+      await expect(
+        createConversation(
+          "u-1",
+          { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "   " },
+          [],
+        ),
+      ).rejects.toThrow("name is required for group conversations");
+    });
+
+    it("rechaza si alguno de los otros miembros no existe en la base", async () => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 10,
+      } as any);
+      vi.mocked(ConversationRepository.countExistingUsers).mockResolvedValue(1); // pedimos 2, existe 1
+
+      await expect(
+        createConversation(
+          "u-1",
+          { type: ConversationType.GROUP, memberIds: ["u-2", "u-inexistente"], name: "Group" },
+          [],
+        ),
+      ).rejects.toThrow("One or more members do not exist");
+    });
+
     it("GROUP: crea el grupo y emite evento CREATED por socket", async () => {
       vi.mocked(SettingsService.getSettings).mockResolvedValue({
         whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
@@ -456,6 +513,71 @@ describe("conversation.service", () => {
         updateConversation("u-1", "c-1", { name: "New Name" }, []),
       ).rejects.toThrow("Only group conversations can be renamed or have their image changed");
     });
+
+    it("rechaza si el usuario no tiene permiso según whoCanChangeGroupInfo", async () => {
+      const group = buildMockConversation({ members: [buildMockMember({ userId: "u-regular", isAdmin: false })] });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanChangeGroupInfo: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+      } as any);
+
+      await expect(
+        updateConversation("u-regular", "c-1", { name: "New Name" }, []),
+      ).rejects.toThrow("You are not allowed to change this group's name or image");
+      expect(ConversationRepository.updateDetails).not.toHaveBeenCalled();
+    });
+
+    it("actualiza nombre e imagen y loguea CHANGE_NAME y CHANGE_IMAGE por separado", async () => {
+      const group = buildMockConversation({
+        name: "Nombre Viejo",
+        imageFileId: "img-old",
+        members: [buildMockMember({ userId: "admin-1", isAdmin: true })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
+      const updated = buildMockConversation({ name: "Nombre Nuevo", imageFileId: "img-new" });
+      vi.mocked(ConversationRepository.updateDetails).mockResolvedValue(updated);
+
+      const result = await updateConversation(
+        "admin-1",
+        "c-1",
+        { name: "Nombre Nuevo", imageFileId: "img-new" },
+        [],
+      );
+
+      expect(result).toBe(updated);
+      expect(ConversationRepository.logAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: ChatAuditAction.CHANGE_NAME,
+          metadata: { from: "Nombre Viejo", to: "Nombre Nuevo" },
+        }),
+      );
+      expect(ConversationRepository.logAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: ChatAuditAction.CHANGE_IMAGE,
+          metadata: { from: "img-old", to: "img-new" },
+        }),
+      );
+      expect(mockEmit).toHaveBeenCalledWith(CONVERSATION_EVENTS.UPDATED, updated);
+    });
+
+    it("no loguea CHANGE_NAME ni CHANGE_IMAGE si esos campos no vinieron en el input", async () => {
+      const group = buildMockConversation({ members: [buildMockMember({ userId: "admin-1", isAdmin: true })] });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
+      vi.mocked(ConversationRepository.updateDetails).mockResolvedValue(group);
+
+      await updateConversation("admin-1", "c-1", {}, []);
+
+      expect(ConversationRepository.logAudit).not.toHaveBeenCalled();
+    });
   });
 
   describe("addMembers", () => {
@@ -471,6 +593,75 @@ describe("conversation.service", () => {
       } as any);
 
       await expect(addMembers("u-1", "c-1", ["u-2"], [])).rejects.toThrow("No new members to add");
+    });
+
+    it("rechaza si superaría el máximo de miembros del grupo", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "u-1" }), buildMockMember({ userId: "u-2" })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanAddMembers: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 2,
+      } as any);
+
+      await expect(addMembers("u-1", "c-1", ["u-nuevo"], [])).rejects.toThrow(
+        "A group conversation cannot have more than 2 members",
+      );
+    });
+
+    it("rechaza si alguno de los usuarios a agregar no existe", async () => {
+      const group = buildMockConversation({ members: [buildMockMember({ userId: "u-1" })] });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanAddMembers: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 10,
+      } as any);
+      vi.mocked(ConversationRepository.countExistingUsers).mockResolvedValue(0);
+
+      await expect(addMembers("u-1", "c-1", ["u-inexistente"], [])).rejects.toThrow(
+        "One or more members do not exist",
+      );
+    });
+
+    it("agrega miembros nuevos, loguea auditoría por cada uno y emite MEMBER_ADDED + CREATED", async () => {
+      const group = buildMockConversation({ members: [buildMockMember({ userId: "u-1", isAdmin: true })] });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanAddMembers: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 10,
+      } as any);
+      vi.mocked(ConversationRepository.countExistingUsers).mockResolvedValue(1);
+
+      const result = await addMembers("u-1", "c-1", ["u-nuevo"], []);
+
+      expect(ConversationRepository.addMembers).toHaveBeenCalledWith("c-1", ["u-nuevo"]);
+      expect(ConversationRepository.logAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: ChatAuditAction.ADD_MEMBER,
+          metadata: { addedUserId: "u-nuevo" },
+        }),
+      );
+      expect(mockEmit).toHaveBeenCalledWith(
+        CONVERSATION_EVENTS.MEMBER_ADDED,
+        expect.objectContaining({ conversationId: "c-1", userIds: ["u-nuevo"] }),
+      );
+      expect(result).toBe(group);
+    });
+
+    it("rechaza si la conversación no es GROUP", async () => {
+      const privateConv = buildMockConversation({
+        type: ConversationType.PRIVATE,
+        members: [buildMockMember({ userId: "u-1" })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(privateConv);
+
+      await expect(addMembers("u-1", "c-1", ["u-2"], [])).rejects.toThrow(
+        "Only group conversations support adding members",
+      );
     });
   });
 
@@ -541,6 +732,45 @@ describe("conversation.service", () => {
         expect.objectContaining({ userId: "target-user", isAdmin: true }),
       );
     });
+
+    it("rechaza si quien actúa no es admin actual del grupo", async () => {
+      const group = buildMockConversation({
+        members: [
+          buildMockMember({ userId: "u-regular", isAdmin: false }),
+          buildMockMember({ userId: "target-user", isAdmin: false }),
+        ],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+
+      await expect(setMemberAdminStatus("u-regular", "c-1", "target-user", true)).rejects.toThrow(
+        "Only current group admins can promote or demote other members",
+      );
+    });
+
+    it("lanza NotFoundError si el usuario objetivo no es miembro de la conversación", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "admin-1", isAdmin: true })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+
+      await expect(setMemberAdminStatus("admin-1", "c-1", "no-es-miembro", true)).rejects.toThrow(
+        NotFoundError,
+      );
+    });
+
+    it("rechaza si el usuario objetivo ya tiene el estado de admin pedido (idempotencia explícita)", async () => {
+      const group = buildMockConversation({
+        members: [
+          buildMockMember({ userId: "admin-1", isAdmin: true }),
+          buildMockMember({ userId: "target-user", isAdmin: true }),
+        ],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+
+      await expect(setMemberAdminStatus("admin-1", "c-1", "target-user", true)).rejects.toThrow(
+        "That member is already a group admin",
+      );
+    });
   });
 
   describe("updateGroupSettings", () => {
@@ -559,10 +789,68 @@ describe("conversation.service", () => {
         }),
       ).rejects.toThrow("This installation does not allow per-group overrides for: whoCanAddMembers");
     });
+
+    it("rechaza si quien actúa no es admin de ESE grupo (la autoridad final no vive en el validador de forma)", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "u-regular", isAdmin: false })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+
+      await expect(
+        updateGroupSettings("u-regular", "c-1", {
+          whoCanAddMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        }),
+      ).rejects.toThrow("Only group admins can change this group's settings");
+      expect(ConversationRepository.upsertGroupSettings).not.toHaveBeenCalled();
+    });
+
+    it("rechaza si la conversación no es GROUP", async () => {
+      const privateConv = buildMockConversation({
+        type: ConversationType.PRIVATE,
+        members: [buildMockMember({ userId: "u-1" })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(privateConv);
+
+      await expect(
+        updateGroupSettings("u-1", "c-1", { whoCanAddMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY }),
+      ).rejects.toThrow("Only group conversations have group settings");
+    });
+
+    it("cuando todos los flags globales lo permiten, persiste el override y devuelve los settings efectivos", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "admin-1", isAdmin: true })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        allowGroupOverrideAddMembers: true,
+        allowGroupOverrideMaxGroupMembers: true,
+      } as any);
+      const effective = {
+        whoCanAddMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        maxGroupMembers: 20,
+      };
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue(effective as any);
+      vi.mocked(SettingsService.getGroupOverrideAllowedFlags).mockResolvedValue({
+        whoCanAddMembers: true,
+        maxGroupMembers: true,
+      } as any);
+
+      const result = await updateGroupSettings("admin-1", "c-1", {
+        whoCanAddMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        maxGroupMembers: 20,
+      });
+
+      expect(ConversationRepository.upsertGroupSettings).toHaveBeenCalledWith("c-1", {
+        whoCanAddMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        maxGroupMembers: 20,
+      });
+      expect(result.effective).toEqual(effective);
+    });
   });
 
   describe("setConversationPinned y setConversationFavorite", () => {
-    it("emite preferencia solo a la room personal del usuario que la cambió", async () => {
+    it("setConversationPinned emite preferencia solo a la room personal del usuario que la cambió", async () => {
       const group = buildMockConversation({
         members: [buildMockMember({ userId: "u-1" })],
       });
@@ -579,6 +867,27 @@ describe("conversation.service", () => {
         CONVERSATION_EVENTS.MEMBER_PREFERENCE_CHANGED,
         expect.objectContaining({ isPinned: true }),
       );
+    });
+
+    it("setConversationFavorite delega en setMemberFavorite y emite MEMBER_PREFERENCE_CHANGED con isFavorite", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "u-1" })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.setMemberFavorite).mockResolvedValue({
+        isPinned: false,
+        isFavorite: true,
+      } as any);
+
+      const result = await setConversationFavorite("u-1", "c-1", true);
+
+      expect(ConversationRepository.setMemberFavorite).toHaveBeenCalledWith("c-1", "u-1", true);
+      expect(mockTo).toHaveBeenCalledWith("user:u-1");
+      expect(mockEmit).toHaveBeenCalledWith(
+        CONVERSATION_EVENTS.MEMBER_PREFERENCE_CHANGED,
+        expect.objectContaining({ isFavorite: true }),
+      );
+      expect(result).toEqual({ isPinned: false, isFavorite: true });
     });
   });
 

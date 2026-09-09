@@ -347,6 +347,36 @@ probaron combinadas:
 
 ---
 
+---
+
+## Adenda — hallazgos de auditoría (2026-09-09)
+
+Misma auditoría que la adenda del checklist de backend — acá los dos hallazgos del
+lado frontend, ya cerrados:
+
+- [x] `frontend/src/features/profile/components/AvatarSelectionModal.tsx` — la Fase 11
+      solo testeaba el cambio de pestañas y el botón de cerrar; el propósito real del
+      componente (elegir y confirmar un avatar — ilustración o abstracto —, subir
+      archivo desde el input oculto, drag&drop, filtrar archivos no-imagen en el drop,
+      Escape con y sin la vista de personalización abierta, click en el fondo vs. click
+      adentro, overlay de carga mientras `onSelectImage` está pendiente) nunca se
+      ejercitaba — `onSelectImage` no se verificaba llamado en ningún test. Se
+      mockearon los tres pickers hijos (`AvatarIllustrationPicker`,
+      `AvatarCustomizerView`, `BoringAvatarPicker` — cada uno con su propia cobertura
+      dedicada aparte) para poder testear solo la orquestación propia del modal.
+      Cobertura pasó de 31% a 88% líneas.
+- [x] `frontend/src/features/admin/components/AdminFilesPanel.tsx` — la Fase 11 solo
+      tenía 1 test de happy path (borrar un archivo). Se agregaron: cancelar el
+      borrado sin efecto, borrado fallido (`remove()` resuelve `false` → no se quita
+      de la lista ni se cierra el modal), estados de carga/error (con "Reintentar")/
+      vacío, paginación (`Cargar más` + deshabilitado durante `loadingMore`), y
+      aplicar/limpiar filtros (verificando que `useAdminFiles` se vuelve a llamar con
+      los filtros derivados — trim, tipo, fechas ISO). Cobertura pasó de 56% a 92%
+      líneas.
+
+**535/535 tests en verde** (`npm run test --workspace=frontend`), typecheck limpio.
+Cobertura global del frontend: 84.6% → 86.1% líneas (piso configurado: 75%).
+
 ## Definition of Done — Frontend completo (Fases 9–15)
 
 - [x] Las 7 fases de este archivo tienen todos sus checkboxes en `[x]`, incluyendo
