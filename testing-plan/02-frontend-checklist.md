@@ -1,0 +1,343 @@
+# Checklist — Frontend (Fases 9 a 15)
+
+> Prerequisito: [Fase 0](00-infrastructure-setup.md) cerrada. Protocolo general y
+> convenciones en [TESTING_PLAN.md](../TESTING_PLAN.md) — leelo primero si no lo
+> hiciste.
+
+**Fuera de alcance en todas las fases de este archivo:** todo lo bajo
+`frontend/src/app/**` (`page.tsx`, `layout.tsx`, `manifest.ts`). Son Server
+Components/routing de Next.js App Router — no se testean acá, ver sección 2 de
+`TESTING_PLAN.md`.
+
+Cómo correr un archivo puntual mientras escribís:
+
+```bash
+cd frontend && npx vitest run src/utils/format-date.test.ts
+```
+
+Cheatsheet de mocking:
+
+- **Llamadas a la API** (`features/*/api/*.api.ts`, que internamente usan
+  `apiRequest` de `lib/api-client.ts`): `vi.mock("@/lib/api-client")` y mockear el
+  valor de retorno de `apiRequest` por test.
+- **Socket** (`lib/socket-client.ts`): `vi.mock("@/lib/socket-client")`.
+- **Hooks que consumen contexto** (auth, tema, settings públicos): envolver el
+  `render()` de Testing Library en los providers reales de `frontend/src/providers/`
+  con valores de prueba, o crear un helper `renderWithProviders()` reutilizable la
+  primera vez que haga falta (Fase 10) y reusarlo después — no reinventarlo por
+  feature.
+- **Componentes con `next/navigation`** (`useRouter`, `usePathname`, `useParams`):
+  `vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), ... }))`
+  por archivo de test, solo con lo que ese componente puntual usa.
+- **Componentes**: priorizar tests de comportamiento observable por el usuario
+  (`@testing-library/user-event`: click, type, etc. → efecto esperado) sobre
+  snapshots o inspección de props internas.
+
+---
+
+<a id="fase-9"></a>
+
+## Fase 9 — Utils & lib (funciones puras — mayor ROI, empezar por acá)
+
+Todo lo de acá son funciones puras o casi puras. Es la fase con mejor relación
+esfuerzo/valor de todo el frontend — sin mocks de React, sin providers, tests
+rápidos de escribir. Recomendado como primera fase de frontend.
+
+- [ ] `frontend/src/utils/cn.ts` (ya cubierto como smoke test en la Fase 0 — solo
+      ampliar casos si hace falta, ej. clases condicionales, merge de conflictos de
+      Tailwind vía `tailwind-merge`).
+- [ ] `frontend/src/utils/compress-image.ts`
+- [ ] `frontend/src/utils/conversation-display.ts` — `getConversationDisplayName()`/
+      `getOtherMembers()`/`getConversationAvatarUrl()`: casos 1-a-1 vs. grupo, chat
+      consigo mismo (self chat).
+- [ ] `frontend/src/utils/dicebear-renderer.ts`
+- [ ] `frontend/src/utils/download-file.ts`
+- [ ] `frontend/src/utils/file-format.ts`
+- [ ] `frontend/src/utils/file-url.ts`
+- [ ] `frontend/src/utils/format-date.ts`
+- [ ] `frontend/src/utils/format-duration.ts`
+- [ ] `frontend/src/utils/group-permissions.ts` — si duplica alguna regla de
+      `allowGroupDelete` u otro flag maestro del backend (ver invariante en
+      `TESTING_PLAN.md` sección 4), cubrir el mismo caso acá también.
+- [ ] `frontend/src/utils/message-edit-window.ts` — contraparte frontend de
+      `assertWithinTimeLimit()` del backend (Fase 4): mismo criterio de ventana de
+      tiempo, casos dentro/fuera de ventana.
+- [ ] `frontend/src/utils/message-preview.ts` — contraparte frontend de
+      `buildLastMessagePreview()` del backend (Fase 3): mensaje borrado → mismo texto
+      fijo, sin importar el `content`.
+- [ ] `frontend/src/utils/message-status.ts` — contraparte frontend de
+      `aggregateReceiptStatus()`.
+- [ ] `frontend/src/utils/mime-type-pattern.ts` — ver nota de sync cliente/servidor en
+      Fase 5 del backend y Fase 14 acá: mismos patrones MIME que
+      `allowed-file-types.constant.ts` del backend.
+- [ ] `frontend/src/utils/notification-sound.ts`
+- [ ] `frontend/src/utils/svg-to-png.ts`
+- [ ] `frontend/src/lib/api-client.ts#apiRequest` — el más importante de esta fase,
+      todo el resto del frontend depende de él: query params se serializan
+      correctamente y omiten `undefined`; `body` FormData se manda tal cual (sin
+      `Content-Type` manual, el browser lo setea); `body` objeto se serializa a JSON
+      con `Content-Type: application/json`; header `Authorization: Bearer <token>`
+      solo si se pasó `token`; `response.ok === false` → lanza `ApiError` con el
+      `error` del body (o `statusText` si no hay body parseable); status 204 →
+      devuelve `undefined`; `responseType: "blob"` → devuelve blob en vez de JSON.
+- [ ] `frontend/src/lib/env.ts` — falta `NEXT_PUBLIC_API_URL` o
+      `NEXT_PUBLIC_SOCKET_URL` → throw (para este test puntual hace falta simular
+      `process.env` vacío, algo distinto al resto de la fase — puede necesitar
+      `vi.resetModules()` + reimport dinámico dentro del test para que el módulo se
+      re-evalúe con el env alterado).
+- [ ] `frontend/src/lib/socket-client.ts` — si expone lógica más allá de instanciar
+      `socket.io-client` (ej. reconexión, autenticación del handshake), testear esa
+      lógica; si es solo instanciación, opcional.
+
+---
+
+<a id="fase-10"></a>
+
+## Fase 10 — Providers & UI compartida
+
+Acá conviene armar el helper `renderWithProviders()` mencionado en el cheatsheet de
+arriba si todavía no existe — varios de estos providers se anidan
+(`app-providers.tsx` los combina) y los tests de features de las Fases 11–14 lo van a
+reusar.
+
+**Providers** (`frontend/src/providers/`)
+- [ ] `theme-provider.tsx` — `ThemeProvider`/`useTheme`: toggle entre temas, persiste
+      la preferencia (revisar mecanismo: `localStorage`, cookie, etc.).
+- [ ] `auth-provider.tsx` — `useAuth()` es el nodo más conectado de todo el frontend
+      (24 conexiones) — dedicarle tiempo: estado autenticado/no autenticado, login
+      exitoso actualiza el estado, logout limpia el estado.
+- [ ] `public-settings-provider.tsx` — expone `getPublicSettings()` mockeado a través
+      del contexto.
+- [ ] `profile-picture-provider.tsx`
+- [ ] `socket-provider.tsx` — conecta/desconecta el socket (mockeado, no un socket
+      real) según el estado de auth.
+- [ ] `app-providers.tsx` — smoke test: renderiza sin explotar envolviendo un `children`
+      de prueba.
+
+**UI compartida** (`frontend/src/components/ui/`)
+- [ ] `Avatar.tsx` — `hashToIndex()`/paleta de color determinística por usuario.
+- [ ] `Badge.tsx`
+- [ ] `Button.tsx` — variantes, estado `disabled` no dispara `onClick`.
+- [ ] `Checkbox.tsx`
+- [ ] `Drawer.tsx` — abre/cierra, cierra al click afuera o Escape si lo maneja.
+- [ ] `Input.tsx`
+- [ ] `MessageStatusTicks.tsx` — recibe cada `MessageReceiptStatus` y renderiza el
+      ícono correspondiente (sent/delivered/read).
+- [ ] `Modal.tsx`
+- [ ] `Select.tsx`
+- [ ] `ThemeToggle.tsx`
+
+**Layout & brand**
+- [ ] `frontend/src/components/layout/ConversationHeader.tsx`
+- [ ] `frontend/src/components/layout/DesktopSidebar.tsx`
+- [ ] `frontend/src/components/layout/EmptyConversationState.tsx`
+- [ ] `frontend/src/components/layout/MobileChatListScreen.tsx`
+- [ ] `frontend/src/components/layout/UserMenu.tsx`
+- [ ] `frontend/src/components/brand/Logo.tsx`
+
+---
+
+<a id="fase-11"></a>
+
+## Fase 11 — Feature: Auth & Admin
+
+**Auth** (`frontend/src/features/auth/`)
+- [ ] `api/auth.api.ts`
+- [ ] `components/LoginForm.tsx` — submit con credenciales llama a la API correcta;
+      error de login (403 genérico del backend, ver invariante en `TESTING_PLAN.md`
+      sección 4) se muestra al usuario sin distinguir motivo.
+- [ ] `hooks/use-profile-picture.ts`
+- [ ] `hooks/use-require-role.ts` — contraparte frontend de `requireRoles` del backend
+      (Fase 1): usuario sin el rol requerido → comportamiento esperado (redirect,
+      render de `ForbiddenScreen`, lo que el hook realmente haga — confirmar leyendo
+      el archivo).
+
+**Admin** (`frontend/src/features/admin/`)
+- [ ] `api/admin-files.api.ts`
+- [ ] `api/admin-settings.api.ts`
+- [ ] `api/admin-users.api.ts`
+- [ ] `utils/build-usage-labels.ts`
+- [ ] `hooks/use-admin-files.ts`
+- [ ] `hooks/use-admin-settings.ts`
+- [ ] `hooks/use-admin-users.ts`
+- [ ] `hooks/use-delete-admin-file.ts`
+- [ ] `hooks/use-update-admin-settings.ts`
+- [ ] `components/AdminShell.tsx`
+- [ ] `components/AdminSettingsPanel.tsx` — el flag `allowGroupDelete` y demás
+      overrides de grupo (ver invariante en `TESTING_PLAN.md` sección 4): el panel no
+      debe permitir un estado de UI que sugiera que hay excepciones para admin de app.
+- [ ] `components/AdminFilesPanel.tsx`
+- [ ] `components/AdminFileRow.tsx`
+- [ ] `components/DeleteFileConfirmModal.tsx`
+- [ ] `components/FileTypeMultiSelect.tsx` — ver nota de sync cliente/servidor
+      (Fase 9 y Fase 5 backend): el patrón ingresado manualmente se valida con el
+      mismo regex que espera el backend.
+- [ ] `components/AdminUsersPanel.tsx`
+- [ ] `components/AdminUserRow.tsx`
+- [ ] `components/ForbiddenScreen.tsx`
+
+---
+
+<a id="fase-12"></a>
+
+## Fase 12 — Feature: Conversations
+
+`frontend/src/features/conversations/`
+
+- [ ] `api/conversations.api.ts`
+- [ ] `hooks/use-conversations.ts`
+- [ ] `hooks/use-conversation.ts`
+- [ ] `hooks/use-create-group.ts`
+- [ ] `hooks/use-update-conversation.ts`
+- [ ] `hooks/use-update-conversation-settings.ts`
+- [ ] `hooks/use-conversation-settings.ts`
+- [ ] `hooks/use-delete-conversation.ts`
+- [ ] `hooks/use-leave-group.ts`
+- [ ] `hooks/use-add-members.ts`
+- [ ] `hooks/use-set-member-admin.ts`
+- [ ] `hooks/use-set-conversation-preference.ts` (favorito/pinned)
+- [ ] `hooks/use-start-conversation.ts`
+- [ ] `hooks/use-open-self-chat.ts`
+- [ ] `hooks/use-new-message-sound.ts`
+- [ ] `hooks/use-long-press.ts` — es un hook de gesto genérico, no de red: testear con
+      eventos de puntero simulados (`fireEvent` de Testing Library), no con mocks de
+      API.
+- [ ] `components/ConversationList.tsx`
+- [ ] `components/ConversationListItem.tsx`
+- [ ] `components/ConversationFilterBar.tsx`
+- [ ] `components/ConversationDetailPanel.tsx`
+- [ ] `components/ConversationOptionsMenu.tsx`
+- [ ] `components/ConversationDangerConfirmModal.tsx` — confirmación de acciones
+      destructivas (borrar/salir): el flag `allowGroupDelete`/`allowConversationDelete`
+      condiciona si la opción aparece — mismo cuidado que en Fase 11.
+- [ ] `components/AddMembersModal.tsx`
+- [ ] `components/GroupSettingsSection.tsx`
+- [ ] `components/GroupMemberRow.tsx`
+
+---
+
+<a id="fase-13"></a>
+
+## Fase 13 — Feature: Messages
+
+`frontend/src/features/messages/` — la feature con más componentes del frontend,
+tiene sentido que sea su propia fase separada de conversations.
+
+- [ ] `api/messages.api.ts`
+- [ ] `providers/image-lightbox-provider.tsx`
+- [ ] `hooks/use-messages.ts`
+- [ ] `hooks/use-typing.ts`
+- [ ] `hooks/use-forward-message.ts`
+- [ ] `hooks/use-message-attachments.ts`
+- [ ] `hooks/use-conversation-files.ts`
+- [ ] `hooks/use-voice-recorder.ts` — grabación de audio: mockear la Web Audio
+      API/`MediaRecorder` (jsdom no la implementa) o, si el mock es demasiado
+      complejo, limitar el test a la máquina de estados del hook (idle/recording/
+      stopped) inyectando un `MediaRecorder` fake por parámetro/mock de módulo.
+- [ ] `hooks/use-message-gestures.ts`
+- [ ] `components/MessageList.tsx`
+- [ ] `components/MessageBubble.tsx` — mensaje borrado → mismo texto fijo que
+      `message-preview.ts` (Fase 9), sin importar el `content` original (mismo
+      criterio que `MessageBubble` documentado en el comentario de
+      `conversation.service.ts` del backend — ver invariante en `TESTING_PLAN.md`
+      sección 4).
+- [ ] `components/MessageInput.tsx`
+- [ ] `components/MessageOptionsMenu.tsx`
+- [ ] `components/MessageAttachments.tsx`
+- [ ] `components/AttachmentPreviewChip.tsx`
+- [ ] `components/AttachmentErrorModal.tsx`
+- [ ] `components/DeleteMessageConfirmModal.tsx`
+- [ ] `components/ForwardMessageModal.tsx`
+- [ ] `components/QuotedMessagePreview.tsx`
+- [ ] `components/TypingIndicator.tsx`
+- [ ] `components/VoiceNotePlayer.tsx`
+- [ ] `components/EmojiPicker.tsx`
+- [ ] `components/EmojiGifStickerPicker.tsx` — mockear `features/giphy/api/giphy.api.ts`
+      para no depender de la Fase 14.
+- [ ] `components/ConversationView.tsx` — el componente contenedor de toda la feature;
+      dejarlo para el final de esta fase (depende de casi todo lo de arriba, más fácil
+      de testear una vez que las piezas ya están cubiertas individualmente).
+
+---
+
+<a id="fase-14"></a>
+
+## Fase 14 — Feature: Files, Giphy, Notifications, Profile, Users, Settings
+
+**Files** (`frontend/src/features/files/`)
+- [ ] `api/files.api.ts`
+- [ ] `components/FileTypeIcon.tsx`
+
+**Giphy** (`frontend/src/features/giphy/`)
+- [ ] `api/giphy.api.ts`
+
+**Notifications** (`frontend/src/features/notifications/`)
+- [ ] `api/push.api.ts`
+- [ ] `utils/vapid-key.ts` — `urlBase64ToUint8Array()`: casos con/sin padding.
+- [ ] `hooks/use-push-notifications.ts` — mockear la Push API del browser
+      (`navigator.serviceWorker`, `PushManager` — no existen en jsdom, hay que
+      stubearlas a mano en el test).
+- [ ] `components/NotificationsBanner.tsx`
+
+**Profile** (`frontend/src/features/profile/`)
+- [ ] `hooks/use-update-profile-name.ts`
+- [ ] `hooks/use-update-profile-picture.ts`
+- [ ] `hooks/use-update-notification-sound.ts`
+- [ ] `components/ProfileSettingsPanel.tsx`
+- [ ] `components/AvatarCustomizerView.tsx`
+- [ ] `components/AvatarSelectionModal.tsx`
+- [ ] `components/AvatarIllustrationPicker.tsx`
+- [ ] `components/BoringAvatarPicker.tsx`
+
+**Users** (`frontend/src/features/users/`)
+- [ ] `api/users.api.ts`
+- [ ] `hooks/use-users.ts`
+- [ ] `components/ContactRow.tsx`
+- [ ] `components/NewChatModal.tsx`
+
+**Settings** (`frontend/src/features/settings/`)
+- [ ] `api/public-settings.api.ts`
+
+---
+
+<a id="fase-15"></a>
+
+## Fase 15 — Auditoría de cobertura + flujos clave
+
+Esta fase es distinta a las anteriores: no es una lista fija de archivos, es un cierre
+de calidad sobre todo lo hecho en Fases 9–14. Hacerla al final, no en paralelo.
+
+### 15.1 — Auditoría de huecos
+
+- [ ] Correr `npm run test:coverage --workspace=frontend`.
+- [ ] Listar cualquier archivo bajo `src/**/*.{ts,tsx}` (excluyendo `src/app/**` y
+      `*.types.ts`) que aparezca con 0% de cobertura o que no haya sido tocado por
+      ninguna fase anterior (puede pasar si se agregó código nuevo mientras este plan
+      estaba en curso — ver política en `TESTING_PLAN.md` sección 6, ese código nuevo
+      ya debería haber traído su test solo).
+- [ ] Por cada hueco real encontrado: agregarlo como checkbox nuevo acá mismo (debajo
+      de esta línea) y resolverlo antes de dar la fase por cerrada.
+
+### 15.2 — Flujos clave (varias unidades juntas, sigue siendo mock de red/socket)
+
+No son tests E2E (no hay browser real, `fetch`/socket siguen mockeados) — son tests
+que ejercitan un hook + los componentes que lo usan juntos, para agarrar problemas de
+integración entre piezas que ya están cubiertas individualmente pero nunca se
+probaron combinadas:
+
+- [ ] Login: `LoginForm` completo → submit → llama a `auth.api.ts` → estado de
+      `auth-provider` se actualiza.
+- [ ] Enviar un mensaje: `MessageInput` → `use-messages.ts` (o el hook que corresponda)
+      → llama a `messages.api.ts` con el payload esperado.
+- [ ] Panel de settings de admin: `AdminSettingsPanel` monta, carga settings vía
+      `use-admin-settings.ts` (mockeado) y los muestra; togglear `allowGroupDelete` y
+      guardar llama a `use-update-admin-settings.ts` con el valor correcto.
+
+---
+
+## Definition of Done — Frontend completo (Fases 9–15)
+
+- [ ] Las 7 fases de este archivo tienen todos sus checkboxes en `[x]`, incluyendo
+      cualquiera agregado durante la auditoría de la Fase 15.
+- [ ] `npm run test --workspace=frontend` pasa completo.
+- [ ] Cada fase cerrada está marcada en la tabla de `TESTING_PLAN.md` sección 5.
