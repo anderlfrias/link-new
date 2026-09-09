@@ -254,4 +254,33 @@ describe("ConversationView", () => {
     })]);
     expect(pasteEvent.defaultPrevented).toBe(true);
   });
+
+  it("adjunta un archivo (ej. PDF) al disparar el evento de pegado global en la conversación", () => {
+    render(<ConversationView conversationId="conv-1" />);
+
+    const mockPdfFile = new File(["bytes"], "contrato.pdf", { type: "application/pdf" });
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            kind: "file",
+            type: "application/pdf",
+            getAsFile: () => mockPdfFile,
+          },
+        ],
+        files: [],
+      },
+    });
+
+    fireEvent(window, pasteEvent);
+
+    expect(mockAddFiles).toHaveBeenCalledTimes(1);
+    expect(mockAddFiles).toHaveBeenCalledWith([expect.objectContaining({
+      name: "contrato.pdf",
+      type: "application/pdf",
+    })]);
+    expect(pasteEvent.defaultPrevented).toBe(true);
+  });
 });
+

@@ -28,7 +28,7 @@ import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
 import { formatDuration } from "@/utils/format-duration";
 import { buildMessagePreview } from "@/utils/message-preview";
-import { extractImageFilesFromClipboard } from "@/utils/clipboard";
+import { extractFilesFromClipboard } from "@/utils/clipboard";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
@@ -180,13 +180,13 @@ export function MessageInput({
   }
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const imageFiles = extractImageFilesFromClipboard(event.clipboardData);
-    if (imageFiles.length > 0) {
-      // Si se pegan imágenes desde el portapapeles (ej. captura de pantalla o imagen copiada),
-      // prevenimos la acción por defecto del textarea y las adjuntamos automáticamente.
+    const files = extractFilesFromClipboard(event.clipboardData);
+    if (files.length > 0) {
+      // Si se pegan archivos desde el portapapeles (capturas, imágenes, PDFs, audios, documentos, etc.),
+      // prevenimos la acción por defecto del textarea y los adjuntamos automáticamente.
       event.preventDefault();
       event.stopPropagation();
-      addFiles(imageFiles);
+      addFiles(files);
     }
   }
 

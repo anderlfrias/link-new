@@ -332,5 +332,47 @@ describe("MessageInput", () => {
     expect(defaultAttachmentsState.addFiles).not.toHaveBeenCalled();
     expect(pasteEvent.defaultPrevented).toBe(false);
   });
+
+  it("adjunta automáticamente cualquier tipo de archivo (ej. PDF) al pegar en el textarea", () => {
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    const mockPdfFile = new File(["fake-pdf-bytes"], "informe.pdf", { type: "application/pdf" });
+
+    const pasteEvent = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        items: [
+          {
+            kind: "file",
+            type: "application/pdf",
+            getAsFile: () => mockPdfFile,
+          },
+        ],
+        files: [],
+      },
+    });
+
+    fireEvent(textarea, pasteEvent);
+
+    expect(defaultAttachmentsState.addFiles).toHaveBeenCalledTimes(1);
+    expect(defaultAttachmentsState.addFiles).toHaveBeenCalledWith([expect.objectContaining({
+      name: "informe.pdf",
+      type: "application/pdf",
+    })]);
+    expect(pasteEvent.defaultPrevented).toBe(true);
+  });
 });
+
 

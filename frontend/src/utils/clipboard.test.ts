@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { copyTextToClipboard, copyImageToClipboard, convertImageBlobToPng, extractImageFilesFromClipboard } from "./clipboard";
+import {
+  copyTextToClipboard,
+  copyImageToClipboard,
+  convertImageBlobToPng,
+  extractFilesFromClipboard,
+  extractImageFilesFromClipboard,
+} from "./clipboard";
 
 describe("clipboard utils", () => {
   const originalClipboard = navigator.clipboard;
@@ -148,10 +154,10 @@ describe("clipboard utils", () => {
     });
   });
 
-  describe("extractImageFilesFromClipboard", () => {
+  describe("extractFilesFromClipboard", () => {
     it("devuelve array vacío si clipboardData es null o undefined", () => {
-      expect(extractImageFilesFromClipboard(null)).toEqual([]);
-      expect(extractImageFilesFromClipboard(undefined as unknown as DataTransfer)).toEqual([]);
+      expect(extractFilesFromClipboard(null)).toEqual([]);
+      expect(extractFilesFromClipboard(undefined as unknown as DataTransfer)).toEqual([]);
     });
 
     it("devuelve array vacío si los datos son solo de texto", () => {
@@ -171,7 +177,7 @@ describe("clipboard utils", () => {
         files: [],
       } as unknown as DataTransfer;
 
-      const result = extractImageFilesFromClipboard(mockClipboardData);
+      const result = extractFilesFromClipboard(mockClipboardData);
       expect(result).toEqual([]);
     });
 
@@ -188,13 +194,40 @@ describe("clipboard utils", () => {
         files: [],
       } as unknown as DataTransfer;
 
-      const result = extractImageFilesFromClipboard(mockClipboardData);
+      const result = extractFilesFromClipboard(mockClipboardData);
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe("captura.png");
       expect(result[0].type).toBe("image/png");
     });
 
-    it("asigna extensión adecuada si el archivo de items viene con nombre 'blob' o sin extensión", () => {
+    it("extrae documentos que no son imágenes (ej. PDFs, audio, etc.) a partir de items", () => {
+      const mockPdfFile = new File(["fake pdf data"], "analisis.pdf", { type: "application/pdf" });
+      const mockAudioFile = new File(["fake audio"], "grabacion.mp3", { type: "audio/mpeg" });
+      const mockClipboardData = {
+        items: [
+          {
+            kind: "file",
+            type: "application/pdf",
+            getAsFile: () => mockPdfFile,
+          },
+          {
+            kind: "file",
+            type: "audio/mpeg",
+            getAsFile: () => mockAudioFile,
+          },
+        ],
+        files: [],
+      } as unknown as DataTransfer;
+
+      const result = extractFilesFromClipboard(mockClipboardData);
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe("analisis.pdf");
+      expect(result[0].type).toBe("application/pdf");
+      expect(result[1].name).toBe("grabacion.mp3");
+      expect(result[1].type).toBe("audio/mpeg");
+    });
+
+    it("asigna extensión adecuada si el archivo viene con nombre 'blob' o sin extensión", () => {
       const blobFile = new File(["fake data"], "blob", { type: "image/jpeg" });
       const mockClipboardData = {
         items: [
@@ -207,13 +240,13 @@ describe("clipboard utils", () => {
         files: [],
       } as unknown as DataTransfer;
 
-      const result = extractImageFilesFromClipboard(mockClipboardData);
+      const result = extractFilesFromClipboard(mockClipboardData);
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe("imagen.jpg");
       expect(result[0].type).toBe("image/jpeg");
     });
 
-    it("extrae imágenes desde clipboardData.files como fallback si items no tiene imágenes", () => {
+    it("extrae archivos desde clipboardData.files como fallback si items no tiene archivos", () => {
       const mockJpgFile = new File(["fake jpg"], "foto.jpg", { type: "image/jpeg" });
       const mockPdfFile = new File(["fake pdf"], "documento.pdf", { type: "application/pdf" });
 
@@ -222,10 +255,14 @@ describe("clipboard utils", () => {
         files: [mockPdfFile, mockJpgFile],
       } as unknown as DataTransfer;
 
-      const result = extractImageFilesFromClipboard(mockClipboardData);
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe("foto.jpg");
-      expect(result[0].type).toBe("image/jpeg");
+      const result = extractFilesFromClipboard(mockClipboardData);
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe("documento.pdf");
+      expect(result[1].name).toBe("foto.jpg");
+    });
+
+    it("funciona idénticamente a través del alias extractImageFilesFromClipboard", () => {
+      expect(extractImageFilesFromClipboard).toBe(extractFilesFromClipboard);
     });
   });
 });

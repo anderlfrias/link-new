@@ -140,56 +140,68 @@ export async function copyImageToClipboard(imageUrl: string): Promise<boolean> {
 }
 
 /**
- * Normaliza el archivo de imagen pegado asegurando que tenga un nombre válido
+ * Normaliza el archivo pegado asegurando que tenga un nombre válido.
+ * Si es una imagen o archivo sin nombre o con nombre genérico 'blob', le asigna uno predeterminado
  * con su extensión correspondiente según el tipo MIME.
  */
-function normalizePastedImageFile(file: File): File {
+function normalizePastedFile(file: File): File {
+  // Si ya tiene un nombre válido con extensión y no es 'blob', mantenerlo
   if (file.name && /\.[a-zA-Z0-9]+$/.test(file.name) && file.name !== "blob") {
     return file;
   }
 
-  const mimeSubtype = file.type.split("/")[1] || "png";
-  const extension = mimeSubtype === "jpeg" ? "jpg" : mimeSubtype;
-  const baseName = !file.name || file.name === "blob" ? "imagen" : file.name;
-  const finalName = `${baseName}.${extension}`;
+  // Si no tiene nombre o es 'blob', inferir extensión si tiene tipo MIME
+  if (file.type) {
+    const mimeSubtype = file.type.split("/")[1]?.split(";")[0]?.trim() || "bin";
+    const extension = mimeSubtype === "jpeg" ? "jpg" : mimeSubtype;
+    const isImage = file.type.startsWith("image/");
+    const baseName = !file.name || file.name === "blob" ? (isImage ? "imagen" : "archivo") : file.name;
+    const finalName = `${baseName}.${extension}`;
+    return new File([file], finalName, { type: file.type, lastModified: file.lastModified || Date.now() });
+  }
 
-  return new File([file], finalName, { type: file.type, lastModified: file.lastModified || Date.now() });
+  return file;
 }
 
 /**
- * Extrae archivos de imagen desde los datos de un evento del portapapeles (`ClipboardEvent.clipboardData`).
- * Soporta tanto `items` (DataTransferItemList de la API estándar) como `files` (FileList).
- * Si no contiene imágenes (por ejemplo texto plano o HTML), devuelve un array vacío para no interferir
- * con el pegado normal de texto del navegador.
+ * Extrae archivos desde los datos de un evento del portapapeles (`ClipboardEvent.clipboardData`).
+ * Soporta cualquier tipo de archivo (imágenes, documentos PDF, audios, videos, etc.)
+ * provenientes tanto de `items` (DataTransferItemList) como de `files` (FileList).
+ *
+ * Si el portapapeles solo contiene texto plano o HTML (sin archivos adjuntos), devuelve un array vacío
+ * para permitir que el pegado nativo de texto en el textarea u otros campos funcione normalmente.
  */
-export function extractImageFilesFromClipboard(clipboardData: DataTransfer | null): File[] {
+export function extractFilesFromClipboard(clipboardData: DataTransfer | null): File[] {
   if (!clipboardData) return [];
 
-  const imageFiles: File[] = [];
+  const files: File[] = [];
 
-  // 1. Revisar items de DataTransfer (captura imágenes copiadas directamente como bitmap/screenshot)
+  // 1. Revisar items de DataTransfer donde el kind sea "file"
   if (clipboardData.items && clipboardData.items.length > 0) {
     for (let i = 0; i < clipboardData.items.length; i++) {
       const item = clipboardData.items[i];
-      if (item.type.startsWith("image/")) {
+      if (item.kind === "file") {
         const file = item.getAsFile();
         if (file) {
-          imageFiles.push(normalizePastedImageFile(file));
+          files.push(normalizePastedFile(file));
         }
       }
     }
   }
 
-  // 2. Si no hubo en items, revisar files (ej. archivos de imagen copiados desde el explorador del sistema)
-  if (imageFiles.length === 0 && clipboardData.files && clipboardData.files.length > 0) {
+  // 2. Si no hubo en items, revisar files (ej. archivos copiados desde el explorador del sistema operativo)
+  if (files.length === 0 && clipboardData.files && clipboardData.files.length > 0) {
     for (let i = 0; i < clipboardData.files.length; i++) {
       const file = clipboardData.files[i];
-      if (file.type.startsWith("image/")) {
-        imageFiles.push(normalizePastedImageFile(file));
-      }
+      files.push(normalizePastedFile(file));
     }
   }
 
-  return imageFiles;
+  return files;
 }
+
+/**
+ * Alias retrocompatible para extractFilesFromClipboard.
+ */
+export const extractImageFilesFromClipboard = extractFilesFromClipboard;
 

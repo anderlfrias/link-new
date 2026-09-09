@@ -16,7 +16,7 @@ import { ConversationDetailPanel } from "@/features/conversations/components/Con
 import { ForwardMessageModal } from "@/features/messages/components/ForwardMessageModal";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
-import { extractImageFilesFromClipboard } from "@/utils/clipboard";
+import { extractFilesFromClipboard } from "@/utils/clipboard";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface ConversationViewProps {
@@ -77,8 +77,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
     }
   }
 
-  // Soporte para pegar imágenes en cualquier lugar de la vista del chat (ej. tras hacer screenshot
-  // o copiar imagen sin tener que haber hecho foco previamente en el textarea).
+  // Soporte para pegar archivos (imágenes, documentos, audios, videos, etc.) en cualquier lugar de la vista
+  // del chat (ej. tras copiar un archivo sin tener que haber hecho foco previamente en el textarea).
   useEffect(() => {
     function handleGlobalPaste(event: globalThis.ClipboardEvent) {
       const activeEl = document.activeElement;
@@ -91,7 +91,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
         return;
       }
 
-      const files = extractImageFilesFromClipboard(event.clipboardData);
+      const files = extractFilesFromClipboard(event.clipboardData);
       if (files.length > 0) {
         event.preventDefault();
         attachmentsState.addFiles(files);
