@@ -935,7 +935,7 @@ flowchart LR
 | 1 | [Modelo de datos y bugs presentes](#fase-1--modelo-de-datos-y-bugs-presentes) | A | `[x] 2026-09-10` |
 | 2 | [Lectura unificada y cierre de `/uploads`](#fase-2--lectura-unificada-y-cierre-de-uploads) | A | `[x] 2026-09-10` |
 | 3 | [Provider S3](#fase-3--provider-s3) | C | `[x] 2026-09-10` |
-| 4 | [Backend del upload chunked](#fase-4--backend-del-upload-chunked) | C | `[ ]` |
+| 4 | [Backend del upload chunked](#fase-4--backend-del-upload-chunked) | C | `[x] 2026-09-10` |
 | 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[ ]` |
 | 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[ ]` |
 | 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[ ]` |
@@ -1196,6 +1196,31 @@ E2E con un script Node que suba 2 GB.
 
 **Terminada cuando.** Un archivo de 2 GB sube completo con script y queda como
 `StoredFile` con `provider = S3` y el **tamaño real** correcto.
+
+**Cerrada 2026-09-10 — notas para quien retome el plan:**
+
+- **Modelo de datos (`prisma/schema.prisma`):**
+  - Añadido enum `FileUploadStatus` (`PENDING`, `UPLOADING`, `COMPLETED`, `ABORTED`, `EXPIRED`, `FAILED`).
+  - Añadido modelo `FileUpload` con clave externa S3 (`externalUploadId`), key generada por Link (`objectKey`), tamaño declarado y partes (`partSize = 8 MiB`, `totalParts`), y relaciones con `User`, `Conversation` y `StoredFile`.
+  - Regenerado Prisma Client con `npx prisma generate`.
+- **Capa de almacenamiento multipart (`src/storage/`):**
+  - `storage.types.ts` extendido con `StoragePart`, `MultipartUploadPart` y métodos multipart en `StorageProvider`.
+  - `S3Storage` (`src/storage/s3.storage.ts`): implementa `createMultipartUpload`, `getPresignedPartUploadUrl` (TTL 15 min), `listParts` (con paginación autoritativa), `completeMultipartUpload` y `abortMultipartUpload`.
+  - `LocalDiskStorage`: implementa stubs defensivos que lanzan `BadRequestError` indicando exclusividad de multipart en S3.
+- **Módulo `uploads` (`src/modules/uploads/`):**
+  - Creado módulo completo con arquitectura estándar: `upload.types.ts`, `upload.validator.ts`, `upload.repository.ts`, `upload.service.ts`, `upload.controller.ts`, `upload.route.ts` y `README.md`.
+  - Montado en `src/route.ts` bajo `/v1/uploads`.
+- **Mitigaciones de seguridad implementadas:**
+  - **S1 (Invariante crítico):** en `completeUpload`, se consulta `s3.listParts` como única fuente de verdad (sin confiar en partes o ETags del cliente), se ensambla y se ejecuta de inmediato `s3.stat(objectKey)` (`HeadObject`). Si el tamaño real supera `AppSettings.maxUploadSizeMb` o es inválido, se ejecuta `s3.delete(objectKey)`, la sesión pasa a `FAILED` y se responde `400 Bad Request`.
+  - **S5 (Cuota de sesiones activas):** `countActiveUploadsByUser` verifica que el usuario no supere 5 sesiones activas simultáneas (`PENDING` o `UPLOADING`), respondiendo con `409 Conflict`.
+  - **S8 (Rate limit en URLs de partes):** `partUrlsRateLimiter` restringe a 120 solicitudes por usuario por 15 minutos, con lotes acotados a un máximo de 20 partes por solicitud (`MAX_PART_URLS_BATCH = 20`).
+  - **S11 (Control de acceso Anti-IDOR):** todas las consultas, obtención de URLs, completado y aborto exigen que el usuario sea el creador (`createdById`) o posea el rol `admin`.
+- **Pruebas añadidas:**
+  - `src/storage/s3.storage.test.ts`: 14 tests (6 tests nuevos cubriendo los métodos multipart).
+  - `src/modules/uploads/upload.validator.test.ts`: 12 tests.
+  - `src/modules/uploads/upload.service.test.ts`: 21 tests (cubriendo flujos normales, faltantes, violación de límites S1 con borrado físico y FAILED, cuotas S5 y accesos no autorizados S11).
+  - `src/modules/uploads/upload.route.test.ts`: 8 tests de integración supertest.
+  - Total backend: 542 tests pasando (47 tests nuevos de la fase).
 
 ---
 

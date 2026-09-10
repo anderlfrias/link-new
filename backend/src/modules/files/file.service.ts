@@ -24,7 +24,7 @@ import {
 /// miles de archivos sueltos en una sola carpeta plana. Sin `conversationId`
 /// (subidas que todavía no tienen un destino conocido, ej. futuro avatar de
 /// usuario) cae a `chat/<yyyy>/<mm>/...`.
-function buildStorageDir(conversationId?: string): string {
+export function buildStorageDir(conversationId?: string): string {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -38,7 +38,7 @@ function buildStorageDir(conversationId?: string): string {
 /// que no es un mime type (ej. una extensión ".pdf") — eso queda bloqueado en
 /// settings.validator.ts, esto de acá es sobre cómo interpretar un valor ya
 /// validado.
-function matchesFileTypePattern(pattern: string, mimeType: string): boolean {
+export function matchesFileTypePattern(pattern: string, mimeType: string): boolean {
   if (pattern.endsWith("/*")) {
     return mimeType.startsWith(pattern.slice(0, -1));
   }
@@ -50,7 +50,7 @@ function matchesFileTypePattern(pattern: string, mimeType: string): boolean {
 /// al mapeo por mime type (ver ALLOWED_MIME_TYPES), y si tampoco hay match,
 /// a "bin". Esto es lo que hace seguro construir `relativePath` sin validar
 /// path traversal en storage: el nombre físico siempre lo generamos nosotros.
-function safeExtension(originalName: string, mimeType: string): string {
+export function safeExtension(originalName: string, mimeType: string): string {
   const fromName = path.extname(originalName).replace(".", "").toLowerCase();
   if (/^[a-z0-9]{1,10}$/.test(fromName)) {
     return fromName;

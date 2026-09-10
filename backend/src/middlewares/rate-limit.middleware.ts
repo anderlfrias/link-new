@@ -79,3 +79,16 @@ export const uploadRateLimiter = rateLimit({
     req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
   message: { error: "Hiciste demasiadas subidas de archivos. Esperá unos minutos y volvé a intentar." },
 });
+
+// Rate limiter para el pedido de URLs presignadas de partes (LARGE_FILES_PLAN.md S8).
+// Presignar es liviano para Link pero pedir miles de URLs puede ser usado como amplificador DoS.
+// Con lotes de 20 partes (8 MiB cada una), 120 requests cubren ~19 GB en 15 minutos para un usuario legítimo.
+export const partUrlsRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+  message: { error: "Demasiadas solicitudes de URLs de subida. Esperá unos minutos y volvé a intentar." },
+});

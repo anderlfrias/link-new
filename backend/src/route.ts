@@ -6,6 +6,7 @@ import giphyRoutes from "./modules/giphy/giphy.route";
 import messageRoutes from "./modules/messages/message.route";
 import pushRoutes from "./modules/push/push.route";
 import { adminSettingsRouter, publicSettingsRouter } from "./modules/settings/settings.route";
+import uploadRoutes from "./modules/uploads/upload.route";
 import userRoutes, { adminUserRouter } from "./modules/users/user.route";
 
 const router = Router();
@@ -21,6 +22,8 @@ router.use("/v1/conversations/:conversationId/messages", messageRoutes);
 // Recurso plano: un StoredFile no pertenece a ninguna conversación en particular
 // (sirve de avatar, imagen de grupo o adjunto de mensaje por igual).
 router.use("/v1/files", fileRoutes);
+// Sesiones de subida chunked multipart directas a storage S3 (§4, §11).
+router.use("/v1/uploads", uploadRoutes);
 // Directorio de usuarios (para elegir con quién iniciar una conversación nueva).
 // authenticate + attachInternalUser se aplican dentro de user.route.ts.
 router.use("/v1/users", userRoutes);

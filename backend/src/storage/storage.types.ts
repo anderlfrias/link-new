@@ -13,6 +13,17 @@ export interface StorageFileStats {
   size: number;
 }
 
+export interface StoragePart {
+  partNumber: number;
+  size: number;
+  eTag: string;
+}
+
+export interface MultipartUploadPart {
+  partNumber: number;
+  eTag: string;
+}
+
 export interface StorageProvider {
   save(buffer: Buffer, relativePath: string): Promise<SavedFile>;
   delete(relativePath: string): Promise<void>;
@@ -23,4 +34,24 @@ export interface StorageProvider {
   createReadStream(relativePath: string, options?: { start?: number; end?: number }): Promise<NodeJS.ReadableStream>;
   /// Obtiene metadatos físicos del archivo (tamaño en bytes).
   stat(relativePath: string): Promise<StorageFileStats>;
+
+  /// Inicia una subida multipart y retorna el uploadId asignado por el storage.
+  createMultipartUpload?(relativePath: string, mimeType: string): Promise<string>;
+  /// Genera una URL presignada PUT para transferir una parte específica.
+  getPresignedPartUploadUrl?(
+    relativePath: string,
+    uploadId: string,
+    partNumber: number,
+    expiresInSeconds?: number,
+  ): Promise<string>;
+  /// Lista las partes subidas hasta el momento (fuente autoritativa de verdad).
+  listParts?(relativePath: string, uploadId: string): Promise<StoragePart[]>;
+  /// Ensambla las partes en el storage.
+  completeMultipartUpload?(
+    relativePath: string,
+    uploadId: string,
+    parts: MultipartUploadPart[],
+  ): Promise<void>;
+  /// Aborta la sesión multipart y libera las partes almacenadas.
+  abortMultipartUpload?(relativePath: string, uploadId: string): Promise<void>;
 }

@@ -1,13 +1,24 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import env from "../config/env";
-import { SavedFile, StorageFileStats, StorageProvider } from "./storage.types";
+import {
+  MultipartUploadPart,
+  SavedFile,
+  StorageFileStats,
+  StoragePart,
+  StorageProvider,
+} from "./storage.types";
 
 export interface S3StorageConfig {
   endpoint?: string;
@@ -19,7 +30,7 @@ export interface S3StorageConfig {
 }
 
 /// Proveedor de almacenamiento S3 compatible con SeaweedFS S3 gateway, MinIO y AWS S3.
-/// Implementa `StorageProvider` para soportar lectura unificada, guardado y borrado (§6, §7).
+/// Implementa `StorageProvider` para soportar lectura unificada, guardado, borrado y multipart (§4, §6, §7).
 export class S3Storage implements StorageProvider {
   private client: S3Client;
   private bucket: string;
@@ -133,6 +144,107 @@ export class S3Storage implements StorageProvider {
     });
 
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+  }
+
+  /// Inicia una subida multipart en S3 y retorna el uploadId asignado (§4.3).
+  async createMultipartUpload(relativePath: string, mimeType: string): Promise<string> {
+    const key = this.normalizeKey(relativePath);
+    const response = await this.client.send(
+      new CreateMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ContentType: mimeType,
+      }),
+    );
+    if (!response.UploadId) {
+      throw new Error("Failed to create multipart upload: no uploadId returned");
+    }
+    return response.UploadId;
+  }
+
+  /// Genera una URL presignada PUT para transferir una parte específica (TTL default 15 min).
+  async getPresignedPartUploadUrl(
+    relativePath: string,
+    uploadId: string,
+    partNumber: number,
+    expiresInSeconds = 900,
+  ): Promise<string> {
+    const key = this.normalizeKey(relativePath);
+    const command = new UploadPartCommand({
+      Bucket: this.bucket,
+      Key: key,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+    });
+    return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+  }
+
+  /// Consulta las partes subidas al storage — fuente de verdad autoritativa (§4.3, §5.3).
+  async listParts(relativePath: string, uploadId: string): Promise<StoragePart[]> {
+    const key = this.normalizeKey(relativePath);
+    const parts: StoragePart[] = [];
+    let partNumberMarker: string | undefined = undefined;
+    let isTruncated = true;
+
+    while (isTruncated) {
+      const response = await this.client.send(
+        new ListPartsCommand({
+          Bucket: this.bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumberMarker: partNumberMarker,
+        }),
+      );
+
+      for (const part of response.Parts ?? []) {
+        if (part.PartNumber != null && part.ETag) {
+          parts.push({
+            partNumber: part.PartNumber,
+            size: part.Size ?? 0,
+            eTag: part.ETag,
+          });
+        }
+      }
+
+      isTruncated = response.IsTruncated ?? false;
+      partNumberMarker = response.NextPartNumberMarker ? String(response.NextPartNumberMarker) : undefined;
+    }
+
+    return parts;
+  }
+
+  /// Ensambla las partes en S3 a partir del listado ordenado (§4.3).
+  async completeMultipartUpload(
+    relativePath: string,
+    uploadId: string,
+    parts: MultipartUploadPart[],
+  ): Promise<void> {
+    const key = this.normalizeKey(relativePath);
+    await this.client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: parts.map((p) => ({
+            PartNumber: p.partNumber,
+            ETag: p.eTag,
+          })),
+        },
+      }),
+    );
+  }
+
+  /// Aborta la subida multipart en S3 y libera el espacio ocupado por partes incompletas (§4.3, §5.5).
+  async abortMultipartUpload(relativePath: string, uploadId: string): Promise<void> {
+    const key = this.normalizeKey(relativePath);
+    await this.client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
+      }),
+    );
   }
 
   getClient(): S3Client {

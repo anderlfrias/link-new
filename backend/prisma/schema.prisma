@@ -194,6 +194,7 @@ model User {
   auditLogs               ChatAuditLog[]
   /// Archivos que este usuario subió (`StoredFile.createdBy`).
   uploadedFiles           StoredFile[]         @relation("StoredFileCreatedBy")
+  fileUploads             FileUpload[]         @relation("FileUploadCreatedBy")
   pushSubscriptions       PushSubscription[]
 
   @@map("users")
@@ -236,6 +237,7 @@ model Conversation {
   /// `AppSettings`. Ver `ConversationGroupSettings` — no existe fila hasta el
   /// primer PATCH de settings de este grupo.
   groupSettings ConversationGroupSettings?
+  fileUploads   FileUpload[]
 
   @@index([createdById])
   @@map("conversations")
@@ -395,6 +397,7 @@ model StoredFile {
   avatarOfUsers        User[]         @relation("UserAvatarFile")
   imageOfConversations Conversation[] @relation("ConversationImageFile")
   messageFiles         MessageFile[]
+  upload               FileUpload?
 
   @@index([createdById])
   /// Barrido futuro de huérfanos/soft-deleted (ver LARGE_FILES_PLAN.md §5.5) —
@@ -583,3 +586,63 @@ model PushSubscription {
   @@index([userId])
   @@map("push_subscriptions")
 }
+
+/// Estado de una sesión de subida chunked. Efímera: se crea al iniciar, muere
+/// al completar/abortar/expirar. NUNCA es la fuente de verdad de qué partes
+/// llegaron — eso lo responde ListParts contra el storage (ver LARGE_FILES_PLAN.md §5.3).
+enum FileUploadStatus {
+  PENDING   @map("pending")     // creada, sin partes todavía
+  UPLOADING @map("uploading")   // al menos un part-urls pedido
+  COMPLETED @map("completed")   // Complete OK + StoredFile creado
+  ABORTED   @map("aborted")     // cancelada por el usuario
+  EXPIRED   @map("expired")     // barrida por upload-cleanup.worker
+  FAILED    @map("failed")      // complete rechazado (tamaño real > límite)
+  @@map("file_upload_status")
+}
+
+model FileUpload {
+  id String @id @default(uuid())
+
+  provider FileProvider
+  /// Key generada SIEMPRE por Link, nunca propuesta por el cliente.
+  objectKey String @map("object_key")
+  /// uploadId del CreateMultipartUpload. Null hasta crearlo.
+  externalUploadId String? @map("external_upload_id")
+
+  originalName String @map("original_name")
+  mimeType     String @map("mime_type")
+  extension    String
+  /// Tamaño DECLARADO por el cliente. Solo sirve para rechazar temprano y
+  /// calcular totalParts. El real se verifica con HeadObject al completar.
+  declaredSize BigInt @map("declared_size")
+  partSize     Int    @map("part_size")
+  totalParts   Int    @map("total_parts")
+
+  status FileUploadStatus @default(PENDING)
+
+  /// SHA-256 que el cliente calcula incrementalmente. Ayuda de integridad,
+  /// NO control de seguridad (lo declara el cliente). Ver §9.3.
+  clientChecksum String? @map("client_checksum")
+
+  createdById String @map("created_by_id")
+  createdBy   User   @relation("FileUploadCreatedBy", fields: [createdById], references: [id])
+
+  /// Solo namespacing + chequeo de membresía, igual que POST /v1/files.
+  conversationId String?       @map("conversation_id")
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+
+  /// Se puebla al completar.
+  storedFileId String?     @unique @map("stored_file_id")
+  storedFile   StoredFile? @relation(fields: [storedFileId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  expiresAt DateTime  @map("expires_at")
+  closedAt  DateTime? @map("closed_at")
+
+  /// El sweeper barre por (status, expiresAt) — sin este índice hace full scan.
+  @@index([status, expiresAt])
+  @@index([createdById, status])
+  @@map("file_uploads")
+}
+

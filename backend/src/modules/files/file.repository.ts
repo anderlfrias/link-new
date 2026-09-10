@@ -11,12 +11,16 @@ export function createStoredFile(data: {
   /// `bigint` porque `StoredFile.size` lo es en Prisma (ver schema.prisma) —
   /// el caller convierte desde el `number` que devuelve `storage.save()`.
   size: bigint;
-  checksum: string;
+  checksum?: string | null;
   createdById: string;
   provider?: FileProvider;
 }) {
   return prisma.storedFile.create({
-    data: { ...data, provider: data.provider ?? FileProvider.LOCAL },
+    data: {
+      ...data,
+      checksum: data.checksum ?? null,
+      provider: data.provider ?? FileProvider.LOCAL,
+    },
   });
 }
 

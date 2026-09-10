@@ -2,7 +2,13 @@ import { createReadStream } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import { BadRequestError } from "../utils/errors";
-import { SavedFile, StorageFileStats, StorageProvider } from "./storage.types";
+import {
+  MultipartUploadPart,
+  SavedFile,
+  StorageFileStats,
+  StoragePart,
+  StorageProvider,
+} from "./storage.types";
 
 const UPLOADS_ROOT = path.join(__dirname, "..", "..", "uploads");
 
@@ -57,5 +63,25 @@ export class LocalDiskStorage implements StorageProvider {
     const absolutePath = this.resolveSafePath(relativePath);
     const stats = await fs.stat(absolutePath);
     return { size: stats.size };
+  }
+
+  async createMultipartUpload(): Promise<string> {
+    throw new BadRequestError("Multipart upload is only supported for S3 storage");
+  }
+
+  async getPresignedPartUploadUrl(): Promise<string> {
+    throw new BadRequestError("Multipart upload is only supported for S3 storage");
+  }
+
+  async listParts(): Promise<StoragePart[]> {
+    throw new BadRequestError("Multipart upload is only supported for S3 storage");
+  }
+
+  async completeMultipartUpload(): Promise<void> {
+    throw new BadRequestError("Multipart upload is only supported for S3 storage");
+  }
+
+  async abortMultipartUpload(): Promise<void> {
+    throw new BadRequestError("Multipart upload is only supported for S3 storage");
   }
 }
