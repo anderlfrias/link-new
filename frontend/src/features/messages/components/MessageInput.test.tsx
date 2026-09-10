@@ -96,6 +96,10 @@ describe("MessageInput", () => {
       fileIds: [],
       validationErrors: [],
       dismissValidationError: vi.fn(),
+      resumableSession: null,
+      resumableMismatchError: null,
+      resumeSessionWithFile: vi.fn(),
+      discardResumableSession: vi.fn(),
     };
   });
 
@@ -415,6 +419,77 @@ describe("MessageInput", () => {
     // No debe abortar ni resetear la bandeja de adjuntos en curso
     expect(defaultAttachmentsState.reset).not.toHaveBeenCalled();
     expect(attachmentsStateWithUploading.removeSentAttachments).not.toHaveBeenCalled();
+  });
+
+  it("renderiza ResumableUploadBanner cuando hay una sesión previa y permite descartar o reanudar", async () => {
+    const user = userEvent.setup();
+    const resumeSessionWithFile = vi.fn();
+    const discardResumableSession = vi.fn();
+
+    const attachmentsStateWithResumable = {
+      ...defaultAttachmentsState,
+      resumableSession: {
+        sessionId: "sess-resumable-1",
+        conversationId: "conv-1",
+        fileName: "clip-cirugia.mp4",
+        fileSize: 45 * 1024 * 1024,
+        fileType: "video/mp4",
+        lastModified: 1700000000000,
+        createdAt: Date.now() - 3600000,
+      },
+      resumableMismatchError: null,
+      resumeSessionWithFile,
+      discardResumableSession,
+    };
+
+    const { rerender } = render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={attachmentsStateWithResumable as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+
+    expect(screen.getByText("Subida interrumpida detectada")).toBeInTheDocument();
+    expect(screen.getByText("clip-cirugia.mp4")).toBeInTheDocument();
+
+    // Probar click en descartar
+    const discardBtn = screen.getByRole("button", { name: "Descartar subida pendiente" });
+    await user.click(discardBtn);
+    expect(discardResumableSession).toHaveBeenCalled();
+
+    // Probar reanudar seleccionando archivo
+    const fileInput = screen.getByLabelText("Seleccionar archivo para reanudar");
+    const matchingFile = new File([new Uint8Array(45 * 1024 * 1024)], "clip-cirugia.mp4", {
+      type: "video/mp4",
+    });
+    fireEvent.change(fileInput, { target: { files: [matchingFile] } });
+    expect(resumeSessionWithFile).toHaveBeenCalledWith(matchingFile);
+
+    // Si además hay mismatchError, debe mostrarlo
+    rerender(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={{
+          ...attachmentsStateWithResumable,
+          resumableMismatchError: "El archivo seleccionado no coincide con la subida pendiente.",
+        } as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+    expect(
+      screen.getByText("El archivo seleccionado no coincide con la subida pendiente."),
+    ).toBeInTheDocument();
   });
 });
 

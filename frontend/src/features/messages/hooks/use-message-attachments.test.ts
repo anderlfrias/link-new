@@ -4,9 +4,26 @@ import { useMessageAttachments } from "./use-message-attachments";
 import { useAuth } from "@/providers/auth-provider";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
+import { abortUpload } from "@/features/files/api/uploads.api";
 import { ChunkedUploader } from "@/features/files/lib/chunked-uploader";
+import {
+  getUploadSession,
+  removeUploadSession,
+  type PersistedUploadSession,
+} from "@/features/files/lib/upload-persistence";
 import { compressImage } from "@/utils/compress-image";
 import { createMockSession, createMockPublicSettings } from "@/test/test-utils";
+
+vi.mock("@/features/files/api/uploads.api", () => ({
+  abortUpload: vi.fn().mockResolvedValue({ id: "abort-id", status: "ABORTED" }),
+}));
+
+vi.mock("@/features/files/lib/upload-persistence", () => ({
+  getUploadSession: vi.fn().mockReturnValue(null),
+  removeUploadSession: vi.fn(),
+  saveUploadSession: vi.fn(),
+  clearExpiredSessions: vi.fn(),
+}));
 
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: vi.fn(),
@@ -344,5 +361,120 @@ describe("useMessageAttachments", () => {
 
     expect(result.current.attachments).toHaveLength(0);
     expect(result.current.validationErrors).toHaveLength(0);
+  });
+
+  it("detecta sesión reanudable existente para la conversación", () => {
+    const mockSessionData: PersistedUploadSession = {
+      sessionId: "session-persisted-1",
+      conversationId: "conv-1",
+      fileName: "large-video.mp4",
+      fileSize: 30 * 1024 * 1024,
+      fileType: "video/mp4",
+      lastModified: 1700000000000,
+      createdAt: Date.now() - 5000,
+    };
+    vi.mocked(getUploadSession).mockReturnValueOnce(mockSessionData);
+
+    const { result } = renderHook(() => useMessageAttachments("conv-1"));
+
+    expect(getUploadSession).toHaveBeenCalledWith("conv-1");
+    expect(result.current.resumableSession).toEqual(mockSessionData);
+    expect(result.current.resumableMismatchError).toBeNull();
+  });
+
+  it("resumeSessionWithFile rechaza archivo que no coincide con la sesión", () => {
+    const mockSessionData: PersistedUploadSession = {
+      sessionId: "session-persisted-2",
+      conversationId: "conv-1",
+      fileName: "target.mp4",
+      fileSize: 30 * 1024 * 1024,
+      fileType: "video/mp4",
+      lastModified: 1700000000000,
+      createdAt: Date.now() - 5000,
+    };
+    vi.mocked(getUploadSession).mockReturnValue(mockSessionData);
+
+    const { result } = renderHook(() => useMessageAttachments("conv-1"));
+
+    // Archivo con nombre distinto
+    const wrongNameFile = new File([new Uint8Array(30 * 1024 * 1024)], "wrong.mp4", {
+      type: "video/mp4",
+    });
+    Object.defineProperty(wrongNameFile, "lastModified", { value: 1700000000000 });
+
+    let success = false;
+    act(() => {
+      success = result.current.resumeSessionWithFile(wrongNameFile);
+    });
+
+    expect(success).toBe(false);
+    expect(result.current.resumableMismatchError).toContain("no coincide");
+    expect(result.current.attachments).toHaveLength(0);
+    expect(ChunkedUploader).not.toHaveBeenCalled();
+  });
+
+  it("resumeSessionWithFile acepta archivo coincidente y arranca ChunkedUploader con existingSessionId", async () => {
+    const mockSessionData: PersistedUploadSession = {
+      sessionId: "session-persisted-3",
+      conversationId: "conv-1",
+      fileName: "target.mp4",
+      fileSize: 25 * 1024 * 1024,
+      fileType: "video/mp4",
+      lastModified: 1700000000000,
+      createdAt: Date.now() - 5000,
+    };
+    vi.mocked(getUploadSession).mockReturnValue(mockSessionData);
+
+    const { result } = renderHook(() => useMessageAttachments("conv-1"));
+
+    const matchingFile = new File([new Uint8Array(25 * 1024 * 1024)], "target.mp4", {
+      type: "video/mp4",
+    });
+    Object.defineProperty(matchingFile, "lastModified", { value: 1700000000000 });
+
+    let success = false;
+    act(() => {
+      success = result.current.resumeSessionWithFile(matchingFile);
+    });
+
+    expect(success).toBe(true);
+    expect(result.current.resumableSession).toBeNull();
+    expect(result.current.resumableMismatchError).toBeNull();
+    expect(result.current.attachments).toHaveLength(1);
+    expect(ChunkedUploader).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file: matchingFile,
+        token: "attach-token",
+        conversationId: "conv-1",
+        existingSessionId: "session-persisted-3",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.attachments[0].status).toBe("done");
+    });
+  });
+
+  it("discardResumableSession aborta en backend y elimina de persistencia", () => {
+    const mockSessionData: PersistedUploadSession = {
+      sessionId: "session-to-discard",
+      conversationId: "conv-1",
+      fileName: "target.mp4",
+      fileSize: 25 * 1024 * 1024,
+      fileType: "video/mp4",
+      lastModified: 1700000000000,
+      createdAt: Date.now() - 5000,
+    };
+    vi.mocked(getUploadSession).mockReturnValue(mockSessionData);
+
+    const { result } = renderHook(() => useMessageAttachments("conv-1"));
+
+    act(() => {
+      result.current.discardResumableSession();
+    });
+
+    expect(abortUpload).toHaveBeenCalledWith("attach-token", "session-to-discard");
+    expect(removeUploadSession).toHaveBeenCalledWith("session-to-discard");
+    expect(result.current.resumableSession).toBeNull();
   });
 });

@@ -135,4 +135,24 @@ describe("AttachmentPreviewChip", () => {
     fireEvent.click(resumeBtn);
     expect(onResume).toHaveBeenCalledTimes(1);
   });
+
+  it("displays offline state indicator when status is offline (§8.5)", () => {
+    const file = new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", {
+      type: "video/mp4",
+    });
+    const attachment: PendingAttachment = {
+      localId: "loc-6",
+      file,
+      status: "offline",
+      progress: {
+        loadedBytes: 8 * 1024 * 1024,
+        totalBytes: 20 * 1024 * 1024,
+        percentage: 40,
+      },
+    };
+
+    render(<AttachmentPreviewChip attachment={attachment} onRemove={vi.fn()} />);
+
+    expect(screen.getByText(/Sin conexión • En pausa/)).toBeInTheDocument();
+  });
 });

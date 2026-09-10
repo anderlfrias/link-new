@@ -19,6 +19,7 @@ import { AttachmentErrorModal } from "@/features/messages/components/AttachmentE
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { EmojiGifStickerPicker } from "@/features/messages/components/EmojiGifStickerPicker";
 import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
+import { ResumableUploadBanner } from "@/features/messages/components/ResumableUploadBanner";
 import { importGiphyAsset } from "@/features/giphy/api/giphy.api";
 import type { GiphyMediaKind } from "@/features/giphy/types/giphy.types";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
@@ -100,6 +101,10 @@ export function MessageInput({
     fileIds,
     validationErrors,
     dismissValidationError,
+    resumableSession,
+    resumableMismatchError,
+    resumeSessionWithFile,
+    discardResumableSession,
   } = attachmentsState;
   const currentValidationError = validationErrors[0];
 
@@ -295,6 +300,14 @@ export function MessageInput({
             onCancel={onCancelReply}
           />
         </div>
+      )}
+      {resumableSession && attachments.length === 0 && (
+        <ResumableUploadBanner
+          session={resumableSession}
+          onSelectFile={resumeSessionWithFile}
+          onDiscard={discardResumableSession}
+          mismatchError={resumableMismatchError}
+        />
       )}
       {attachments.length > 0 && (
         <div className="flex min-w-0 gap-2 overflow-x-auto pl-3 pr-5 pt-2.5">

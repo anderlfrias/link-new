@@ -6,6 +6,10 @@ import {
   completeUpload as defaultCompleteUpload,
   abortUpload as defaultAbortUpload,
 } from "@/features/files/api/uploads.api";
+import {
+  saveUploadSession,
+  removeUploadSession,
+} from "@/features/files/lib/upload-persistence";
 
 export type ChunkedUploadStatus =
   | "idle"
@@ -14,6 +18,7 @@ export type ChunkedUploadStatus =
   | "retrying"
   | "paused"
   | "resuming"
+  | "offline"
   | "completing"
   | "done"
   | "error"
@@ -39,6 +44,7 @@ export interface ChunkedUploaderOptions {
   file: File;
   token: string;
   conversationId?: string;
+  existingSessionId?: string;
   concurrency?: number;
   partBatchSize?: number;
   maxRetries?: number;
@@ -60,6 +66,7 @@ export class ChunkedUploader {
   private file: File;
   private token: string;
   private conversationId?: string;
+  private existingSessionId?: string;
   private concurrency: number;
   private partBatchSize: number;
   private maxRetries: number;
@@ -98,6 +105,7 @@ export class ChunkedUploader {
     this.file = options.file;
     this.token = options.token;
     this.conversationId = options.conversationId;
+    this.existingSessionId = options.existingSessionId;
     this.concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
     this.partBatchSize = options.partBatchSize ?? DEFAULT_PART_BATCH_SIZE;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
@@ -124,6 +132,11 @@ export class ChunkedUploader {
         }
         throw new Error("XMLHttpRequest is not available in current environment");
       });
+
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("offline", this.handleOffline);
+      window.addEventListener("online", this.handleOnline);
+    }
   }
 
   public getStatus(): ChunkedUploadStatus {
@@ -195,6 +208,45 @@ export class ChunkedUploader {
   }
 
   private async initiateAndRun(): Promise<void> {
+    if (this.existingSessionId) {
+      // Reanudar una sesión persistida previa (§8.5, Fase 7)
+      this.sessionId = this.existingSessionId;
+      this.setStatus("resuming");
+
+      const status = await this.api.getUploadStatus(this.token, this.sessionId);
+      this.partSize = status.partSize;
+      this.totalParts = status.totalParts;
+
+      this.completedParts.clear();
+      if (status.parts && status.parts.length > 0) {
+        for (const p of status.parts) {
+          this.completedParts.set(p.partNumber, p.size);
+        }
+      }
+
+      this.pendingParts = Array.from({ length: this.totalParts }, (_, i) => i + 1).filter(
+        (p) => !this.completedParts.has(p),
+      );
+      this.inFlightBytes.clear();
+      this.partUrls.clear();
+      this.partRetries.clear();
+
+      saveUploadSession({
+        sessionId: this.sessionId,
+        conversationId: this.conversationId,
+        fileName: this.file.name,
+        fileSize: this.file.size,
+        fileType: this.file.type || "application/octet-stream",
+        lastModified: this.file.lastModified,
+        createdAt: Date.now(),
+      });
+
+      this.setStatus("uploading");
+      this.emitProgress();
+      this.pumpQueue();
+      return;
+    }
+
     this.setStatus("initiating");
 
     const session = await this.api.initiateUpload(this.token, {
@@ -214,13 +266,23 @@ export class ChunkedUploader {
     this.partUrls.clear();
     this.partRetries.clear();
 
+    saveUploadSession({
+      sessionId: this.sessionId,
+      conversationId: this.conversationId,
+      fileName: this.file.name,
+      fileSize: this.file.size,
+      fileType: this.file.type || "application/octet-stream",
+      lastModified: this.file.lastModified,
+      createdAt: Date.now(),
+    });
+
     this.setStatus("uploading");
     this.emitProgress();
     this.pumpQueue();
   }
 
   private pumpQueue(): void {
-    if (this.isPaused || this.isCanceled || this.isCompleting) {
+    if (this.isPaused || this.isCanceled || this.isCompleting || this.status === "offline") {
       return;
     }
 
@@ -241,7 +303,7 @@ export class ChunkedUploader {
   }
 
   private async executeUploadPart(partNumber: number): Promise<void> {
-    if (this.isPaused || this.isCanceled) {
+    if (this.isPaused || this.isCanceled || this.status === "offline") {
       this.activeWorkers--;
       this.pendingParts.unshift(partNumber);
       return;
@@ -258,7 +320,7 @@ export class ChunkedUploader {
         }
       }
 
-      if (this.isPaused || this.isCanceled) {
+      if (this.isPaused || this.isCanceled || this.status === "offline") {
         this.activeWorkers--;
         this.pendingParts.unshift(partNumber);
         return;
@@ -349,7 +411,7 @@ export class ChunkedUploader {
     this.inFlightBytes.delete(partNumber);
     this.activeXhrs.delete(partNumber);
 
-    if (this.isPaused || this.isCanceled) {
+    if (this.isPaused || this.isCanceled || this.status === "offline") {
       return;
     }
 
@@ -369,7 +431,7 @@ export class ChunkedUploader {
         : Math.min(10000, this.baseRetryDelayMs * Math.pow(2, currentRetries) + Math.random() * 200);
 
       setTimeout(() => {
-        if (!this.isPaused && !this.isCanceled) {
+        if (!this.isPaused && !this.isCanceled && this.status !== "offline") {
           if (!this.pendingParts.includes(partNumber)) {
             this.pendingParts.unshift(partNumber);
           }
@@ -392,9 +454,37 @@ export class ChunkedUploader {
     try {
       const storedFile = await this.api.completeUpload(this.token, this.sessionId);
       this.setStatus("done");
+      if (this.sessionId) removeUploadSession(this.sessionId);
+      this.cleanupListeners();
       this.onSuccess?.(storedFile);
       this.resolvePromise?.(storedFile);
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      // Mitigación Fase 7: si Complete reporta partes faltantes, re-consultar y subir faltantes
+      if (/missing parts/i.test(errorMsg)) {
+        try {
+          const status = await this.api.getUploadStatus(this.token, this.sessionId);
+          const present = new Set((status.parts || []).map((p) => p.partNumber));
+          const missing = Array.from({ length: this.totalParts }, (_, i) => i + 1).filter(
+            (p) => !present.has(p),
+          );
+
+          if (missing.length > 0) {
+            this.pendingParts = missing;
+            for (const m of missing) {
+              this.completedParts.delete(m);
+            }
+            this.isCompleting = false;
+            this.setStatus("uploading");
+            this.emitProgress();
+            this.pumpQueue();
+            return;
+          }
+        } catch {
+          // Si falla la re-consulta, proceder a error fatal
+        }
+      }
+
       this.handleFatalError(err instanceof Error ? err : new Error(String(err)));
     }
   }
@@ -402,6 +492,8 @@ export class ChunkedUploader {
   private handleFatalError(error: Error): void {
     if (this.status === "error" || this.status === "canceled") return;
     this.setStatus("error");
+    if (this.sessionId) removeUploadSession(this.sessionId);
+    this.cleanupListeners();
     this.abortAllActiveXhrs();
     this.onError?.(error);
     this.rejectPromise?.(error);
@@ -423,13 +515,18 @@ export class ChunkedUploader {
   }
 
   public pause(): void {
-    if (this.isPaused || this.isCanceled || this.status === "done" || this.status === "error") {
+    if (
+      this.isPaused ||
+      this.isCanceled ||
+      this.status === "done" ||
+      this.status === "error" ||
+      this.status === "offline"
+    ) {
       return;
     }
 
     this.isPaused = true;
 
-    // Recolectar las partes en vuelo para volver a encolarlas
     const inFlightPartNumbers = Array.from(this.activeXhrs.keys());
     this.abortAllActiveXhrs();
 
@@ -444,8 +541,42 @@ export class ChunkedUploader {
     this.setStatus("paused");
   }
 
+  private pauseForOffline(): void {
+    this.isPaused = true;
+
+    const inFlightPartNumbers = Array.from(this.activeXhrs.keys());
+    this.abortAllActiveXhrs();
+
+    const newPending = new Set(this.pendingParts);
+    for (const partNumber of inFlightPartNumbers) {
+      if (!this.completedParts.has(partNumber)) {
+        newPending.add(partNumber);
+      }
+    }
+    this.pendingParts = Array.from(newPending).sort((a, b) => a - b);
+
+    this.setStatus("offline");
+  }
+
+  public handleOffline = (): void => {
+    if (
+      this.status === "uploading" ||
+      this.status === "initiating" ||
+      this.status === "retrying" ||
+      this.status === "resuming"
+    ) {
+      this.pauseForOffline();
+    }
+  };
+
+  public handleOnline = (): void => {
+    if (this.status === "offline") {
+      void this.resume();
+    }
+  };
+
   public async resume(): Promise<UploadedFile> {
-    if (!this.isPaused || this.isCanceled) {
+    if ((!this.isPaused && this.status !== "offline") || this.isCanceled) {
       if (this.completionPromise) return this.completionPromise;
       return this.start();
     }
@@ -453,7 +584,7 @@ export class ChunkedUploader {
     this.setStatus("resuming");
     this.isPaused = false;
 
-    // Sincronización con backend / storage (§8.5, Fase 7 prep)
+    // Sincronización con backend / storage (§8.5, Fase 7)
     if (this.sessionId) {
       try {
         const status = await this.api.getUploadStatus(this.token, this.sessionId);
@@ -464,7 +595,7 @@ export class ChunkedUploader {
           this.pendingParts = this.pendingParts.filter((p) => !this.completedParts.has(p));
         }
       } catch {
-        // Si falla la consulta de status, continuamos con las partes locales conocidas
+        // Continuar con partes locales conocidas si falla la red
       }
     }
 
@@ -480,6 +611,8 @@ export class ChunkedUploader {
     this.isCanceled = true;
     this.isPaused = false;
 
+    if (this.sessionId) removeUploadSession(this.sessionId);
+    this.cleanupListeners();
     this.abortAllActiveXhrs();
     this.setStatus("canceled");
 
@@ -493,5 +626,12 @@ export class ChunkedUploader {
 
     const cancelError = new Error("Upload canceled by user");
     this.rejectPromise?.(cancelError);
+  }
+
+  private cleanupListeners(): void {
+    if (typeof window !== "undefined" && typeof window.removeEventListener === "function") {
+      window.removeEventListener("offline", this.handleOffline);
+      window.removeEventListener("online", this.handleOnline);
+    }
   }
 }

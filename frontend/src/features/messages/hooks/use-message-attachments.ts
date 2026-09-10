@@ -4,11 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
+import { abortUpload } from "@/features/files/api/uploads.api";
 import {
   ChunkedUploader,
   type ChunkedUploadProgress,
   type ChunkedUploadStatus,
 } from "@/features/files/lib/chunked-uploader";
+import {
+  getUploadSession,
+  removeUploadSession,
+  type PersistedUploadSession,
+} from "@/features/files/lib/upload-persistence";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 import { isImageMimeType } from "@/utils/file-format";
 import type { UploadedFile } from "@/features/files/types/file.types";
@@ -24,6 +30,7 @@ export type AttachmentStatus =
   | "retrying"
   | "paused"
   | "resuming"
+  | "offline"
   | "completing"
   | "canceled";
 
@@ -98,7 +105,15 @@ export function useMessageAttachments(conversationId: string) {
   // dos avisos por pisarse entre sí — se muestran de a uno, "Aceptar" pasa al
   // siguiente.
   const [validationErrors, setValidationErrors] = useState<AttachmentValidationError[]>([]);
+  const [resumableSession, setResumableSession] = useState<PersistedUploadSession | null>(null);
+  const [resumableMismatchError, setResumableMismatchError] = useState<string | null>(null);
   const nextId = useRef(0);
+
+  // Cargar sesión reanudable pendiente al cambiar de conversación o montar (§8.5)
+  useEffect(() => {
+    setResumableSession(getUploadSession(conversationId));
+    setResumableMismatchError(null);
+  }, [conversationId]);
 
   // Ref espejo de `attachments.length` para leer la cantidad actual de forma
   // síncrona dentro de `addFiles` sin tener que declarar `attachments` como
@@ -109,7 +124,7 @@ export function useMessageAttachments(conversationId: string) {
   }, [attachments]);
 
   const startUpload = useCallback(
-    (fileToUpload: File, localId: string) => {
+    (fileToUpload: File, localId: string, existingSessionId?: string) => {
       if (!token) return;
 
       if (fileToUpload.size > CHUNKED_UPLOAD_THRESHOLD_BYTES) {
@@ -118,6 +133,7 @@ export function useMessageAttachments(conversationId: string) {
           file: fileToUpload,
           token,
           conversationId,
+          existingSessionId,
           onStatusChange: (newStatus: ChunkedUploadStatus) => {
             setAttachments((prev) =>
               prev.map((att) =>
@@ -267,6 +283,48 @@ export function useMessageAttachments(conversationId: string) {
     [token, maxFilesPerMessage, startUpload],
   );
 
+  /** Reanuda una sesión multipart previa pidiendo al usuario el archivo correspondiente (§8.5). */
+  const resumeSessionWithFile = useCallback(
+    (file: File): boolean => {
+      if (!resumableSession) return false;
+
+      const isNameMatch = file.name === resumableSession.fileName;
+      const isSizeMatch = file.size === resumableSession.fileSize;
+      const isTimeMatch =
+        !resumableSession.lastModified ||
+        Math.abs(file.lastModified - resumableSession.lastModified) <= 2000;
+
+      if (!isNameMatch || !isSizeMatch || !isTimeMatch) {
+        setResumableMismatchError(
+          "El archivo seleccionado no coincide con la subida pendiente (nombre o tamaño diferente).",
+        );
+        return false;
+      }
+
+      setResumableMismatchError(null);
+      const sessionToResume = resumableSession;
+      setResumableSession(null);
+
+      const localId = `${Date.now()}-${nextId.current++}`;
+      setAttachments((prev) => [...prev, { localId, file, status: "uploading" }]);
+      startUpload(file, localId, sessionToResume.sessionId);
+      return true;
+    },
+    [resumableSession, startUpload],
+  );
+
+  /** Descarta una sesión multipart pendiente y aborta la subida en el storage (§8.5). */
+  const discardResumableSession = useCallback(() => {
+    if (!resumableSession) return;
+    const { sessionId } = resumableSession;
+    removeUploadSession(sessionId);
+    setResumableSession(null);
+    setResumableMismatchError(null);
+    if (token) {
+      void abortUpload(token, sessionId).catch(() => {});
+    }
+  }, [resumableSession, token]);
+
   const pauseAttachment = useCallback((localId: string) => {
     setAttachments((prev) =>
       prev.map((att) => {
@@ -346,7 +404,8 @@ export function useMessageAttachments(conversationId: string) {
       att.status === "initiating" ||
       att.status === "retrying" ||
       att.status === "resuming" ||
-      att.status === "completing",
+      att.status === "completing" ||
+      att.status === "offline",
   );
 
   const fileIds = attachments
@@ -366,5 +425,9 @@ export function useMessageAttachments(conversationId: string) {
     fileIds,
     validationErrors,
     dismissValidationError,
+    resumableSession,
+    resumableMismatchError,
+    resumeSessionWithFile,
+    discardResumableSession,
   };
 }

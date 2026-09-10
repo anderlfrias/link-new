@@ -369,4 +369,151 @@ describe("ChunkedUploader", () => {
     expect(latest.loadedBytes).toBe(4 * 1024 * 1024);
     expect(latest.percentage).toBe(25); // 4 MiB de 16 MiB = 25%
   });
+
+  it("reanuda una sesión existente (existingSessionId) subiendo solo las partes faltantes (§8.5)", async () => {
+    const file = new File([new Uint8Array(24 * 1024 * 1024)], "resume-existing.dat");
+    // La sesión existente ya tiene la parte 1 subida en S3
+    mockApi.getUploadStatus.mockResolvedValueOnce({
+      id: "session-existente-1",
+      status: "UPLOADING",
+      partSize: 8 * 1024 * 1024,
+      totalParts: 3,
+      parts: [{ partNumber: 1, size: 8 * 1024 * 1024, eTag: '"etag-1"' }],
+    });
+
+    const xhrInstances: MockXhrInstance[] = [];
+    const createXhr = createMockXhrFactory(xhrInstances);
+
+    const uploader = new ChunkedUploader({
+      file,
+      token: "test-token",
+      existingSessionId: "session-existente-1",
+      api: mockApi,
+      createXhr,
+      concurrency: 1,
+    });
+
+    const uploadPromise = uploader.start();
+
+    // No debe llamar a initiateUpload porque ya tiene sesión
+    expect(mockApi.initiateUpload).not.toHaveBeenCalled();
+    expect(mockApi.getUploadStatus).toHaveBeenCalledWith("test-token", "session-existente-1");
+
+    // Debe saltar la parte 1 y arrancar directamente con la parte 2
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(1));
+    expect(xhrInstances[0].requestUrl).toBe("https://storage.link/part-2");
+    xhrInstances[0].status = 200;
+    xhrInstances[0].onload?.();
+
+    // Luego parte 3
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(2));
+    expect(xhrInstances[1].requestUrl).toBe("https://storage.link/part-3");
+    xhrInstances[1].status = 200;
+    xhrInstances[1].onload?.();
+
+    const result = await uploadPromise;
+    expect(result).toEqual(mockStoredFile);
+    expect(mockApi.completeUpload).toHaveBeenCalledWith("test-token", "session-existente-1");
+  });
+
+  it("pausa al perder conexión (offline) y reanuda automáticamente al volver (online)", async () => {
+    const file = new File([new Uint8Array(16 * 1024 * 1024)], "offline.dat");
+    mockApi.initiateUpload.mockResolvedValueOnce({
+      uploadSessionId: "session-offline",
+      partSize: 8 * 1024 * 1024,
+      totalParts: 2,
+      expiresAt: "2026-09-11T12:00:00.000Z",
+    });
+
+    const xhrInstances: MockXhrInstance[] = [];
+    const createXhr = createMockXhrFactory(xhrInstances);
+
+    const uploader = new ChunkedUploader({
+      file,
+      token: "test-token",
+      api: mockApi,
+      createXhr,
+      concurrency: 1,
+    });
+
+    void uploader.start();
+
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(1));
+
+    // Se dispara evento offline
+    uploader.handleOffline();
+    expect(uploader.getStatus()).toBe("offline");
+    expect(xhrInstances[0].abort).toHaveBeenCalled();
+
+    // Se dispara evento online
+    uploader.handleOnline();
+    await vi.waitFor(() => expect(uploader.getStatus()).toBe("uploading"));
+
+    // Se reanuda la parte 1
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(2));
+    xhrInstances[1].status = 200;
+    xhrInstances[1].onload?.();
+
+    // Parte 2
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(3));
+    xhrInstances[2].status = 200;
+    xhrInstances[2].onload?.();
+
+    await vi.waitFor(() => expect(uploader.getStatus()).toBe("done"));
+  });
+
+  it("se recupera si completeUpload reporta partes faltantes y sube las que faltan", async () => {
+    const file = new File([new Uint8Array(16 * 1024 * 1024)], "missing-parts.dat");
+    mockApi.initiateUpload.mockResolvedValueOnce({
+      uploadSessionId: "session-missing",
+      partSize: 8 * 1024 * 1024,
+      totalParts: 2,
+      expiresAt: "2026-09-11T12:00:00.000Z",
+    });
+
+    // Primera vez que se intenta completar: falla diciendo que falta la parte 2
+    mockApi.completeUpload
+      .mockRejectedValueOnce(new Error("Missing parts: received 1 parts, expected 2"))
+      .mockResolvedValueOnce(mockStoredFile);
+
+    // Cuando re-consulta getUploadStatus: solo está la parte 1
+    mockApi.getUploadStatus.mockResolvedValueOnce({
+      id: "session-missing",
+      status: "UPLOADING",
+      parts: [{ partNumber: 1, size: 8 * 1024 * 1024, eTag: '"etag-1"' }],
+    });
+
+    const xhrInstances: MockXhrInstance[] = [];
+    const createXhr = createMockXhrFactory(xhrInstances);
+
+    const uploader = new ChunkedUploader({
+      file,
+      token: "test-token",
+      api: mockApi,
+      createXhr,
+      concurrency: 1,
+    });
+
+    const uploadPromise = uploader.start();
+
+    // Parte 1 OK
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(1));
+    xhrInstances[0].status = 200;
+    xhrInstances[0].onload?.();
+
+    // Parte 2 OK
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(2));
+    xhrInstances[1].status = 200;
+    xhrInstances[1].onload?.();
+
+    // completeUpload falla con Missing parts, re-consulta status y vuelve a encolar la parte 2
+    await vi.waitFor(() => expect(xhrInstances.length).toBe(3));
+    expect(xhrInstances[2].requestUrl).toBe("https://storage.link/part-2");
+    xhrInstances[2].status = 200;
+    xhrInstances[2].onload?.();
+
+    const result = await uploadPromise;
+    expect(result).toEqual(mockStoredFile);
+    expect(uploader.getStatus()).toBe("done");
+  });
 });

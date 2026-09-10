@@ -7,6 +7,7 @@ import {
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
   IconRefresh,
+  IconWifiOff,
   IconX,
 } from "@tabler/icons-react";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
@@ -23,7 +24,7 @@ interface AttachmentPreviewChipProps {
   onRetry?: () => void;
 }
 
-/** Chip del adjunto en preparación o subida, con progreso fluido, métricas y controles (§8.1, §8.4). */
+/** Chip del adjunto en preparación o subida, con progreso fluido, métricas y controles (§8.1, §8.4, §8.5). */
 export function AttachmentPreviewChip({
   attachment,
   onRemove,
@@ -60,7 +61,7 @@ export function AttachmentPreviewChip({
       className={cn(
         "relative flex min-w-44 max-w-56 shrink-0 items-center gap-2.5 rounded-xl border border-black/10 bg-white p-2.5 shadow-sm transition-all dark:border-white/10 dark:bg-neutral-900/90",
         status === "error" && "border-red-400 dark:border-red-500/60",
-        status === "paused" && "border-amber-300 dark:border-amber-500/50",
+        (status === "paused" || status === "offline") && "border-amber-300 dark:border-amber-500/50",
       )}
     >
       <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/5 dark:bg-white/10">
@@ -80,6 +81,10 @@ export function AttachmentPreviewChip({
         {status === "error" ? (
           <p className="truncate text-[11px] font-medium text-red-500" title={error ?? "Error al subir"}>
             {error ?? "Error al subir"}
+          </p>
+        ) : status === "offline" ? (
+          <p className="truncate text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            Sin conexión • En pausa
           </p>
         ) : status === "paused" ? (
           <p className="truncate text-[11px] font-medium text-amber-500">Pausado • {percentage}%</p>
@@ -139,6 +144,9 @@ export function AttachmentPreviewChip({
         {isUploadingState && (
           <IconLoader2 size={14} className="shrink-0 animate-spin text-brand-blue" />
         )}
+        {status === "offline" && (
+          <IconWifiOff size={14} className="shrink-0 text-amber-500" />
+        )}
         {status === "error" && !onRetry && (
           <IconAlertCircle size={14} className="shrink-0 text-red-500" />
         )}
@@ -160,7 +168,7 @@ export function AttachmentPreviewChip({
           <div
             className={cn(
               "h-full transition-all duration-200 ease-out",
-              status === "paused" ? "bg-amber-400" : "bg-brand-blue",
+              status === "paused" || status === "offline" ? "bg-amber-400" : "bg-brand-blue",
             )}
             style={{ width: `${percentage}%` }}
           />

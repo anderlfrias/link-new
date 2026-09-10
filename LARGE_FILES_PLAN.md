@@ -938,7 +938,7 @@ flowchart LR
 | 4 | [Backend del upload chunked](#fase-4--backend-del-upload-chunked) | C | `[x] 2026-09-10` |
 | 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[x] 2026-09-10` |
 | 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[x] 2026-09-10` |
-| 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[ ]` |
+| 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[x] 2026-09-10` |
 | 8 | [Migración progresiva](#fase-8--migración-progresiva) | C | `[ ]` |
 | 9 | [Endurecimiento de seguridad](#fase-9--endurecimiento-de-seguridad) | C | `[ ]` |
 | 10 | [Documentación y cierre](#fase-10--documentación-y-cierre) | C | `[ ]` |
@@ -1365,6 +1365,14 @@ verificar que termina.
 
 **Terminada cuando.** Una subida de 2 GB sobrevive un corte de red de 30 s **y un reinicio
 de Link** (§4.7).
+
+- [x] Completada 2026-09-10:
+  - `upload-persistence.ts`: persistencia de sesiones en `localStorage` con TTL de 24h y auto-limpieza.
+  - `chunked-uploader.ts`: soporte para `existingSessionId`, reanudación por `ListParts`, listeners reactivos a `window.online`/`offline`, y recuperación de partes faltantes si `completeUpload` falla.
+  - `ResumableUploadBanner.tsx`: banner para re-pick asistido informando nombre y tamaño del archivo con validación estricta y botón de descarte.
+  - `AttachmentPreviewChip.tsx`: indicador y badge de estado `offline` ("Sin conexión • En pausa").
+  - `use-message-attachments.ts`: integración de sesión reanudable, re-pick asistido, descarte con `abortUpload` y estado `offline`.
+  - Cobertura de tests: 1180 tests pasando en el monorepo (550 backend + 630 frontend).
 
 ---
 
