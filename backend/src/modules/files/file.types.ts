@@ -22,6 +22,7 @@ export interface StoredFileResponse {
   size: number;
   url: string;
   createdAt: Date;
+  deletedAt: Date | null;
 }
 
 /// Categoría de archivo para el filtro de tipo del panel de admin — deriva de

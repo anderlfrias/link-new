@@ -6,11 +6,18 @@ import * as FileRepository from "../files/file.repository";
 import * as SettingsService from "../settings/settings.service";
 import { getTrendingGiphy, importGiphyAsset, searchGiphy } from "./giphy.service";
 
-vi.mock("../../storage", () => ({
-  storage: {
+const { mockGiphyStorage } = vi.hoisted(() => {
+  const mockGiphyStorage = {
     save: vi.fn(),
     getPublicUrl: vi.fn((p: string) => `/uploads/${p}`),
-  },
+  };
+  return { mockGiphyStorage };
+});
+
+vi.mock("../../storage", () => ({
+  storage: mockGiphyStorage,
+  getWriteProvider: vi.fn(() => ({ provider: "LOCAL", storage: mockGiphyStorage })),
+  getProvider: vi.fn(() => mockGiphyStorage),
 }));
 
 vi.mock("../settings/settings.service", () => ({

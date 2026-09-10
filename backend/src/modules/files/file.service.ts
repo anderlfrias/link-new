@@ -1,10 +1,12 @@
-import { createHash, randomUUID } from "crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import path from "path";
 import { parseBuffer } from "music-metadata";
 import { FileTypeRestrictionMode, StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
-import { storage } from "../../storage";
-import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
+import { ADMIN_ROLE } from "../../constants/roles.constant";
+import env from "../../config/env";
+import { getProvider, getWriteProvider, storage } from "../../storage";
+import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
 import { isConversationMember } from "../conversations/conversation.repository";
 import * as SettingsService from "../settings/settings.service";
 import * as FileRepository from "./file.repository";
@@ -56,10 +58,92 @@ function safeExtension(originalName: string, mimeType: string): string {
   return ALLOWED_MIME_TYPES[mimeType]?.extension ?? "bin";
 }
 
+function getSigningSecret(): string {
+  return env.FILE_URL_SIGNING_SECRET || env.EXTERNAL_AUTH_JWT_SECRET;
+}
+
+/// Genera un token HMAC con expiración para acceder a un archivo específico (TTL default 1 hora).
+export function generateFileToken(fileId: string, userId?: string, ttlSeconds = 3600): string {
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const uid = userId ?? "anonymous";
+  const data = `${fileId}:${uid}:${exp}`;
+  const sig = createHmac("sha256", getSigningSecret()).update(data).digest("base64url");
+  const payload = Buffer.from(JSON.stringify({ u: uid, e: exp })).toString("base64url");
+  return `${payload}.${sig}`;
+}
+
+/// Verifica el token HMAC de una URL de archivo, comprobando expiración y firma criptográfica.
+export function verifyFileToken(fileId: string, token: string): { userId: string } {
+  const parts = token.split(".");
+  if (parts.length !== 2) {
+    throw new UnauthorizedError("Invalid token format");
+  }
+  const [payloadB64, sig] = parts;
+  let parsed: { u: string; e: number };
+  try {
+    parsed = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
+  } catch {
+    throw new UnauthorizedError("Invalid token payload");
+  }
+  const { u: userId, e: exp } = parsed;
+  if (!userId || typeof exp !== "number") {
+    throw new UnauthorizedError("Malformed token payload");
+  }
+  if (Math.floor(Date.now() / 1000) > exp) {
+    throw new UnauthorizedError("Token expired");
+  }
+  const expectedData = `${fileId}:${userId}:${exp}`;
+  const expectedSig = createHmac("sha256", getSigningSecret()).update(expectedData).digest("base64url");
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
+    throw new UnauthorizedError("Invalid token signature");
+  }
+  return { userId };
+}
+
+/// Evalúa si un usuario tiene permiso para acceder a un archivo (§5.4).
+export async function canAccessFile(
+  userId: string,
+  fileId: string,
+  userRoles: string[] = [],
+): Promise<boolean> {
+  if (userRoles.includes(ADMIN_ROLE)) {
+    return true;
+  }
+  return FileRepository.checkUserFileAccess(userId, fileId);
+}
+
+/// Construye la cabecera Content-Disposition con RFC 5987 y allowlist inline sin SVG (S6, S7).
+export function buildContentDisposition(
+  originalName: string,
+  mimeType: string,
+  forceDownload = false,
+): string {
+  const isInlineAllowed =
+    !forceDownload &&
+    (mimeType.startsWith("audio/") ||
+      mimeType === "video/mp4" ||
+      ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(mimeType));
+
+  const dispositionType = isInlineAllowed ? "inline" : "attachment";
+
+  const sanitizedAscii = originalName
+    .replace(/[\x00-\x1f\x7f"\\;]/g, "_")
+    .replace(/[^\x20-\x7e]/g, "_");
+
+  const encodedUtf8 = encodeURIComponent(originalName)
+    .replace(/['()]/g, escape)
+    .replace(/\*/g, "%2A");
+
+  return `${dispositionType}; filename="${sanitizedAscii}"; filename*=UTF-8''${encodedUtf8}`;
+}
+
 /// Exportada para que otros módulos que ya tienen un `StoredFile` en mano
 /// (ej. messages, al listar los archivos compartidos de una conversación)
-/// arme la misma forma pública sin duplicar la lógica de `url`.
-export function toStoredFileResponse(file: StoredFile): StoredFileResponse {
+/// armen la misma forma pública sin duplicar la lógica de `url`.
+export function toStoredFileResponse(file: StoredFile, currentUserId?: string): StoredFileResponse {
+  const token = generateFileToken(file.id, currentUserId ?? file.createdById ?? undefined);
   return {
     id: file.id,
     originalName: file.originalName,
@@ -68,8 +152,9 @@ export function toStoredFileResponse(file: StoredFile): StoredFileResponse {
     // StoredFile.size es bigint en Prisma (ver schema.prisma) — la API
     // pública lo mantiene number (Number.MAX_SAFE_INTEGER son ~9 PB, sobra).
     size: Number(file.size),
-    url: storage.getPublicUrl(file.path),
+    url: `/api/v1/files/${file.id}/content?t=${token}`,
     createdAt: file.createdAt,
+    deletedAt: file.deletedAt,
   };
 }
 
@@ -126,7 +211,8 @@ export async function uploadFile(
   const storedName = `${randomUUID()}.${extension}`;
   const checksum = createHash("sha256").update(upload.buffer).digest("hex");
 
-  const saved = await storage.save(upload.buffer, `${buildStorageDir(conversationId)}/${storedName}`);
+  const { provider, storage: writeStorage } = getWriteProvider();
+  const saved = await writeStorage.save(upload.buffer, `${buildStorageDir(conversationId)}/${storedName}`);
 
   const file = await FileRepository.createStoredFile({
     originalName: upload.originalname,
@@ -137,17 +223,25 @@ export async function uploadFile(
     size: BigInt(saved.size),
     checksum,
     createdById: currentUserId,
+    provider,
   });
 
-  return toStoredFileResponse(file);
+  return toStoredFileResponse(file, currentUserId);
 }
 
-export async function getFile(fileId: string): Promise<StoredFileResponse> {
+export async function getFile(
+  fileId: string,
+  currentUserId?: string,
+  userRoles: string[] = [],
+): Promise<StoredFileResponse> {
   const file = await FileRepository.findActiveById(fileId);
   if (!file) {
     throw new NotFoundError("File not found");
   }
-  return toStoredFileResponse(file);
+  if (currentUserId && !(await canAccessFile(currentUserId, fileId, userRoles))) {
+    throw new ForbiddenError("You do not have access to this file");
+  }
+  return toStoredFileResponse(file, currentUserId);
 }
 
 export async function getFileChecksum(fileId: string): Promise<string | null> {
@@ -165,7 +259,8 @@ export async function storeAvatar(userId: string, buffer: Buffer, mimeType: stri
   const storedName = `${randomUUID()}.${extension}`;
   const checksum = createHash("sha256").update(buffer).digest("hex");
 
-  const saved = await storage.save(buffer, `avatars/${userId}/${storedName}`);
+  const { provider, storage: writeStorage } = getWriteProvider();
+  const saved = await writeStorage.save(buffer, `avatars/${userId}/${storedName}`);
 
   const file = await FileRepository.createStoredFile({
     originalName: `avatar.${extension}`,
@@ -176,9 +271,10 @@ export async function storeAvatar(userId: string, buffer: Buffer, mimeType: stri
     size: BigInt(saved.size),
     checksum,
     createdById: userId,
+    provider,
   });
 
-  return toStoredFileResponse(file);
+  return toStoredFileResponse(file, userId);
 }
 
 export async function deleteFile(currentUserId: string, fileId: string): Promise<{ id: string }> {
@@ -246,7 +342,8 @@ export async function adminDeleteFile(fileId: string): Promise<{ id: string }> {
   // y no lanza por ENOENT, así que este catch es una red de seguridad para
   // errores reales de IO (permisos, disco no montado, futuro provider remoto).
   try {
-    await storage.delete(file.path);
+    const fileProvider = getProvider(file.provider);
+    await fileProvider.delete(file.path);
   } catch (error) {
     console.error(`[files] adminDeleteFile: failed to delete physical file for ${fileId}`, error);
   }

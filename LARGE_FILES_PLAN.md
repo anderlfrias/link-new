@@ -1102,6 +1102,22 @@ mensaje. Es el Riesgo 2 de §13.
 **Terminada cuando.** `/uploads` retirado; toda imagen, nota de voz y descarga funciona vía
 `/content`; un no-miembro recibe `403`; Range verificado con `curl -r`.
 
+**Cerrada 2026-09-10 — notas para quien retome el plan:**
+
+- **Cierre de `/uploads` y retiro de `express.static` (S10):** se removió `express.static('/uploads')` de `backend/src/app.ts`. Todo archivo ahora pasa por `GET /api/v1/files/:id/content` con headers CORP `cross-origin` y soporte de Range (`res.sendFile(..., { acceptRanges: true })`).
+- **Autenticación dual en `/content`:**
+  - `?t=<hmac>`: token firmado con SHA-256 (`fileId`, `userId`, `exp`) usando `FILE_URL_SIGNING_SECRET` (o fallback a `EXTERNAL_AUTH_JWT_SECRET`). Apto para `<img>`, `<audio>` y enlaces nativos de descarga streaming.
+  - `Authorization: Bearer <jwt>`: verificación tradicional por header para clientes API/scripts.
+  - Avatares públicos: `isAvatarFile(fileId)` permite acceso directo sin token para avatares activos de usuarios (§12.1 Supuesto 6).
+- **Control de acceso e IDOR cerrado (S11):** `canAccessFile` evalúa en una consulta indexada las 5 reglas de §5.4 (admin, avatar público, creador, miembro en imagen de conversación, miembro en adjunto de mensaje). `GET /files/:id` ahora rechaza con 403 a usuarios sin relación con el archivo.
+- **Payload de mensajes reducido a la forma pública (S12):** `message.files[].file` (`PublicStoredFile`) ya no expone `path`, `storedName`, `checksum`, `provider` ni `createdById`. Expone `id`, `originalName`, `mimeType`, `extension`, `size` (number), `url` (con token firmado HMAC) y `deletedAt`.
+- **Protección contra Directory Traversal (S15):** `LocalDiskStorage` valida contención absoluta con `path.resolve` impidiendo accesos fuera del directorio raíz de uploads.
+- **Content-Disposition RFC 5987 y prevención de XSS (S6, S7):** `buildContentDisposition` formatea `filename` y `filename*` sanitizando CRLF y comillas, y fuerza `attachment` para SVGs y tipos no incluidos en el allowlist inline.
+- **Frontend streaming nativo sin buffer en RAM:** `downloadFile` agrega `download=1` a las URLs de `/content` y ejecuta la descarga vía anchor tag nativo, eliminando el consumo excesivo de memoria por `fetch -> blob`.
+- Tests nuevos/actualizados:
+  - Backend: `local-disk.storage.test.ts`, `storage/index.test.ts`, `file.repository.test.ts`, `file.service.test.ts`, `file.route.test.ts`, `message.service.test.ts`, `app.test.ts`. Total: 485 tests pasando.
+  - Frontend: `file-url.test.ts`, `download-file.test.ts`, `MessageAttachments.test.tsx`. Total: 589 tests pasando.
+
 ---
 
 ### Fase 3 — Provider S3

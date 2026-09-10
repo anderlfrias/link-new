@@ -87,16 +87,23 @@ export interface ForwardedFromPreview {
   senderName: string;
 }
 
-/// `StoredFile` tal como queda embebido en un mensaje después de
-/// `withPreviews` (message.service.ts): misma forma cruda (SÍ incluye
-/// `path`/`storedName`/`checksum`/`provider` — reducirla a la forma pública,
-/// como ya hace `toStoredFileResponse`, es un cambio de contrato mayor,
-/// deliberadamente diferido a una fase posterior de LARGE_FILES_PLAN.md),
-/// pero con `size` ya convertido de `bigint` (tipo real de `StoredFile.size`
-/// en Prisma) a `number`: ni `JSON.stringify` ni el serializador de
-/// socket.io saben serializar un `bigint`, así que dejarlo crudo rompe
-/// CUALQUIER mensaje con un adjunto apenas se emite o se responde por HTTP.
-export type SerializableStoredFile = Omit<StoredFile, "size"> & { size: number };
+/// Forma pública de un `StoredFile` embebido en un mensaje después de
+/// `withPreviews` (message.service.ts) — LARGE_FILES_PLAN.md Fase 2 (§5.2, S12).
+/// Nunca expone rutas físicas (`path`, `storedName`) ni detalles internos
+/// (`checksum`, `provider`, `createdById`). La `url` incluye el token HMAC
+/// para lectura autorizada via `GET /api/v1/files/:id/content?t=<hmac>`.
+export interface PublicStoredFile {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  extension: string;
+  size: number;
+  url: string;
+  createdAt: Date;
+  deletedAt: Date | null;
+}
+
+export type SerializableStoredFile = PublicStoredFile;
 
 export type MessageWithRelations = Message & {
   sender: Pick<User, "id" | "name" | "email" | "avatarFileId">;

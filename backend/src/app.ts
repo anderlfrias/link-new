@@ -3,7 +3,6 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
-import path from "path";
 import { corsOrigin } from "./config/cors-origins";
 import { errorHandler } from "./middlewares/error.middleware";
 import routes from "./route";
@@ -25,15 +24,6 @@ app.use(cors({ origin: corsOrigin }));
 app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-// helmet() ya seteó Cross-Origin-Resource-Policy: same-origin arriba, lo que
-// bloquea que el frontend (otro puerto = otro origen) cargue estas imágenes en
-// un <img>. Se relaja solo acá, no globalmente: es la única ruta pensada para
-// consumirse desde otro origen (ver backend/API.md sección 9).
-app.use(
-  "/uploads",
-  helmet.crossOriginResourcePolicy({ policy: "cross-origin" }),
-  express.static(path.join(__dirname, "..", "uploads")),
-);
 
 app.get("/", (_req, res) => {
   res.send("Backend is running");

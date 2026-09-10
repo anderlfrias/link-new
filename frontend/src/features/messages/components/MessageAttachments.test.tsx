@@ -109,4 +109,33 @@ describe("MessageAttachments", () => {
     fireEvent.click(fileBtn);
     expect(downloadFile).toHaveBeenCalledWith(expect.stringContaining("data.csv"), "data.csv");
   });
+
+  it("uses signed file.url for image lightbox and download", () => {
+    const files: MessageFile[] = [
+      {
+        id: "mf-signed",
+        messageId: "m-1",
+        fileId: "f-signed",
+        createdAt: "2026-09-09T10:00:00Z",
+        file: {
+          id: "f-signed",
+          originalName: "foto.png",
+          mimeType: "image/png",
+          extension: "png",
+          size: 1024,
+          url: "/api/v1/files/f-signed/content?t=hmac-123",
+          deletedAt: null,
+        } as any,
+      },
+    ];
+
+    render(<MessageAttachments files={files} isOwn={false} />);
+    const imgBtn = screen.getByLabelText("Ver imagen foto.png");
+    fireEvent.click(imgBtn);
+
+    expect(mockOpenLightbox).toHaveBeenCalledWith({
+      url: "http://localhost:4000/api/v1/files/f-signed/content?t=hmac-123",
+      name: "foto.png",
+    });
+  });
 });

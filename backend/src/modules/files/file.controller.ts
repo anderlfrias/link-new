@@ -1,5 +1,10 @@
-import { NextFunction, Request, Response } from "express";
-import { BadRequestError } from "../../utils/errors";
+import { FileProvider } from "@prisma/client";
+import { prisma } from "../../config/prisma";
+import { getProvider } from "../../storage";
+import { LocalDiskStorage } from "../../storage/local-disk.storage";
+import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
+import { mapTokenToUser, verifyToken } from "../auth/jwt";
+import * as FileRepository from "./file.repository";
 import * as FileService from "./file.service";
 import { AdminFileFilters, StoredFileCategory, UploadKind } from "./file.types";
 
@@ -25,8 +30,82 @@ export async function upload(req: Request, res: Response, next: NextFunction) {
 
 export async function getById(req: Request, res: Response, next: NextFunction) {
   try {
-    const file = await FileService.getFile(req.params.id);
+    const userRoles = req.user?.roles ?? [];
+    const file = await FileService.getFile(req.params.id, currentUserId(req), userRoles);
     res.json(file);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/// Sirve el contenido de un archivo con permisos por request (§4.5, §5.4).
+/// Acepta token firmado `?t=<token>` (para <img>, <audio>, descargas) o `Authorization: Bearer`.
+export async function getContent(req: Request, res: Response, next: NextFunction) {
+  try {
+    const fileId = req.params.id;
+    const file = await FileRepository.findActiveById(fileId);
+    if (!file) {
+      throw new NotFoundError("Archivo no encontrado");
+    }
+
+    let userId: string | null = null;
+    let userRoles: string[] = [];
+
+    const tokenQuery = req.query.t;
+    if (typeof tokenQuery === "string" && tokenQuery) {
+      const verified = FileService.verifyFileToken(fileId, tokenQuery);
+      if (!verified) {
+        throw new UnauthorizedError("Token de archivo inválido o expirado");
+      }
+      userId = verified.userId;
+    } else {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        const rawToken = authHeader.slice("Bearer ".length);
+        const mappedUser = mapTokenToUser(verifyToken(rawToken));
+        const internalUser = await prisma.user.findUnique({ where: { email: mappedUser.email } });
+        if (!internalUser) {
+          throw new UnauthorizedError("Usuario no encontrado");
+        }
+        userId = internalUser.id;
+        userRoles = mappedUser.roles;
+      }
+    }
+
+    // Si no hay token de usuario, permitimos únicamente si el archivo es un avatar público (§5.4 regla 2)
+    if (!userId) {
+      const isAvatar = await FileRepository.isAvatarFile(fileId);
+      if (!isAvatar) {
+        throw new UnauthorizedError("Autenticación requerida para acceder al contenido");
+      }
+    } else {
+      const hasAccess = await FileService.canAccessFile(userId, fileId, userRoles);
+      if (!hasAccess) {
+        throw new ForbiddenError("No tienes permiso para acceder a este archivo");
+      }
+    }
+
+    const forceDownload = req.query.download === "1";
+    const disposition = FileService.buildContentDisposition(file.originalName, file.mimeType, forceDownload);
+
+    res.setHeader("Content-Type", file.mimeType);
+    res.setHeader("Content-Disposition", disposition);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+
+    if (file.provider === FileProvider.LOCAL) {
+      const diskStorage = getProvider(FileProvider.LOCAL) as LocalDiskStorage;
+      const absolutePath = diskStorage.getAbsolutePath(file.path);
+      res.sendFile(absolutePath, { acceptRanges: true }, (err) => {
+        if (err && !res.headersSent) {
+          next(err);
+        }
+      });
+      return;
+    }
+
+    // Proveedor S3: reservado para Fase 3 (302 redirect a presigned GET)
+    throw new BadRequestError(`Unsupported file provider: ${file.provider}`);
   } catch (error) {
     next(error);
   }

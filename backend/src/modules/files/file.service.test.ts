@@ -2,12 +2,21 @@ import { FileTypeRestrictionMode } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 
-vi.mock("../../storage", () => ({
-  storage: {
+const { mockStorage } = vi.hoisted(() => {
+  const mockStorage = {
     save: vi.fn((buf: Buffer, relPath: string) => Promise.resolve({ path: relPath, size: buf.length })),
     delete: vi.fn(() => Promise.resolve()),
     getPublicUrl: vi.fn((p: string) => `/uploads/${p}`),
-  },
+    createReadStream: vi.fn(),
+    stat: vi.fn(),
+  };
+  return { mockStorage };
+});
+
+vi.mock("../../storage", () => ({
+  storage: mockStorage,
+  getProvider: vi.fn(() => mockStorage),
+  getWriteProvider: vi.fn(() => ({ provider: "LOCAL", storage: mockStorage })),
 }));
 
 vi.mock("../conversations/conversation.repository", () => ({
@@ -27,13 +36,17 @@ import * as FileRepository from "./file.repository";
 import { parseBuffer } from "music-metadata";
 import {
   adminDeleteFile,
+  buildContentDisposition,
+  canAccessFile,
   deleteFile,
+  generateFileToken,
   getFile,
   getFileChecksum,
   listFilesForAdmin,
   storeAvatar,
   toStoredFileResponse,
   uploadFile,
+  verifyFileToken,
 } from "./file.service";
 
 function buildMockStoredFile(overrides: any = {}) {
@@ -61,9 +74,9 @@ describe("file.service", () => {
   });
 
   describe("toStoredFileResponse", () => {
-    it("convierte StoredFile a StoredFileResponse generando url pública", () => {
+    it("convierte StoredFile a StoredFileResponse generando url firmada", () => {
       const file = buildMockStoredFile();
-      const response = toStoredFileResponse(file as any);
+      const response = toStoredFileResponse(file as any, "u-user");
 
       expect(response).toEqual({
         id: "file-1",
@@ -71,10 +84,14 @@ describe("file.service", () => {
         mimeType: "application/pdf",
         extension: "pdf",
         size: 2048,
-        url: "/uploads/chat/conv-1/2026/03/stored-uuid.pdf",
+        url: expect.stringMatching(/^\/api\/v1\/files\/file-1\/content\?t=.+/),
         createdAt: file.createdAt,
+        deletedAt: null,
       });
-      expect(storage.getPublicUrl).toHaveBeenCalledWith(file.path);
+
+      const token = response.url.split("t=")[1];
+      const verified = verifyFileToken("file-1", token);
+      expect(verified.userId).toBe("u-user");
     });
 
     // LARGE_FILES_PLAN.md §5.1/§13 (Riesgo 3): StoredFile.size es bigint en
@@ -256,6 +273,24 @@ describe("file.service", () => {
       expect(result.id).toBe("file-1");
     });
 
+    it("getFile verifica autorización del usuario (S11)", async () => {
+      const file = buildMockStoredFile();
+      vi.mocked(FileRepository.findActiveById).mockResolvedValue(file as any);
+      vi.mocked(FileRepository.checkUserFileAccess).mockResolvedValue(false);
+
+      await expect(getFile("file-1", "unauthorized-user")).rejects.toThrow(ForbiddenError);
+      await expect(getFile("file-1", "unauthorized-user")).rejects.toThrow("You do not have access to this file");
+
+      vi.mocked(FileRepository.checkUserFileAccess).mockResolvedValue(true);
+      const authorized = await getFile("file-1", "authorized-user");
+      expect(authorized.id).toBe("file-1");
+
+      // Admin siempre tiene acceso
+      vi.mocked(FileRepository.checkUserFileAccess).mockResolvedValue(false);
+      const adminResult = await getFile("file-1", "admin-user", ["admin"]);
+      expect(adminResult.id).toBe("file-1");
+    });
+
     it("getFile lanza NotFoundError si no existe", async () => {
       vi.mocked(FileRepository.findActiveById).mockResolvedValue(null);
 
@@ -269,6 +304,74 @@ describe("file.service", () => {
 
       vi.mocked(FileRepository.findActiveById).mockResolvedValue(null);
       expect(await getFileChecksum("file-missing")).toBeNull();
+    });
+  });
+
+  describe("HMAC tokens y acceso a archivos", () => {
+    it("genera y verifica tokens HMAC correctamente", () => {
+      const token = generateFileToken("file-123", "user-abc", 3600);
+      const verified = verifyFileToken("file-123", token);
+      expect(verified.userId).toBe("user-abc");
+    });
+
+    it("falla verificación si el token expiró", () => {
+      const expiredToken = generateFileToken("file-123", "user-abc", -10);
+      expect(() => verifyFileToken("file-123", expiredToken)).toThrow("Token expired");
+    });
+
+    it("falla verificación si fileId no coincide con la firma", () => {
+      const token = generateFileToken("file-123", "user-abc", 3600);
+      expect(() => verifyFileToken("different-file", token)).toThrow("Invalid token signature");
+    });
+
+    it("falla verificación si el token tiene formato inválido o payload corrupto", () => {
+      expect(() => verifyFileToken("file-123", "invalid-token")).toThrow("Invalid token format");
+      expect(() => verifyFileToken("file-123", "badpayload.badsig")).toThrow("Invalid token payload");
+    });
+
+    it("canAccessFile permite a admin inmediatamente y consulta repositorio para otros", async () => {
+      const adminAccess = await canAccessFile("u-admin", "f-1", ["admin"]);
+      expect(adminAccess).toBe(true);
+      expect(FileRepository.checkUserFileAccess).not.toHaveBeenCalled();
+
+      vi.mocked(FileRepository.checkUserFileAccess).mockResolvedValueOnce(true);
+      const userAccess = await canAccessFile("u-normal", "f-1", []);
+      expect(userAccess).toBe(true);
+      expect(FileRepository.checkUserFileAccess).toHaveBeenCalledWith("u-normal", "f-1");
+    });
+  });
+
+  describe("buildContentDisposition (S6 y S7)", () => {
+    it("asigna inline para imágenes seguras, audio y video mp4", () => {
+      expect(buildContentDisposition("foto.png", "image/png")).toContain("inline;");
+      expect(buildContentDisposition("foto.jpg", "image/jpeg")).toContain("inline;");
+      expect(buildContentDisposition("anim.gif", "image/gif")).toContain("inline;");
+      expect(buildContentDisposition("audio.ogg", "audio/ogg")).toContain("inline;");
+      expect(buildContentDisposition("clip.mp4", "video/mp4")).toContain("inline;");
+    });
+
+    it("asigna attachment a SVG para mitigar XSS almacenado (S6)", () => {
+      const cd = buildContentDisposition("vector.svg", "image/svg+xml");
+      expect(cd).toContain("attachment;");
+    });
+
+    it("asigna attachment a PDFs, binarios o cuando forceDownload es true", () => {
+      expect(buildContentDisposition("doc.pdf", "application/pdf")).toContain("attachment;");
+      expect(buildContentDisposition("foto.png", "image/png", true)).toContain("attachment;");
+    });
+
+    it("sanitiza caracteres de control, comillas y CRLF en el nombre ASCII (S7)", () => {
+      const hostileName = 'foto"maliciosa\r\n;test.png';
+      const cd = buildContentDisposition(hostileName, "image/png");
+      expect(cd).not.toContain("\r");
+      expect(cd).not.toContain("\n");
+      expect(cd).toContain('filename="foto_maliciosa___test.png"');
+      expect(cd).toContain("filename*=UTF-8''foto%22maliciosa%0D%0A%3Btest.png");
+    });
+
+    it("codifica nombres con acentos y caracteres especiales según RFC 5987", () => {
+      const cd = buildContentDisposition("informe médico año 2026.pdf", "application/pdf");
+      expect(cd).toContain("filename*=UTF-8''informe%20m%C3%A9dico%20a%C3%B1o%202026.pdf");
     });
   });
 

@@ -1,7 +1,8 @@
 import express from "express";
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
+import * as fileRepository from "./file.repository";
 import fileRouter from "./file.route";
 import * as FileService from "./file.service";
 
@@ -10,12 +11,47 @@ import * as FileService from "./file.service";
 // (multer + el nuevo rate limiter), no la lógica del handler (esa ya está
 // cubierta con mocks livianos en file.controller.test.ts).
 
+import fs from "fs";
+import os from "os";
+import path from "path";
+
+const { tempFilePath, tempDir } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fsLib = require("fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const osLib = require("os");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pathLib = require("path");
+  const dir = fsLib.mkdtempSync(pathLib.join(osLib.tmpdir(), "route-test-"));
+  const file = pathLib.join(dir, "test.txt");
+  fsLib.writeFileSync(file, "contenido de prueba para range");
+  return { tempFilePath: file, tempDir: dir };
+});
+
 vi.mock("./file.service", () => ({
   uploadFile: vi.fn(),
   getFile: vi.fn(),
   deleteFile: vi.fn(),
   listFilesForAdmin: vi.fn(),
   adminDeleteFile: vi.fn(),
+  verifyFileToken: vi.fn(),
+  canAccessFile: vi.fn(),
+  buildContentDisposition: vi.fn((name: string, mime: string) => `inline; filename="${name}"`),
+}));
+
+vi.mock("./file.repository", () => ({
+  findActiveById: vi.fn(),
+  isAvatarFile: vi.fn(),
+}));
+
+vi.mock("../../storage", () => ({
+  getProvider: vi.fn(() => ({
+    getAbsolutePath: vi.fn(() => tempFilePath),
+  })),
+  getWriteProvider: vi.fn(() => ({
+    provider: "LOCAL",
+    storage: { save: vi.fn() },
+  })),
 }));
 
 vi.mock("../auth/jwt", () => ({
@@ -120,4 +156,121 @@ describe("file.route (wiring: multer + rate limit)", () => {
     expect(blocked.status).toBe(429);
     expect(FileService.uploadFile).not.toHaveBeenCalled();
   }, 20000);
+});
+
+describe("GET /files/:id/content", () => {
+  const app = buildTestApp();
+
+  afterAll(() => {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const mockFile = {
+    id: "f-123",
+    originalName: "test.txt",
+    mimeType: "text/plain",
+    size: 29,
+    path: "2026/09/test.txt",
+    provider: "LOCAL",
+    createdById: "u-owner",
+  };
+
+  it("retorna 404 si el archivo no existe o está eliminado", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(null);
+
+    const res = await request(app).get("/files/not-found/content?t=valid-token");
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/no encontrado/i);
+  });
+
+  it("retorna 401 si no se envía token HMAC, ni Bearer JWT, y no es avatar público", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(fileRepository.isAvatarFile).mockResolvedValue(false);
+
+    const res = await request(app).get("/files/f-123/content");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/autenticaci/i);
+  });
+
+  it("retorna 401 si el token HMAC en ?t= es inválido", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(FileService.verifyFileToken).mockReturnValue(null);
+
+    const res = await request(app).get("/files/f-123/content?t=invalid-hmac");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/inválido o expirado/i);
+  });
+
+  it("retorna 403 si el usuario del token HMAC no tiene acceso (canAccessFile = false)", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-intruder", fileId: "f-123" });
+    vi.mocked(FileService.canAccessFile).mockResolvedValue(false);
+
+    const res = await request(app).get("/files/f-123/content?t=valid-hmac");
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/permiso/i);
+  });
+
+  it("retorna 200 con streaming y headers si el token HMAC es válido y tiene acceso", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-123" });
+    vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
+    vi.mocked(FileService.buildContentDisposition).mockReturnValue('inline; filename="test.txt"');
+
+    const res = await request(app).get("/files/f-123/content?t=valid-hmac");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/plain");
+    expect(res.headers["content-disposition"]).toBe('inline; filename="test.txt"');
+    expect(res.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+    expect(res.headers["accept-ranges"]).toBe("bytes");
+    expect(res.text).toBe("contenido de prueba para range");
+  });
+
+  it("soporta Range request retornando 206 Partial Content", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-123" });
+    vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
+
+    const res = await request(app)
+      .get("/files/f-123/content?t=valid-hmac")
+      .set("Range", "bytes=0-8");
+
+    expect(res.status).toBe(206);
+    expect(res.headers["content-range"]).toMatch(/^bytes 0-8\/\d+$/);
+    expect(res.text).toBe("contenido");
+  });
+
+  it("permite acceso mediante header Authorization Bearer sin HMAC token", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
+
+    const res = await request(app)
+      .get("/files/f-123/content")
+      .set("Authorization", "Bearer user-token:alice");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("contenido de prueba para range");
+    expect(FileService.canAccessFile).toHaveBeenCalledWith(
+      "internal-alice@example.com",
+      "f-123",
+      ["user"],
+    );
+  });
+
+  it("permite acceso anónimo sin tokens si el archivo es un avatar público", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(fileRepository.isAvatarFile).mockResolvedValue(true);
+
+    const res = await request(app).get("/files/f-123/content");
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe("contenido de prueba para range");
+  });
 });

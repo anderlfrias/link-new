@@ -16,8 +16,10 @@ vi.mock("../../config/prisma", () => ({
 import { prisma } from "../../config/prisma";
 import {
   aggregateFilesForAdmin,
+  checkUserFileAccess,
   createStoredFile,
   findActiveById,
+  isAvatarFile,
   listFilesForAdmin,
   softDelete,
 } from "./file.repository";
@@ -207,4 +209,53 @@ describe("file.repository", () => {
       );
     });
   });
+
+  describe("checkUserFileAccess", () => {
+    it("devuelve true si findFirst encuentra coincidencia según las reglas §5.4", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce({ id: "f-1" } as any);
+
+      const hasAccess = await checkUserFileAccess("u-1", "f-1");
+      expect(hasAccess).toBe(true);
+      expect(prisma.storedFile.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: "f-1",
+          OR: [
+            { createdById: "u-1" },
+            { avatarOfUsers: { some: {} } },
+            { imageOfConversations: { some: { members: { some: { userId: "u-1" } } } } },
+            { messageFiles: { some: { message: { conversation: { members: { some: { userId: "u-1" } } } } } } },
+          ],
+        },
+        select: { id: true },
+      });
+    });
+
+    it("devuelve false si no hay coincidencia de acceso", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce(null);
+
+      const hasAccess = await checkUserFileAccess("u-stranger", "f-secret");
+      expect(hasAccess).toBe(false);
+    });
+  });
+
+  describe("isAvatarFile", () => {
+    it("devuelve true si el archivo está asociado a avatarOfUsers", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce({ id: "f-avatar" } as any);
+
+      const result = await isAvatarFile("f-avatar");
+      expect(result).toBe(true);
+      expect(prisma.storedFile.findFirst).toHaveBeenCalledWith({
+        where: { id: "f-avatar", avatarOfUsers: { some: {} } },
+        select: { id: true },
+      });
+    });
+
+    it("devuelve false si no es avatar", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce(null);
+
+      const result = await isAvatarFile("f-doc");
+      expect(result).toBe(false);
+    });
+  });
 });
+

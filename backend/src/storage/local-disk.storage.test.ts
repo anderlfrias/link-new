@@ -57,4 +57,35 @@ describe("LocalDiskStorage", () => {
 
     expect(url).toBe("/uploads/chat/123/foto.png");
   });
+
+  it("stat devuelve el tamaño en bytes del archivo existente", async () => {
+    const buffer = Buffer.from("Datos para stat");
+    const relativePath = "stat-test.txt";
+    await storage.save(buffer, relativePath);
+
+    const fileStat = await storage.stat(relativePath);
+    expect(fileStat.size).toBe(buffer.length);
+  });
+
+  it("createReadStream lee los bytes del archivo correctamente", async () => {
+    const buffer = Buffer.from("Stream de prueba");
+    const relativePath = "stream-test.txt";
+    await storage.save(buffer, relativePath);
+
+    const stream = await storage.createReadStream(relativePath);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    expect(Buffer.concat(chunks).toString("utf-8")).toBe("Stream de prueba");
+  });
+
+  it("getAbsolutePath devuelve la ruta absoluta y previene path traversal (S15)", async () => {
+    const safePath = storage.getAbsolutePath("chat/archivo.txt");
+    expect(safePath).toBe(path.resolve(tempDir, "chat/archivo.txt"));
+
+    expect(() => storage.getAbsolutePath("../../../etc/passwd")).toThrow("Path traversal detected");
+    await expect(storage.save(Buffer.from("x"), "../evil.txt")).rejects.toThrow("Path traversal detected");
+  });
 });
+

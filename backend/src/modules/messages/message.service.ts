@@ -57,17 +57,17 @@ function toForwardedFromPreview(
   return { id: raw.id, senderId: raw.senderId, senderName: raw.sender.name };
 }
 
-/// `StoredFile.size` es `bigint` en Prisma — sin convertir a `number` acá,
-/// tanto `res.json()` como el emit de socket.io explotan apenas un mensaje
-/// trae un adjunto (`JSON.stringify` no sabe serializar `bigint`, ver
-/// LARGE_FILES_PLAN.md §13, Riesgo 3). No reduce `file` a su forma pública
-/// (eso es `toStoredFileResponse`, ver SerializableStoredFile en
-/// message.types.ts) — a propósito, ese cambio de contrato mayor queda
-/// diferido a una fase posterior de ese plan.
+/// Reduce cada `StoredFile` a su forma pública segura (`PublicStoredFile` / `SerializableStoredFile`),
+/// transformando `size` a `number` y generando una URL firmada con HMAC (`/api/v1/files/:id/content?t=...`).
+/// Oculta `path`, `storedName`, `checksum` y `provider` de los payloads de mensajes (S12).
 function toSerializableFiles(
   files: (MessageFile & { file: StoredFile })[],
+  currentUserId?: string,
 ): (MessageFile & { file: SerializableStoredFile })[] {
-  return files.map((entry) => ({ ...entry, file: { ...entry.file, size: Number(entry.file.size) } }));
+  return files.map((entry) => ({
+    ...entry,
+    file: toStoredFileResponse(entry.file, currentUserId),
+  }));
 }
 
 function withPreviews<
@@ -76,7 +76,7 @@ function withPreviews<
     forwardedFrom: Parameters<typeof toForwardedFromPreview>[0];
     files: (MessageFile & { file: StoredFile })[];
   },
->(message: T) {
+>(message: T, currentUserId?: string) {
   // Desestructurar (en vez de spread-y-reescribir) para que TS calcule bien
   // el tipo de `rest` sin `replyTo`/`forwardedFrom`/`files` — spreadear un
   // `T` genérico y "pisar" una clave después no reemplaza su tipo de forma
@@ -86,7 +86,7 @@ function withPreviews<
     ...rest,
     replyTo: toReplyPreview(replyTo),
     forwardedFrom: toForwardedFromPreview(forwardedFrom),
-    files: toSerializableFiles(files),
+    files: toSerializableFiles(files, currentUserId),
   };
 }
 
@@ -118,12 +118,12 @@ async function notifyConversationListChanged(
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 
-async function assertOwnedMessage(conversationId: string, messageId: string): Promise<MessageWithRelations> {
+async function assertOwnedMessage(conversationId: string, messageId: string, currentUserId?: string): Promise<MessageWithRelations> {
   const message = await MessageRepository.findById(messageId);
   if (!message || message.conversationId !== conversationId) {
     throw new NotFoundError("Message not found");
   }
-  return withPreviews(message);
+  return withPreviews(message, currentUserId);
 }
 
 /// Ventanas de tiempo configurables (ver AppSettings, allowMessageEdit/
@@ -193,7 +193,7 @@ async function createAndDeliverMessage(
       status: deliveredNow.has(member.userId) ? "delivered" : "sent",
     }));
 
-  const messageWithReceipts: MessageWithReceipts = { ...withPreviews(message), receipts };
+  const messageWithReceipts: MessageWithReceipts = { ...withPreviews(message, currentUserId), receipts };
   io.to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.CREATED, messageWithReceipts);
   await notifyConversationListChanged(conversation.members, conversationId);
 
@@ -308,7 +308,7 @@ export async function listMessages(
   }
 
   return ordered.map((message) => ({
-    ...withPreviews(message),
+    ...withPreviews(message, currentUserId),
     receipts: computeReceipts(conversation.members, message),
   }));
 }
@@ -326,7 +326,7 @@ export async function listConversationFiles(
   const entries = await MessageRepository.listFiles(conversationId, { beforeId: options.beforeId, limit });
 
   return entries.map((entry) => ({
-    ...toStoredFileResponse(entry.file),
+    ...toStoredFileResponse(entry.file, currentUserId),
     messageId: entry.message.id,
     senderId: entry.message.senderId,
   }));
@@ -339,7 +339,7 @@ export async function editMessage(
   input: UpdateMessageInput,
 ): Promise<MessageWithReceipts> {
   const conversation = await assertMembership(conversationId, currentUserId);
-  const message = await assertOwnedMessage(conversationId, messageId);
+  const message = await assertOwnedMessage(conversationId, messageId, currentUserId);
 
   if (message.senderId !== currentUserId) {
     throw new ForbiddenError("You can only edit your own messages");
@@ -363,7 +363,7 @@ export async function editMessage(
   });
 
   const messageWithReceipts: MessageWithReceipts = {
-    ...withPreviews(updated),
+    ...withPreviews(updated, currentUserId),
     receipts: computeReceipts(conversation.members, updated),
   };
 
@@ -378,7 +378,7 @@ export async function editMessage(
 
 export async function deleteMessage(currentUserId: string, conversationId: string, messageId: string) {
   const conversation = await assertMembership(conversationId, currentUserId);
-  const message = await assertOwnedMessage(conversationId, messageId);
+  const message = await assertOwnedMessage(conversationId, messageId, currentUserId);
 
   const isOwnMessage = message.senderId === currentUserId;
   if (!isOwnMessage && conversation.createdById !== currentUserId) {

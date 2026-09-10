@@ -13,14 +13,68 @@ export function createStoredFile(data: {
   size: bigint;
   checksum: string;
   createdById: string;
+  provider?: FileProvider;
 }) {
   return prisma.storedFile.create({
-    data: { ...data, provider: FileProvider.LOCAL },
+    data: { ...data, provider: data.provider ?? FileProvider.LOCAL },
   });
 }
 
 export function findActiveById(id: string) {
   return prisma.storedFile.findFirst({ where: { id, deletedAt: null } });
+}
+
+/// Evalúa en una sola consulta si el usuario tiene acceso a este archivo según §5.4:
+/// 1. Creador/uploader
+/// 2. Avatar de cualquier usuario (visibles en toda la instalación)
+/// 3. Imagen de grupo de una conversación donde el usuario es miembro
+/// 4. Adjunto en un mensaje de una conversación donde el usuario es miembro
+export async function checkUserFileAccess(userId: string, fileId: string): Promise<boolean> {
+  const match = await prisma.storedFile.findFirst({
+    where: {
+      id: fileId,
+      OR: [
+        { createdById: userId },
+        { avatarOfUsers: { some: {} } },
+        {
+          imageOfConversations: {
+            some: {
+              members: {
+                some: { userId },
+              },
+            },
+          },
+        },
+        {
+          messageFiles: {
+            some: {
+              message: {
+                conversation: {
+                  members: {
+                    some: { userId },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  return match !== null;
+}
+
+/// Verifica si el archivo es un avatar de usuario (público a toda la app).
+export async function isAvatarFile(fileId: string): Promise<boolean> {
+  const match = await prisma.storedFile.findFirst({
+    where: {
+      id: fileId,
+      avatarOfUsers: { some: {} },
+    },
+    select: { id: true },
+  });
+  return match !== null;
 }
 
 /// Borrado lógico únicamente — igual que `Conversation`/`Message` en el resto

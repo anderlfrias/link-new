@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconDotsVertical, IconLoader2 } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { getAvatarUrl } from "@/utils/file-url";
 import type { ConversationMember } from "@/features/conversations/types/conversation.types";
 
 interface GroupMemberRowProps {
@@ -45,7 +45,7 @@ export function GroupMemberRow({
     <div className="flex items-center gap-3 px-1 py-2">
       <Avatar
         name={member.user.name}
-        imageUrl={member.user.avatarFile ? buildStoredFileUrl(member.user.avatarFile.path) : null}
+        imageUrl={getAvatarUrl(member.user)}
         size="md"
       />
       <div className="min-w-0 flex-1">

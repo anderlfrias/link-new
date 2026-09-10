@@ -9,10 +9,18 @@ export interface SavedFile {
   size: number;
 }
 
+export interface StorageFileStats {
+  size: number;
+}
+
 export interface StorageProvider {
   save(buffer: Buffer, relativePath: string): Promise<SavedFile>;
   delete(relativePath: string): Promise<void>;
   /// Construye la URL pública a partir de la ruta relativa. Solo este método
   /// sabe cómo se sirve un archivo (estático en disco, bucket firmado, CDN, ...).
   getPublicUrl(relativePath: string): string;
+  /// Crea un stream de lectura para servir o migrar contenido sin cargarlo entero en RAM.
+  createReadStream(relativePath: string, options?: { start?: number; end?: number }): Promise<NodeJS.ReadableStream>;
+  /// Obtiene metadatos físicos del archivo (tamaño en bytes).
+  stat(relativePath: string): Promise<StorageFileStats>;
 }

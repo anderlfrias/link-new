@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import env from "../../config/env";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
-import { storage } from "../../storage";
+import { getWriteProvider, storage } from "../../storage";
 import { BadRequestError, ForbiddenError, ServiceUnavailableError } from "../../utils/errors";
 import * as SettingsService from "../settings/settings.service";
 import { toStoredFileResponse } from "../files/file.service";
@@ -209,7 +209,8 @@ export async function importGiphyAsset(
   const now = new Date();
   const relativeDir = `giphy/${kind}/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const saved = await storage.save(buffer, `${relativeDir}/${storedName}`);
+  const { provider, storage: writeStorage } = getWriteProvider();
+  const saved = await writeStorage.save(buffer, `${relativeDir}/${storedName}`);
   const file = await FileRepository.createStoredFile({
     originalName: `${kind === "stickers" ? "sticker" : "gif"}-${giphyId}.${extension}`,
     storedName,
@@ -219,7 +220,8 @@ export async function importGiphyAsset(
     size: BigInt(saved.size),
     checksum,
     createdById: currentUserId,
+    provider,
   });
 
-  return toStoredFileResponse(file);
+  return toStoredFileResponse(file, currentUserId);
 }

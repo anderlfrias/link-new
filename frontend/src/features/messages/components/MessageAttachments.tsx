@@ -4,7 +4,7 @@ import { IconDownload, IconFileOff } from "@tabler/icons-react";
 import { FileTypeIcon } from "@/features/files/components/FileTypeIcon";
 import { VoiceNotePlayer } from "@/features/messages/components/VoiceNotePlayer";
 import { useImageLightbox } from "@/features/messages/providers/image-lightbox-provider";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { resolveFileUrl } from "@/utils/file-url";
 import { downloadFile } from "@/utils/download-file";
 import { formatFileSize, isAudioMimeType, isImageMimeType } from "@/utils/file-format";
 import { cn } from "@/utils/cn";
@@ -50,7 +50,7 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
           );
         }
 
-        const url = buildStoredFileUrl(file.path);
+        const url = resolveFileUrl(file);
 
         if (isImageMimeType(file.mimeType)) {
           return (

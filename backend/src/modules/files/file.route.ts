@@ -1,4 +1,5 @@
 import { Router } from "express";
+import helmet from "helmet";
 import multer from "multer";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { authenticate, requireRoles } from "../../middlewares/auth.middleware";
@@ -34,6 +35,14 @@ const upload = multer({
 });
 
 const router = Router();
+
+// Ruta de contenido autorizada por HMAC o Bearer (§4.5).
+// Va ANTES de authenticate global porque etiquetas <img>/<audio> no envían headers.
+router.get(
+  "/:id/content",
+  helmet.crossOriginResourcePolicy({ policy: "cross-origin" }),
+  FileController.getContent,
+);
 
 router.use(authenticate, attachInternalUser);
 

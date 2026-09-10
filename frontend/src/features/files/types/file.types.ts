@@ -9,22 +9,27 @@ export interface UploadedFile {
   mimeType: string;
   extension: string;
   size: number;
-  /** Relativa al host del backend, ej. "/uploads/chat/....jpg". */
+  /** Relativa al host del backend, ej. "/api/v1/files/:id/content?t=...". */
   url: string;
   createdAt: string;
 }
 
-/** Forma de `files[].file` embebida dentro de un mensaje (ver message.types.ts). */
+/** Forma pública de `files[].file` embebida dentro de un mensaje (ver message.types.ts) — LARGE_FILES_PLAN.md Fase 2 (§5.2, S12). */
 export interface StoredFile {
   id: string;
   originalName: string;
   mimeType: string;
-  path: string;
   extension: string;
   size: number;
-  provider: FileProvider;
-  checksum: string | null;
-  createdById: string;
+  url: string;
   createdAt: string;
   deletedAt: string | null;
+  /** @deprecated Ruta interna eliminada en Fase 2 (S12). Conservada opcional para compatibilidad transitoria. */
+  path?: string;
+  /** @deprecated Proveedor interno eliminado en Fase 2 (S12). */
+  provider?: FileProvider;
+  /** @deprecated Checksum interno eliminado en Fase 2 (S12). */
+  checksum?: string | null;
+  /** @deprecated Creador eliminado en Fase 2 (S12). */
+  createdById?: string;
 }

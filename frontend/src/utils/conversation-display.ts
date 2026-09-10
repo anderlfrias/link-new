@@ -3,7 +3,7 @@ import type {
   ConversationMember,
   ConversationListItem,
 } from "@/features/conversations/types/conversation.types";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { getAvatarUrl } from "@/utils/file-url";
 
 export function getOtherMembers(conversation: Conversation, currentUserId: string): ConversationMember[] {
   return conversation.members.filter((member) => member.userId !== currentUserId);
@@ -27,13 +27,13 @@ export function getConversationDisplayName(conversation: Conversation, currentUs
  * a las iniciales de "Mensajes guardados". PRIVATE: foto del otro miembro. */
 export function getConversationAvatarUrl(conversation: Conversation, currentUserId: string): string | null {
   if (conversation.type === "GROUP") {
-    return conversation.imageFile ? buildStoredFileUrl(conversation.imageFile.path) : null;
+    return getAvatarUrl({ imageFileId: conversation.imageFileId, imageFile: conversation.imageFile });
   }
   if (conversation.type === "SELF") {
     return null;
   }
   const other = getOtherMembers(conversation, currentUserId)[0];
-  return other?.user.avatarFile ? buildStoredFileUrl(other.user.avatarFile.path) : null;
+  return other ? getAvatarUrl(other.user) : null;
 }
 
 /**

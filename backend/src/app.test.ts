@@ -9,6 +9,10 @@ vi.mock("web-push", () => ({
   WebPushError: class WebPushError extends Error {},
 }));
 
+vi.mock("./modules/files/file.repository", () => ({
+  findActiveById: vi.fn().mockResolvedValue(null),
+}));
+
 import app from "./app";
 
 describe("app smoke test", () => {
@@ -23,8 +27,8 @@ describe("app smoke test", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /uploads/<file> contains 'Cross-Origin-Resource-Policy: cross-origin' header", async () => {
-    const res = await request(app).get("/uploads/non-existent-test-file.png");
+  it("GET /api/v1/files/:id/content contains 'Cross-Origin-Resource-Policy: cross-origin' header", async () => {
+    const res = await request(app).get("/api/v1/files/non-existent-test-file/content");
     expect(res.headers["cross-origin-resource-policy"]).toBe("cross-origin");
   });
 });

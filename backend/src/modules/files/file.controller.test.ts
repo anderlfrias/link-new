@@ -69,8 +69,11 @@ describe("file.controller", () => {
   });
 
   describe("getById", () => {
-    it("responde con el archivo solicitado", async () => {
-      const req = createMockRequest({ params: { id: "f-1" } });
+    it("responde con el archivo solicitado pasando usuario y roles", async () => {
+      const req = createMockRequest({
+        user: { ...mockUser, roles: ["admin"] } as any,
+        params: { id: "f-1" },
+      });
       const res = createMockResponse();
       const next = createMockNext();
 
@@ -78,7 +81,7 @@ describe("file.controller", () => {
 
       await getById(req, res, next);
 
-      expect(FileService.getFile).toHaveBeenCalledWith("f-1");
+      expect(FileService.getFile).toHaveBeenCalledWith("f-1", "u-internal-1", ["admin"]);
       expect(res.json).toHaveBeenCalledWith({ id: "f-1" });
     });
   });

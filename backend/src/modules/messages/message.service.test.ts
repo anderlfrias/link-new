@@ -285,6 +285,52 @@ describe("message.service", () => {
       expect(result[0].id).toBe("m-1");
       expect(result[1].id).toBe("m-2");
     });
+
+    it("reduce adjuntos al shape público (PublicStoredFile) sin filtrar rutas internas ni checksum (S12)", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsgWithFile = buildMockMessage({
+        id: "m-file",
+        files: [
+          {
+            id: "mf-1",
+            messageId: "m-file",
+            fileId: "f-1",
+            file: {
+              id: "f-1",
+              originalName: "reporte.pdf",
+              storedName: "secret-uuid.pdf",
+              mimeType: "application/pdf",
+              extension: "pdf",
+              size: 2048n,
+              path: "2026/09/secret-uuid.pdf",
+              checksum: "sha256-hash",
+              provider: "LOCAL",
+              createdById: "u-1",
+              createdAt: new Date(),
+              deletedAt: null,
+            },
+          },
+        ],
+      });
+      vi.mocked(MessageRepository.listMessages).mockResolvedValue([mockMsgWithFile] as any);
+
+      const result = await listMessages("u-1", "conv-1", { limit: 10 });
+
+      expect(result).toHaveLength(1);
+      const file = result[0].files[0].file as any;
+      expect(file.id).toBe("f-1");
+      expect(file.originalName).toBe("reporte.pdf");
+      expect(file.size).toBe(2048);
+      expect(file.url).toMatch(/^\/api\/v1\/files\/f-1\/content\?t=.+/);
+      expect(file.deletedAt).toBeNull();
+      // Verificamos que NO se expongan campos internos (§5.2, S12)
+      expect(file.path).toBeUndefined();
+      expect(file.storedName).toBeUndefined();
+      expect(file.checksum).toBeUndefined();
+      expect(file.provider).toBeUndefined();
+    });
   });
 
   describe("listConversationFiles", () => {

@@ -18,7 +18,7 @@ import { ContactRow } from "@/features/users/components/ContactRow";
 import { useUsers } from "@/features/users/hooks/use-users";
 import { useStartConversation } from "@/features/conversations/hooks/use-start-conversation";
 import { useCreateGroup } from "@/features/conversations/hooks/use-create-group";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { getAvatarUrl } from "@/utils/file-url";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
 
 interface NewChatModalProps {
@@ -270,7 +270,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
                 <div key={user.id} className="flex w-16 flex-col items-center gap-1">
                   <Avatar
                     name={user.name}
-                    imageUrl={user.avatarFile ? buildStoredFileUrl(user.avatarFile.path) : null}
+                    imageUrl={getAvatarUrl(user)}
                     size="md"
                   />
                   <p className="w-full truncate text-center text-xs text-neutral-500 dark:text-neutral-400">

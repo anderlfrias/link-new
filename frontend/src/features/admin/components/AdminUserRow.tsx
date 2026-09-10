@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar } from "@/components/ui/Avatar";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { getAvatarUrl } from "@/utils/file-url";
 import { formatFileSize } from "@/utils/file-format";
 import type { AdminUserListItem } from "@/features/admin/types/admin-users.types";
 
@@ -14,7 +14,7 @@ export function AdminUserRow({ user }: AdminUserRowProps) {
     <div className="flex items-center gap-3 border-b border-black/5 px-1 py-2.5 last:border-0 dark:border-white/10">
       <Avatar
         name={user.name}
-        imageUrl={user.avatarFile ? buildStoredFileUrl(user.avatarFile.path) : null}
+        imageUrl={getAvatarUrl(user)}
         size="md"
       />
       <div className="min-w-0 flex-1">

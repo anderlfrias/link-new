@@ -16,7 +16,7 @@ import { useMessageGestures } from "@/features/messages/hooks/use-message-gestur
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { aggregateMessageStatus } from "@/utils/message-status";
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { resolveFileUrl } from "@/utils/file-url";
 import { copyImageToClipboard, copyTextToClipboard } from "@/utils/clipboard";
 import { isImageMimeType } from "@/utils/file-format";
 import { FormattedMessageText } from "@/features/messages/components/FormattedMessageText";
@@ -164,11 +164,11 @@ export function MessageBubble({
 
   function getTargetImageUrl(): string | null {
     if (contextImageUrl) return contextImageUrl;
-    if (isSticker && message.files[0]?.file?.path) {
-      return buildStoredFileUrl(message.files[0].file.path);
+    if (isSticker && message.files[0]?.file) {
+      return resolveFileUrl(message.files[0].file);
     }
-    if (imageFiles.length > 0 && imageFiles[0]?.file?.path) {
-      return buildStoredFileUrl(imageFiles[0].file.path);
+    if (imageFiles.length > 0 && imageFiles[0]?.file) {
+      return resolveFileUrl(imageFiles[0].file);
     }
     return null;
   }
@@ -384,7 +384,7 @@ export function MessageBubble({
           <div className={cn("flex flex-col gap-1", renderAsOwn ? "items-end" : "items-start")}>
             {/* eslint-disable-next-line @next/next/no-img-element -- tamaño intrínseco de sticker, no una foto de ancho completo */}
             <img
-              src={buildStoredFileUrl(message.files[0].file.path)}
+              src={resolveFileUrl(message.files[0].file)}
               alt="Sticker"
               className="h-36 w-36 object-contain"
             />

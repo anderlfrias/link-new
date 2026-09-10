@@ -2,7 +2,7 @@
 
 import { IconCheck } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
-import { buildStoredFileUrl } from "@/utils/file-url";
+import { getAvatarUrl } from "@/utils/file-url";
 import { cn } from "@/utils/cn";
 import type { DirectoryUser } from "@/features/users/types/user.types";
 
@@ -24,7 +24,7 @@ export function ContactRow({ user, onClick, disabled, selected }: ContactRowProp
     >
       <Avatar
         name={user.name}
-        imageUrl={user.avatarFile ? buildStoredFileUrl(user.avatarFile.path) : null}
+        imageUrl={getAvatarUrl(user)}
         size="lg"
       />
       <div className="min-w-0 flex-1">

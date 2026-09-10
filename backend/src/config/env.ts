@@ -25,6 +25,9 @@ const schema = yup.object({
   // giphy.service.ts) — así activar/desactivar Giphy no exige coordinar un
   // restart con esta variable siempre presente.
   GIPHY_API_KEY: yup.string().optional(),
+  // Secreto para firmar tokens HMAC en URLs de archivos (/v1/files/:id/content?t=...).
+  // Si no se define, se utiliza EXTERNAL_AUTH_JWT_SECRET como fallback seguro.
+  FILE_URL_SIGNING_SECRET: yup.string().optional(),
 });
 
 let env: yup.InferType<typeof schema>;
