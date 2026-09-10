@@ -7,7 +7,13 @@ const schema = yup.object({
   EXTERNAL_AUTH_API_URL: yup.string().url().required(),
   APP_CODE_EXTERNAL_AUTH: yup.string().required(),
   EXTERNAL_AUTH_JWT_SECRET: yup.string().required(),
-  MAX_UPLOAD_SIZE_MB: yup.number().default(25),
+  // Solo semilla de AppSettings.maxUploadSizeMb en el primer arranque (ver
+  // settings.repository.ts#getOrCreate) — después la fila en la base manda.
+  // 2048 (antes 25): techo que un admin puede habilitar una vez completado
+  // el upload chunked de LARGE_FILES_PLAN.md. El camino directo de hoy
+  // (`POST /v1/files`) sigue tope-ado por `ABSOLUTE_MAX_UPLOAD_BYTES` (32 MB,
+  // ver file.route.ts) hasta esa fase, sin importar este valor.
+  MAX_UPLOAD_SIZE_MB: yup.number().default(2048),
   VAPID_PUBLIC_KEY: yup.string().required(),
   VAPID_PRIVATE_KEY: yup.string().required(),
   VAPID_SUBJECT: yup.string().required(),

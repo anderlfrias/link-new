@@ -86,9 +86,11 @@ describe("user.service", () => {
       vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue(mockRows as any);
       vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(2);
 
-      // u-1 has storage, u-2 has none
+      // u-1 has storage, u-2 has none. _sum.size es bigint en Prisma
+      // (StoredFile.size, ver schema.prisma) — un mock number acá no
+      // detectaría si listUsersForAdmin se olvida de convertir con Number().
       vi.mocked(UserRepository.sumStorageForUsers).mockResolvedValue([
-        { createdById: "u-1", _count: 4, _sum: { size: 1048576 } },
+        { createdById: "u-1", _count: 4, _sum: { size: 1048576n } },
       ] as any);
 
       // u-1 is admin in 1 group, u-2 in 0 groups

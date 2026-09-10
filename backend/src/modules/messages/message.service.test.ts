@@ -131,11 +131,19 @@ describe("message.service", () => {
       const mockCreated = buildMockMessage({
         type: MessageType.STICKER,
         content: "",
-        files: [{ fileId: "file-sticker" }],
+        files: [
+          {
+            id: "mf-1",
+            fileId: "file-sticker",
+            messageId: "msg-1",
+            createdAt: new Date(),
+            file: { id: "file-sticker", size: 4096n, path: "chat/sticker.gif" },
+          },
+        ],
       });
       vi.mocked(MessageRepository.createMessage).mockResolvedValue(mockCreated as any);
 
-      await sendMessage("u-1", "conv-1", {
+      const result = await sendMessage("u-1", "conv-1", {
         content: "",
         fileIds: ["file-sticker"],
         type: "STICKER",
@@ -147,6 +155,12 @@ describe("message.service", () => {
           fileIds: ["file-sticker"],
         }),
       );
+      // LARGE_FILES_PLAN.md §13, Riesgo 3: StoredFile.size es bigint en
+      // Prisma — withPreviews debe convertirlo a number antes de que este
+      // mensaje se emita por socket.io o se responda por HTTP, o ambos
+      // explotan en cuanto el mensaje trae un adjunto.
+      expect(result.files[0].file.size).toBe(4096);
+      expect(() => JSON.stringify(result)).not.toThrow();
     });
 
     it("rechaza si replyToId no existe en la conversación", async () => {
@@ -284,7 +298,10 @@ describe("message.service", () => {
             path: "uploads/f-1.pdf",
             originalName: "doc.pdf",
             mimeType: "application/pdf",
-            sizeBytes: 1024,
+            // bigint: StoredFile.size real en Prisma (ver schema.prisma) —
+            // listConversationFiles pasa por toStoredFileResponse, que debe
+            // convertirlo a number.
+            size: 1024n,
             createdAt: new Date(),
           },
           message: { id: "m-1", senderId: "u-1", createdAt: new Date() },
@@ -298,6 +315,7 @@ describe("message.service", () => {
       expect(files[0].id).toBe("f-1");
       expect(files[0].messageId).toBe("m-1");
       expect(files[0].senderId).toBe("u-1");
+      expect(files[0].size).toBe(1024);
     });
   });
 

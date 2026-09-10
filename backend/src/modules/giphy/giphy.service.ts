@@ -216,7 +216,7 @@ export async function importGiphyAsset(
     path: saved.path,
     mimeType,
     extension,
-    size: saved.size,
+    size: BigInt(saved.size),
     checksum,
     createdById: currentUserId,
   });

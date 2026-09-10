@@ -3,6 +3,7 @@ import multer from "multer";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { authenticate, requireRoles } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
+import { uploadRateLimiter } from "../../middlewares/rate-limit.middleware";
 import * as FileController from "./file.controller";
 
 // memoryStorage: el StorageProvider (src/storage) trabaja siempre con buffers,
@@ -17,7 +18,15 @@ import * as FileController from "./file.controller";
 // por request. Este `fileSize` es solo un techo de seguridad fijo, para no
 // dejar que multer bufferee en memoria un body absurdamente grande antes de
 // que corra cualquier código de aplicación — no lo edita un admin.
-const ABSOLUTE_MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+//
+// 32 MB (antes 500 MB): con 500 MB, una sola subida grande alcanzaba (y
+// superaba) el `max_memory_restart: "500M"` de PM2 (ver ecosystem.config.js)
+// y reiniciaba el backend entero — bug activo, ver LARGE_FILES_PLAN.md B2.
+// Este camino directo queda pensado para adjuntos chicos/medianos; archivos
+// más grandes esperan el upload chunked de una fase posterior de ese plan —
+// hasta entonces, `AppSettings.maxUploadSizeMb` puede declarar un techo
+// mayor sin que este camino pueda entregarlo: multer corta acá primero.
+const ABSOLUTE_MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -28,7 +37,7 @@ const router = Router();
 
 router.use(authenticate, attachInternalUser);
 
-router.post("/", upload.single("file"), FileController.upload);
+router.post("/", uploadRateLimiter, upload.single("file"), FileController.upload);
 router.get("/:id", FileController.getById);
 router.delete("/:id", FileController.remove);
 

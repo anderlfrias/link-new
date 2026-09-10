@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { loginIpRateLimiter, loginUserRateLimiter } from "./rate-limit.middleware";
+import { loginIpRateLimiter, loginUserRateLimiter, uploadRateLimiter } from "./rate-limit.middleware";
 
 const TOO_MANY_ATTEMPTS_BODY = {
   error: "Hiciste demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar.",
@@ -123,4 +123,74 @@ describe("loginIpRateLimiter", () => {
     const blocked = await request(app).post("/login").send({});
     expect(blocked.status).toBe(429);
   });
+});
+
+// A diferencia de buildApp(...) de arriba, este inyecta req.user a partir de
+// un header que solo el test controla (no hay JWT real acá) y responde 201:
+// uploadRateLimiter NO usa skipSuccessfulRequests (ver rate-limit.middleware.ts),
+// así que hay que probar que un 2xx también gasta cupo, no solo los fallos.
+function buildUploadApp() {
+  const app = express();
+  app.use((req, _res, next) => {
+    const userId = req.headers["x-test-user-id"];
+    if (typeof userId === "string") {
+      req.user = { id: "ext", email: "u@test.com", roles: [], internalUserId: userId } as any;
+    }
+    next();
+  });
+  app.use(uploadRateLimiter);
+  app.post("/upload", (_req, res) => res.status(201).json({ ok: true }));
+  return app;
+}
+
+describe("uploadRateLimiter", () => {
+  it("permite 60 subidas por usuario y bloquea la 61ra con el mensaje esperado", async () => {
+    const app = buildUploadApp();
+    const userId = uniqueKey("upload-user");
+
+    for (let i = 0; i < 60; i++) {
+      const res = await request(app).post("/upload").set("x-test-user-id", userId);
+      expect(res.status).toBe(201);
+    }
+
+    const blocked = await request(app).post("/upload").set("x-test-user-id", userId);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({
+      error: "Hiciste demasiadas subidas de archivos. Esperá unos minutos y volvé a intentar.",
+    });
+  }, 20000);
+
+  it("dos usuarios distintos tienen cupos independientes", async () => {
+    const app = buildUploadApp();
+    const userA = uniqueKey("upload-a");
+    const userB = uniqueKey("upload-b");
+
+    for (let i = 0; i < 60; i++) {
+      await request(app).post("/upload").set("x-test-user-id", userA);
+    }
+
+    const res = await request(app).post("/upload").set("x-test-user-id", userB);
+    expect(res.status).toBe(201);
+  }, 20000);
+
+  it("las subidas exitosas SÍ gastan cupo (a diferencia de los limiters de login)", async () => {
+    const app = buildUploadApp();
+    const userId = uniqueKey("upload-counts-success");
+
+    const first = await request(app).post("/upload").set("x-test-user-id", userId);
+    expect(first.status).toBe(201);
+    expect(first.headers["ratelimit-remaining"]).toBe("59");
+  });
+
+  it("sin usuario autenticado cae al fallback de IP y sigue limitando", async () => {
+    const app = buildUploadApp();
+
+    for (let i = 0; i < 60; i++) {
+      const res = await request(app).post("/upload");
+      expect(res.status).toBe(201);
+    }
+
+    const blocked = await request(app).post("/upload");
+    expect(blocked.status).toBe(429);
+  }, 20000);
 });

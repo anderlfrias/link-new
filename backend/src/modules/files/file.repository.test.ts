@@ -37,7 +37,7 @@ describe("file.repository", () => {
         path: "chat/123/uuid.png",
         mimeType: "image/png",
         extension: "png",
-        size: 100,
+        size: 100n,
         checksum: "abc",
         createdById: "u-1",
       };
@@ -47,6 +47,30 @@ describe("file.repository", () => {
       expect(prisma.storedFile.create).toHaveBeenCalledWith({
         data: { ...data, provider: FileProvider.LOCAL },
       });
+    });
+
+    it("acepta un size mayor a 2^31 bytes (2 GiB+) sin desbordar", async () => {
+      vi.mocked(prisma.storedFile.create).mockResolvedValue({ id: "f-large" } as any);
+
+      // 3 GiB en bytes: desborda un int4 (max ~2.147 GB) pero no un bigint.
+      const threeGib = 3n * 1024n ** 3n;
+      const data = {
+        originalName: "video.mp4",
+        storedName: "uuid.mp4",
+        path: "chat/123/uuid.mp4",
+        mimeType: "video/mp4",
+        extension: "mp4",
+        size: threeGib,
+        checksum: "def",
+        createdById: "u-1",
+      };
+
+      await createStoredFile(data);
+
+      expect(prisma.storedFile.create).toHaveBeenCalledWith({
+        data: { ...data, provider: FileProvider.LOCAL },
+      });
+      expect(vi.mocked(prisma.storedFile.create).mock.calls[0][0].data.size).toBe(threeGib);
     });
   });
 

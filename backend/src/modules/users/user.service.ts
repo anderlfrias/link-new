@@ -42,7 +42,9 @@ export async function listUsersForAdmin(
   const storageByUser = new Map(
     storageRows
       .filter((row): row is typeof row & { createdById: string } => row.createdById !== null)
-      .map((row) => [row.createdById, { fileCount: row._count, totalSize: row._sum.size ?? 0 }]),
+      // row._sum.size es bigint | null (StoredFile.size, ver schema.prisma) —
+      // sin convertir, JSON.stringify explota al responder el panel admin.
+      .map((row) => [row.createdById, { fileCount: row._count, totalSize: Number(row._sum.size ?? 0) }]),
   );
   const groupAdminByUser = new Map(groupAdminRows.map((row) => [row.userId, row._count]));
 

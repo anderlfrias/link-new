@@ -58,3 +58,24 @@ export const loginUserRateLimiter = rateLimit({
   },
   message: TOO_MANY_ATTEMPTS_MESSAGE,
 });
+
+// Antes de que exista el upload chunked (ver LARGE_FILES_PLAN.md, Fase 4+),
+// este es el único freno contra un usuario autenticado que abre muchas
+// subidas seguidas para agotar memoria/disco (ese plan, S5 y S14) — hasta
+// ahora `POST /v1/files` no tenía ningún límite propio, solo el techo fijo
+// de tamaño de multer (`file.route.ts`). Por usuario (`internalUserId`), no
+// por IP: varias personas subiendo desde la misma oficina/CGNAT no deben
+// compartir un único cupo (mismo razonamiento que `loginUserRateLimiter`
+// arriba). A diferencia de los limiters de login, NO usa
+// `skipSuccessfulRequests`: acá una subida exitosa es exactamente el costo
+// de recurso (memoria/disco) que se quiere acotar, así que también gasta
+// cupo, no solo los fallos.
+export const uploadRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+  message: { error: "Hiciste demasiadas subidas de archivos. Esperá unos minutos y volvé a intentar." },
+});

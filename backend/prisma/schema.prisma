@@ -83,12 +83,17 @@ enum ChatAuditAction {
   @@map("chat_audit_action")
 }
 
-/// Proveedor de almacenamiento físico donde vive un `StoredFile`.
-/// Preparado para incorporar más adelante MINIO, S3, R2, etc. sin cambiar
-/// el modelo `StoredFile`: solo se agregarían nuevos valores a este enum.
+/// Proveedor de almacenamiento físico donde vive un `StoredFile`. Es el
+/// marcador que permite convivir archivos en distintos proveedores a la vez
+/// durante una migración gradual (ver LARGE_FILES_PLAN.md).
 enum FileProvider {
   /// Disco local del servidor (ver `src/storage`).
   LOCAL @map("local")
+  /// Cualquier storage compatible con la API S3 (SeaweedFS hoy, ver
+  /// LARGE_FILES_PLAN.md). Declarado antes de que exista `S3Storage` en
+  /// `src/storage` — hasta esa fase, ningún `StoredFile` se crea con este
+  /// valor todavía.
+  S3    @map("s3")
 
   @@map("file_provider")
 }
@@ -364,8 +369,14 @@ model StoredFile {
   path         String
   mimeType     String @map("mime_type")
   extension    String
-  /// Tamaño del archivo en bytes.
-  size         Int
+  /// Tamaño del archivo en bytes. `BigInt` porque `Int` (`int4`, máx.
+  /// ~2.147 GB) desborda con un solo archivo de 2 GiB — ver
+  /// LARGE_FILES_PLAN.md §5.1. La API pública lo sigue exponiendo como
+  /// `number` (`toStoredFileResponse`, `Number.MAX_SAFE_INTEGER` son ~9 PB,
+  /// sobra de sobra) — el tipo nativo `bigint` solo importa puertas adentro
+  /// del backend, y toda lectura de este campo antes de serializar a JSON o
+  /// emitir por socket.io debe convertirlo con `Number(...)` primero.
+  size         BigInt
 
   /// Proveedor de almacenamiento donde vive físicamente el archivo.
   provider FileProvider
@@ -386,6 +397,11 @@ model StoredFile {
   messageFiles         MessageFile[]
 
   @@index([createdById])
+  /// Barrido futuro de huérfanos/soft-deleted (ver LARGE_FILES_PLAN.md §5.5) —
+  /// sin este índice, ese filtro hace full scan de la tabla.
+  @@index([deletedAt])
+  /// `listFilesForAdmin` ordena por esta columna (ver file.repository.ts).
+  @@index([createdAt])
   @@map("stored_files")
 }
 

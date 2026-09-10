@@ -314,6 +314,9 @@ describe("giphy.service", () => {
           mimeType: "image/gif",
           extension: "gif",
           createdById: "u-1",
+          // FileRepository.createStoredFile espera bigint (StoredFile.size
+          // en Prisma) — importGiphyAsset debe convertir el number de storage.save().
+          size: BigInt(gifBuffer.length),
         }),
       );
       expect(result.id).toBe("file-giphy-1");

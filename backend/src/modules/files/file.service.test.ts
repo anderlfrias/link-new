@@ -44,7 +44,7 @@ function buildMockStoredFile(overrides: any = {}) {
     path: "chat/conv-1/2026/03/stored-uuid.pdf",
     mimeType: "application/pdf",
     extension: "pdf",
-    size: 2048,
+    size: 2048n,
     checksum: "hash123",
     createdById: "u-uploader",
     createdAt: new Date("2026-03-01T12:00:00Z"),
@@ -75,6 +75,20 @@ describe("file.service", () => {
         createdAt: file.createdAt,
       });
       expect(storage.getPublicUrl).toHaveBeenCalledWith(file.path);
+    });
+
+    // LARGE_FILES_PLAN.md §5.1/§13 (Riesgo 3): StoredFile.size es bigint en
+    // Prisma desde la migración a soportar archivos >= 2 GiB — un size que
+    // desbordaría el int4 anterior (max ~2.147 GB) debe serializar como
+    // number (JSON) sin explotar ni perder precisión.
+    it("serializa un size de 3 GiB (bigint) a number sin desbordar ni explotar", () => {
+      const threeGib = 3n * 1024n ** 3n;
+      const file = buildMockStoredFile({ size: threeGib });
+
+      const response = toStoredFileResponse(file as any);
+
+      expect(response.size).toBe(Number(threeGib));
+      expect(() => JSON.stringify(response)).not.toThrow();
     });
   });
 
@@ -224,6 +238,9 @@ describe("file.service", () => {
           originalName: "reporte.pdf",
           extension: "pdf",
           createdById: "u-1",
+          // FileRepository.createStoredFile espera bigint (StoredFile.size
+          // en Prisma) — uploadFile debe convertir el number de storage.save().
+          size: BigInt(pdfUpload.buffer.length),
         }),
       );
       expect(result.id).toBe(mockSaved.id);
@@ -274,6 +291,7 @@ describe("file.service", () => {
           originalName: "avatar.png",
           createdById: "u-1",
           mimeType: "image/png",
+          size: BigInt(buffer.length),
         }),
       );
       expect(result.id).toBe("file-1");
@@ -320,7 +338,7 @@ describe("file.service", () => {
       vi.mocked(FileRepository.listFilesForAdmin).mockResolvedValue(mockRows as any);
       vi.mocked(FileRepository.aggregateFilesForAdmin).mockResolvedValue({
         _count: 1,
-        _sum: { size: 2048 },
+        _sum: { size: 2048n },
       } as any);
 
       const result = await listFilesForAdmin({}, { limit: 10 });
@@ -333,6 +351,35 @@ describe("file.service", () => {
         groupImageOfConversationCount: 0,
         messageAttachmentCount: 2,
       });
+    });
+
+    // LARGE_FILES_PLAN.md §5.1: _sum.size vuelve bigint | null con la
+    // migración — el punto de la Fase 1 "más fácil de olvidar" (ver §13,
+    // Riesgo 3): sin Number(...), JSON.stringify explota al responder.
+    it("serializa totalSize sin explotar cuando el agregado supera 2^31 bytes", async () => {
+      vi.mocked(FileRepository.listFilesForAdmin).mockResolvedValue([]);
+      const bigTotal = 5n * 1024n ** 3n; // 5 GiB
+      vi.mocked(FileRepository.aggregateFilesForAdmin).mockResolvedValue({
+        _count: 2,
+        _sum: { size: bigTotal },
+      } as any);
+
+      const result = await listFilesForAdmin({}, { limit: 10 });
+
+      expect(result.totalSize).toBe(Number(bigTotal));
+      expect(() => JSON.stringify(result)).not.toThrow();
+    });
+
+    it("totalSize es 0 cuando el agregado no tiene archivos (_sum.size null)", async () => {
+      vi.mocked(FileRepository.listFilesForAdmin).mockResolvedValue([]);
+      vi.mocked(FileRepository.aggregateFilesForAdmin).mockResolvedValue({
+        _count: 0,
+        _sum: { size: null },
+      } as any);
+
+      const result = await listFilesForAdmin({}, { limit: 10 });
+
+      expect(result.totalSize).toBe(0);
     });
   });
 

@@ -8,7 +8,9 @@ export function createStoredFile(data: {
   path: string;
   mimeType: string;
   extension: string;
-  size: number;
+  /// `bigint` porque `StoredFile.size` lo es en Prisma (ver schema.prisma) —
+  /// el caller convierte desde el `number` que devuelve `storage.save()`.
+  size: bigint;
   checksum: string;
   createdById: string;
 }) {

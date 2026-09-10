@@ -87,9 +87,20 @@ export interface ForwardedFromPreview {
   senderName: string;
 }
 
+/// `StoredFile` tal como queda embebido en un mensaje después de
+/// `withPreviews` (message.service.ts): misma forma cruda (SÍ incluye
+/// `path`/`storedName`/`checksum`/`provider` — reducirla a la forma pública,
+/// como ya hace `toStoredFileResponse`, es un cambio de contrato mayor,
+/// deliberadamente diferido a una fase posterior de LARGE_FILES_PLAN.md),
+/// pero con `size` ya convertido de `bigint` (tipo real de `StoredFile.size`
+/// en Prisma) a `number`: ni `JSON.stringify` ni el serializador de
+/// socket.io saben serializar un `bigint`, así que dejarlo crudo rompe
+/// CUALQUIER mensaje con un adjunto apenas se emite o se responde por HTTP.
+export type SerializableStoredFile = Omit<StoredFile, "size"> & { size: number };
+
 export type MessageWithRelations = Message & {
   sender: Pick<User, "id" | "name" | "email" | "avatarFileId">;
-  files: (MessageFile & { file: StoredFile })[];
+  files: (MessageFile & { file: SerializableStoredFile })[];
   replyTo: MessageReplyPreview | null;
   forwardedFrom: ForwardedFromPreview | null;
 };

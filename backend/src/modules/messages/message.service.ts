@@ -1,4 +1,4 @@
-import { ChatAuditAction, ConversationType, MessageType } from "@prisma/client";
+import { ChatAuditAction, ConversationType, MessageFile, MessageType, StoredFile } from "@prisma/client";
 import {
   assertMembership,
   buildLastMessagePreview,
@@ -25,6 +25,7 @@ import {
   MessageReplyPreview,
   MessageWithReceipts,
   MessageWithRelations,
+  SerializableStoredFile,
   UpdateMessageInput,
 } from "./message.types";
 
@@ -56,18 +57,37 @@ function toForwardedFromPreview(
   return { id: raw.id, senderId: raw.senderId, senderName: raw.sender.name };
 }
 
+/// `StoredFile.size` es `bigint` en Prisma — sin convertir a `number` acá,
+/// tanto `res.json()` como el emit de socket.io explotan apenas un mensaje
+/// trae un adjunto (`JSON.stringify` no sabe serializar `bigint`, ver
+/// LARGE_FILES_PLAN.md §13, Riesgo 3). No reduce `file` a su forma pública
+/// (eso es `toStoredFileResponse`, ver SerializableStoredFile en
+/// message.types.ts) — a propósito, ese cambio de contrato mayor queda
+/// diferido a una fase posterior de ese plan.
+function toSerializableFiles(
+  files: (MessageFile & { file: StoredFile })[],
+): (MessageFile & { file: SerializableStoredFile })[] {
+  return files.map((entry) => ({ ...entry, file: { ...entry.file, size: Number(entry.file.size) } }));
+}
+
 function withPreviews<
   T extends {
     replyTo: Parameters<typeof toReplyPreview>[0];
     forwardedFrom: Parameters<typeof toForwardedFromPreview>[0];
+    files: (MessageFile & { file: StoredFile })[];
   },
->(
-  message: T,
-): Omit<T, "replyTo" | "forwardedFrom"> & {
-  replyTo: MessageReplyPreview | null;
-  forwardedFrom: ForwardedFromPreview | null;
-} {
-  return { ...message, replyTo: toReplyPreview(message.replyTo), forwardedFrom: toForwardedFromPreview(message.forwardedFrom) };
+>(message: T) {
+  // Desestructurar (en vez de spread-y-reescribir) para que TS calcule bien
+  // el tipo de `rest` sin `replyTo`/`forwardedFrom`/`files` — spreadear un
+  // `T` genérico y "pisar" una clave después no reemplaza su tipo de forma
+  // confiable en la inferencia.
+  const { replyTo, forwardedFrom, files, ...rest } = message;
+  return {
+    ...rest,
+    replyTo: toReplyPreview(replyTo),
+    forwardedFrom: toForwardedFromPreview(forwardedFrom),
+    files: toSerializableFiles(files),
+  };
 }
 
 /// Avisa a cada miembro (en su room personal, no la de la conversación) que

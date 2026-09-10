@@ -65,7 +65,9 @@ export function toStoredFileResponse(file: StoredFile): StoredFileResponse {
     originalName: file.originalName,
     mimeType: file.mimeType,
     extension: file.extension,
-    size: file.size,
+    // StoredFile.size es bigint en Prisma (ver schema.prisma) — la API
+    // pública lo mantiene number (Number.MAX_SAFE_INTEGER son ~9 PB, sobra).
+    size: Number(file.size),
     url: storage.getPublicUrl(file.path),
     createdAt: file.createdAt,
   };
@@ -132,7 +134,7 @@ export async function uploadFile(
     path: saved.path,
     mimeType: upload.mimetype,
     extension,
-    size: saved.size,
+    size: BigInt(saved.size),
     checksum,
     createdById: currentUserId,
   });
@@ -171,7 +173,7 @@ export async function storeAvatar(userId: string, buffer: Buffer, mimeType: stri
     path: saved.path,
     mimeType,
     extension,
-    size: saved.size,
+    size: BigInt(saved.size),
     checksum,
     createdById: userId,
   });
@@ -221,7 +223,9 @@ export async function listFilesForAdmin(
     },
   }));
 
-  return { files, totalCount: aggregate._count, totalSize: aggregate._sum.size ?? 0 };
+  // aggregate._sum.size es bigint | null (mismo motivo que toStoredFileResponse)
+  // — sin convertir, JSON.stringify explota al responder este endpoint.
+  return { files, totalCount: aggregate._count, totalSize: Number(aggregate._sum.size ?? 0) };
 }
 
 /// A diferencia de `deleteFile` (borrado lógico, solo el dueño): esta es la
