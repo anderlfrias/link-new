@@ -936,7 +936,7 @@ flowchart LR
 | 2 | [Lectura unificada y cierre de `/uploads`](#fase-2--lectura-unificada-y-cierre-de-uploads) | A | `[x] 2026-09-10` |
 | 3 | [Provider S3](#fase-3--provider-s3) | C | `[x] 2026-09-10` |
 | 4 | [Backend del upload chunked](#fase-4--backend-del-upload-chunked) | C | `[x] 2026-09-10` |
-| 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[ ]` |
+| 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[x] 2026-09-10` |
 | 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[ ]` |
 | 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[ ]` |
 | 8 | [Migración progresiva](#fase-8--migración-progresiva) | C | `[ ]` |
@@ -1251,6 +1251,26 @@ huérfanos; **nunca borrar la fila, solo los bytes**.
 
 **Terminada cuando.** Un upload abandonado se limpia solo y **ningún archivo en uso se
 toca**, verificado por test.
+
+**Cerrada 2026-09-10 — notas para quien retome el plan:**
+
+- **Modelo de datos y Prisma (`prisma/schema.prisma`):**
+  - En `StoredFile`: añadido campo `purgedAt DateTime? @map("purged_at")` con índice `@@index([purgedAt])`. Registra cuándo un archivo con borrado lógico ya tuvo sus bytes físicos liberados en el storage para evitar scans o eliminaciones redundantes.
+  - En `AppSettings`: añadidos `uploadCleanupEnabled` (default `false`), `orphanFileRetentionHours` (default `24`), `softDeletedFilePurgeDays` (default `null`) y `uploadCleanupDryRun` (default `false`).
+  - Regenerado Prisma Client con `npx prisma generate`.
+- **Worker de limpieza (`src/workers/upload-cleanup.worker.ts`):**
+  - Implementado `runUploadCleanupSweep()` y arrancado en `server.ts` con intervalo horario (`startUploadCleanupWorker()`).
+  - Tarea 1: aborta sesiones multipart expiradas en S3 (`AbortMultipartUpload`) y actualiza su estado a `EXPIRED` en Postgres.
+  - Tarea 2: detecta `StoredFile`s sin referencias en `messageFiles`, `avatarOfUsers` o `imageOfConversations` creados hace más de `orphanFileRetentionHours`. Borra el objeto físico en el storage correspondiente (`getProvider(file.provider).delete`) y marca `deletedAt` y `purgedAt`.
+  - Tarea 3: purga física de archivos soft-deleted antiguos (`deletedAt < now - M días` y `purgedAt == null`). Borra el objeto físico en storage y marca `purgedAt = now()`. **Invariante: la fila en Postgres nunca se elimina**, preservando la integridad de placeholders en mensajes antiguos.
+  - Modo `dryRun`: simula y loguea las acciones en consola sin modificar storage ni base de datos.
+- **Configuración administrativa y UI (Backend + Frontend):**
+  - `settings.types.ts` y `settings.validator.ts` actualizados con validación completa y soporte para `null`.
+  - `admin-settings.types.ts` y `AdminSettingsPanel.tsx` actualizados con sección de UI dedicada ("Limpieza y ciclo de vida de archivos") para controlar el worker, las horas de huérfanos, días de purga y togglear modo Dry Run.
+- **Pruebas añadidas:**
+  - `src/workers/upload-cleanup.worker.test.ts`: 6 tests cubriendo modo deshabilitado, modo dryRun, aborto de sesiones expiradas, huérfanos (con verificación del invariante de relaciones excluyentes) y purga física de soft-deleted sin borrar filas.
+  - `src/modules/settings/settings.validator.test.ts`: 2 tests nuevos para validación de campos de limpieza.
+  - Total backend: 550 tests pasando. Total frontend: 589 tests pasando. Total proyecto: 1139 tests en verde.
 
 ---
 

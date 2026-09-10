@@ -42,6 +42,14 @@ export interface AdminSettings {
   messageDeleteForEveryoneTimeLimitMinutes: number | null;
   /** Interruptor maestro del buscador de GIFs/stickers (Giphy). */
   allowStickersAndGifs: boolean;
+  /** Interruptor maestro del worker de limpieza automática de archivos. */
+  uploadCleanupEnabled: boolean;
+  /** Horas tras las que un archivo sin referencias se borra. `null` = deshabilitado. */
+  orphanFileRetentionHours: number | null;
+  /** Días tras los que un archivo soft-deleted purga sus bytes en storage. `null` = deshabilitado. */
+  softDeletedFilePurgeDays: number | null;
+  /** Si es true, simula en logs sin borrar físicamente. */
+  uploadCleanupDryRun: boolean;
 }
 
 export type UpdateAdminSettingsPayload = Partial<AdminSettings>;

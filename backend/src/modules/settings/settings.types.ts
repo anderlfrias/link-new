@@ -27,6 +27,10 @@ export type UpdateSettingsInput = Partial<
     | "allowMessageDeleteForEveryone"
     | "messageDeleteForEveryoneTimeLimitMinutes"
     | "allowStickersAndGifs"
+    | "uploadCleanupEnabled"
+    | "orphanFileRetentionHours"
+    | "softDeletedFilePurgeDays"
+    | "uploadCleanupDryRun"
   >
 >;
 

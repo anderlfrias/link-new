@@ -50,6 +50,10 @@ interface DraftState {
   allowMessageDeleteForEveryone: boolean;
   messageDeleteForEveryoneTimeLimitMinutes: string;
   allowStickersAndGifs: boolean;
+  uploadCleanupEnabled: boolean;
+  orphanFileRetentionHours: string;
+  softDeletedFilePurgeDays: string;
+  uploadCleanupDryRun: boolean;
 }
 
 /** Una categoría cuenta como "marcada" si TODOS sus patterns están en la lista guardada —
@@ -117,6 +121,12 @@ function toDraft(settings: AdminSettings): DraftState {
         ? ""
         : String(settings.messageDeleteForEveryoneTimeLimitMinutes),
     allowStickersAndGifs: settings.allowStickersAndGifs,
+    uploadCleanupEnabled: settings.uploadCleanupEnabled ?? false,
+    orphanFileRetentionHours:
+      settings.orphanFileRetentionHours == null ? "" : String(settings.orphanFileRetentionHours),
+    softDeletedFilePurgeDays:
+      settings.softDeletedFilePurgeDays == null ? "" : String(settings.softDeletedFilePurgeDays),
+    uploadCleanupDryRun: settings.uploadCleanupDryRun ?? false,
   };
 }
 
@@ -168,6 +178,20 @@ function validate(draft: DraftState): FieldErrors {
     }
   }
 
+  if (draft.orphanFileRetentionHours.trim() !== "") {
+    const hours = Number(draft.orphanFileRetentionHours);
+    if (!Number.isInteger(hours) || hours < 1) {
+      errors.orphanFileRetentionHours = "Debe ser un número entero mayor a 0, o vacío para deshabilitar.";
+    }
+  }
+
+  if (draft.softDeletedFilePurgeDays.trim() !== "") {
+    const days = Number(draft.softDeletedFilePurgeDays);
+    if (!Number.isInteger(days) || days < 1) {
+      errors.softDeletedFilePurgeDays = "Debe ser un número entero mayor a 0, o vacío para deshabilitar.";
+    }
+  }
+
   return errors;
 }
 
@@ -201,6 +225,12 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
         ? null
         : Number(draft.messageDeleteForEveryoneTimeLimitMinutes),
     allowStickersAndGifs: draft.allowStickersAndGifs,
+    uploadCleanupEnabled: draft.uploadCleanupEnabled,
+    orphanFileRetentionHours:
+      draft.orphanFileRetentionHours.trim() === "" ? null : Number(draft.orphanFileRetentionHours),
+    softDeletedFilePurgeDays:
+      draft.softDeletedFilePurgeDays.trim() === "" ? null : Number(draft.softDeletedFilePurgeDays),
+    uploadCleanupDryRun: draft.uploadCleanupDryRun,
   };
 }
 
@@ -351,6 +381,58 @@ export function AdminSettingsPanel() {
                   value={draft.fileTypeSelection}
                   onChange={(next) => updateField("fileTypeSelection", next)}
                 />
+              )}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              Limpieza y ciclo de vida de archivos
+            </h3>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <Checkbox
+                  checked={draft.uploadCleanupEnabled}
+                  onChange={(event) => updateField("uploadCleanupEnabled", event.target.checked)}
+                  label="Habilitar worker automático de limpieza de archivos"
+                />
+                <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                  Barre sesiones de subida expiradas, archivos huérfanos sin vincular y purga física de eliminados.
+                </p>
+              </div>
+
+              {draft.uploadCleanupEnabled && (
+                <div className="flex flex-col gap-3 border-l-2 border-brand-accent/30 pl-4">
+                  <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    Retención de archivos huérfanos sin vincular (horas)
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="24 (vacío = no borrar)"
+                      value={draft.orphanFileRetentionHours}
+                      onChange={(event) => updateField("orphanFileRetentionHours", event.target.value)}
+                      error={errors.orphanFileRetentionHours}
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    Purga física de archivos eliminados (días tras borrado lógico)
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Ej. 30 (vacío = no purgar)"
+                      value={draft.softDeletedFilePurgeDays}
+                      onChange={(event) => updateField("softDeletedFilePurgeDays", event.target.value)}
+                      error={errors.softDeletedFilePurgeDays}
+                    />
+                  </label>
+
+                  <Checkbox
+                    checked={draft.uploadCleanupDryRun}
+                    onChange={(event) => updateField("uploadCleanupDryRun", event.target.checked)}
+                    label="Modo simulación (Dry Run: registrar en logs sin borrar)"
+                  />
+                </div>
               )}
             </div>
           </section>

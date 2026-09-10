@@ -147,5 +147,28 @@ describe("settings.validator", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("accepts valid file cleanup and lifecycle settings", async () => {
+      const payload = {
+        uploadCleanupEnabled: true,
+        orphanFileRetentionHours: 48,
+        softDeletedFilePurgeDays: 90,
+        uploadCleanupDryRun: true,
+      };
+
+      const result = await updateSettingsSchema.validate(payload);
+      expect(result).toMatchObject(payload);
+    });
+
+    it("accepts null for optional retention and purge limits", async () => {
+      const payload = {
+        orphanFileRetentionHours: null,
+        softDeletedFilePurgeDays: null,
+      };
+
+      const result = await updateSettingsSchema.validate(payload);
+      expect(result.orphanFileRetentionHours).toBeNull();
+      expect(result.softDeletedFilePurgeDays).toBeNull();
+    });
   });
 });

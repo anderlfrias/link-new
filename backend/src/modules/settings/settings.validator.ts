@@ -43,6 +43,10 @@ export const updateSettingsSchema = yup
     allowMessageDeleteForEveryone: yup.boolean(),
     messageDeleteForEveryoneTimeLimitMinutes: yup.number().integer().min(1).nullable(),
     allowStickersAndGifs: yup.boolean(),
+    uploadCleanupEnabled: yup.boolean(),
+    orphanFileRetentionHours: yup.number().integer().min(1).nullable(),
+    softDeletedFilePurgeDays: yup.number().integer().min(1).nullable(),
+    uploadCleanupDryRun: yup.boolean(),
   })
   .test(
     "at-least-one-field",
@@ -71,5 +75,9 @@ export const updateSettingsSchema = yup
       value.messageEditTimeLimitMinutes !== undefined ||
       value.allowMessageDeleteForEveryone !== undefined ||
       value.messageDeleteForEveryoneTimeLimitMinutes !== undefined ||
-      value.allowStickersAndGifs !== undefined,
+      value.allowStickersAndGifs !== undefined ||
+      value.uploadCleanupEnabled !== undefined ||
+      value.orphanFileRetentionHours !== undefined ||
+      value.softDeletedFilePurgeDays !== undefined ||
+      value.uploadCleanupDryRun !== undefined,
   );
