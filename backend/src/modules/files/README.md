@@ -10,13 +10,16 @@ Base: `/api/v1/files`
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `POST` | `/` | Sube un archivo (`multipart/form-data`, campo `file`, `conversationId` y `kind` opcionales). |
-| `GET` | `/:id` | Metadata del archivo (incluye `url`). |
+| `POST` | `/` | Sube un archivo directo ≤ 16 MiB (`multipart/form-data`, campo `file`, `conversationId` y `kind` opcionales). |
+| `GET` | `/:id` | Metadata del archivo (incluye `url` firmada de descarga). |
+| `GET` | `/:id/content` | Descarga o streaming del archivo (`?t=...` token HMAC o `Authorization: Bearer`). |
 | `DELETE` | `/:id` | Borrado lógico (solo quien lo subió). |
 
-Todas requieren autenticación (`authenticate` + `attachInternalUser`), igual que `conversations`/`messages`.
+Todas requieren autenticación (`authenticate` + `attachInternalUser`), salvo `GET /:id/content` cuando incluye un token HMAC firmado válido en el query parameter `?t=...`.
 
-### `POST /` — Subir
+### `POST /` — Subir (Directo ≤ 16 MiB)
+
+Para archivos mayores a 16 MiB (hasta 2 GB), se utiliza el módulo chunked/multipart [`/api/v1/uploads`](../uploads/README.md). Este endpoint directo está optimizado para avatares, notas de voz y adjuntos pequeños.
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/files \
@@ -30,7 +33,7 @@ curl -X POST http://localhost:4000/api/v1/files \
 `kind` es opcional (`"file"` default, o `"voice_note"`) — distingue una nota de voz grabada de un adjunto genérico, ya que solo la primera tiene un límite de duración. No se persiste: el archivo se guarda igual sea cual sea el `kind`.
 
 Validaciones, en este orden:
-1. **Techo de seguridad fijo** (`ABSOLUTE_MAX_UPLOAD_BYTES`, `file.route.ts`, 500 MB, no editable) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial). Existe solo para no dejar que `multer` bufferee en memoria un body absurdamente grande.
+1. **Techo de seguridad fijo** (`ABSOLUTE_MAX_UPLOAD_BYTES`, `file.route.ts`, 32 MB, no editable) — lo hace `multer` directamente; si se excede, lanza un `MulterError` que el error handler global (`middlewares/error.middleware.ts`) traduce a `400` (no es un `AppError`, por eso necesita ese caso especial). Existe solo para no dejar que `multer` bufferee en memoria un body absurdamente grande.
 2. **Membresía**, solo si mandaste `conversationId`: `403` si no sos miembro de esa conversación. Sin este chequeo, cualquiera podría namespacear archivos bajo una conversación ajena.
 3. **Tamaño real** (`file.service.ts`, `uploadFile`) contra `AppSettings.maxUploadSizeMb` — este es el límite editable en runtime por un admin (ver [`settings`](../settings/README.md)); `400` si se excede.
 4. **Tipo de archivo**, solo si `AppSettings.fileTypeRestrictionMode` no es `DISABLED` (default): `ALLOWLIST` rechaza (`400`) cualquier mime type que no matchee ninguna entrada de `fileTypeList`; `BLOCKLIST` rechaza el que sí matchee. Cada entrada guardada es siempre un mime type exacto (`"application/pdf"`) o un wildcard de tipo (`"audio/*"`, `"video/*"`) — ver `matchesFileTypePattern()`; el backend nunca ve ni valida una extensión, solo mime types. El panel de admin arma `fileTypeList` con un multiselect autocompletado (`FileTypeMultiSelect.tsx`): eligiendo categorías curadas (`FILE_TYPE_CATEGORIES`, `src/constants/file-type-categories.constant.ts` — incluye "Ejecutables") que expanden a uno o más mime types, o tipeando un valor manual — si lo tipeado es una extensión conocida (`".pdf"`, `".exe"`, etc.), se resuelve **en el cliente** al mime type real antes de agregarse (`FILE_TYPE_EXTENSION_ALIASES`, `frontend/src/features/admin/constants/file-type-extension-aliases.constant.ts`); si es un mime type completo, se valida con el mismo patrón `tipo/subtipo` (o `tipo/*`) que usa `settings.validator.ts` en el servidor (`utils/mime-type-pattern.ts`, frontend), para que el error aparezca al tipear en vez de recién al guardar. Un botón "?" al lado del campo explica el formato. `settings.validator.ts` sigue siendo la autoridad real: rechaza en el `PATCH` cualquier entrada que no tenga forma de mime type, sin importar qué haya podido colarse desde el cliente.
@@ -46,12 +49,15 @@ Respuesta `201`:
   "mimeType": "image/jpeg",
   "extension": "jpg",
   "size": 245678,
-  "url": "/uploads/chat/<conversationId>/2026/07/9f2b3c1a-....jpg",
+  "url": "/api/v1/files/9f2b3c1a-..../content?t=eyJhbGciOi...",
   "createdAt": "2026-07-23T20:00:00.000Z"
 }
 ```
 
-`url` la construye el `StorageProvider` activo a partir de la ruta relativa guardada en `StoredFile.path` — nunca se expone `path` ni `storedName` (rutas físicas) directamente en la respuesta.
+> [!NOTE]
+> **Serialización de `size`**: En la base de datos PostgreSQL, `StoredFile.size` se almacena como `BigInt` (para admitir archivos grandes hasta terabytes sin desborde de entero de 32 bits). En los endpoints HTTP, se serializa a `number` para interoperabilidad directa con clientes JavaScript/JSON.
+
+`url` la construye el `StorageProvider` activo a partir de la ruta y un token HMAC firmado (`?t=...`, TTL 1 hora) — nunca se expone `path` ni `storedName` (rutas físicas) directamente en la respuesta.
 
 ### Organización en disco (`buildStorageDir()` en `file.service.ts`)
 
@@ -64,11 +70,20 @@ El nombre físico (`storedName`) sigue siendo siempre un UUID — la carpeta agr
 
 ### `GET /:id`
 
-Misma forma que la respuesta de `POST /`. `404` si no existe o está borrado lógicamente. No verifica que el archivo esté "en uso" por algo que el usuario pueda ver — el archivo físico ya es servible sin autenticación vía `/uploads/...` (montado en `app.ts`), así que este endpoint solo expone la misma información por otra vía, no agrega un permiso nuevo.
+Devuelve la metadata del archivo en el mismo formato que `POST /`. Verifica permisos de acceso mediante `canAccessFile` (debe ser el uploader, miembro de una conversación donde se use el archivo, o admin).
+
+### `GET /:id/content`
+
+Descarga o transmisión segura del archivo.
+* **Autenticación dual**: Acepta `Authorization: Bearer <token>` o token firmado en query string `?t=<hmac_token>` (permitiendo que elementos HTML como `<img src="...">` o descargas directas del navegador funcionen sin cabeceras personalizadas).
+* **Control de acceso**: Valida que el token HMAC sea legítimo y no haya expirado, o que el usuario autenticado tenga permiso (`canAccessFile`).
+* **Protección contra XSS**: Envía cabeceras estrictas `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` y `Content-Disposition: inline` únicamente para imágenes y audios seguros; todo lo demás (incluyendo HTML y SVG) se descarga forzosamente como `Content-Disposition: attachment; filename*=UTF-8''...`.
+* **Redirección S3**: Si el archivo reside en `FileProvider.S3`, responde con `302 Found` hacia una URL presignada GET del storage con TTL corto (5 minutos). Si reside en `FileProvider.LOCAL`, hace streaming mediante `res.sendFile()`.
+* **Rate limit**: Protegido por `downloadRateLimiter` (180 descargas por usuario/IP cada 15 minutos).
 
 ### `DELETE /:id`
 
-Borrado lógico (`deletedAt`) — igual que `Conversation`/`Message` en el resto del sistema. Solo quien subió el archivo (`403` para cualquier otro). **No borra el archivo físico ni verifica si sigue referenciado** (por un mensaje, una conversación o un usuario) — limpiar archivos huérfanos en disco es trabajo de un job de background (`src/workers`, todavía no existe), no de este endpoint.
+Borrado lógico (`deletedAt`) — igual que `Conversation`/`Message` en el resto del sistema. Solo quien subió el archivo (`403` para cualquier otro). **No borra el archivo físico ni verifica si sigue referenciado** (por un mensaje, una conversación o un usuario). Limpiar archivos huérfanos o abandonados es tarea de procesos en segundo plano.
 
 ## Gestión de storage (admin)
 
@@ -121,7 +136,9 @@ Llega acá por dos caminos, mutuamente excluyentes por usuario:
 
 Sea cual sea el camino, el resultado se guarda igual: un `StoredFile` normal vía `file.service.ts` (`storeAvatar`), bajo `avatars/<userId>/...`, apuntado por `User.avatarFileId`. A partir de ahí, cualquier otro usuario la ve — se sirve como cualquier otro `StoredFile`, sin pasar por ningún proveedor externo.
 
-## Qué falta a propósito
+## Arquitectura y Módulos Relacionados
 
-* **Limpieza de archivos huérfanos**: un `StoredFile` borrado lógicamente, o reemplazado por una foto de perfil nueva, no se borra físicamente. Candidato natural para `src/workers`.
-* **Proveedores remotos** (S3, MinIO): la interfaz (`StorageProvider`) ya está pensada para eso, pero hoy solo existe `LocalDiskStorage`.
+* **Almacenamiento S3**: Soportado en [`src/storage/s3.storage.ts`](../../storage/s3.storage.ts) mediante cliente `@aws-sdk/client-s3` con soporte para SeaweedFS, streaming y URLs presignadas.
+* **Subida de Archivos Grandes (> 16 MiB)**: Implementada en el módulo [`src/modules/uploads`](../uploads/README.md) mediante subida multipart directa a S3 en fragmentos de 8 MiB con verificación de integridad `HeadObject`.
+* **Limpieza y Ciclo de Vida**: Gestionada en segundo plano por `src/workers/upload-cleanup.worker.ts` (cancela sesiones multipart expiradas en S3).
+* **Migración en Caliente**: Gestionada en segundo plano por `src/workers/file-migration.worker.ts` (migra gradualmente archivos de `LOCAL` a `S3` con verificación estricta de orden y checksum).

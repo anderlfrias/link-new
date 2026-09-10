@@ -110,13 +110,20 @@ Cada módulo es responsable de registrar sus propios eventos de socket (por ejem
 
 Esta carpeta **no almacena archivos**.
 
-Aquí viven únicamente los proveedores de almacenamiento (`StorageProvider`) que exponen una interfaz común para guardar y leer archivos, sin importar el backend físico utilizado. Hoy solo existe `LocalDiskStorage` (`FileProvider.LOCAL`); `MinIOStorage`/`S3Storage` se agregarían acá el día que hagan falta, sin que el módulo `files` (que sí sabe qué es un archivo válido: tipo, tamaño, quién lo subió) necesite cambiar. Detalle completo en [`src/modules/files/README.md`](./src/modules/files/README.md).
+Aquí viven los proveedores de almacenamiento (`StorageProvider`) que exponen una interfaz común para guardar, leer, transmitir (streaming) y borrar archivos, sin importar el backend físico utilizado:
+* **`LocalDiskStorage`** (`FileProvider.LOCAL`): almacena y sirve archivos directamente desde el sistema de archivos local del servidor.
+* **`S3Storage`** (`FileProvider.S3`): compatible con AWS S3, SeaweedFS (`weed server -s3`) y MinIO. Soporta generación de URLs presignadas para descarga y subida multipart (PUT por partes).
+
+El acceso a los proveedores se resuelve dinámicamente según el proveedor registrado en cada archivo (`getProvider(file.provider)`) y la variable de entorno de escritura por defecto (`getWriteProvider()`). Detalle completo en [`src/modules/files/README.md`](./src/modules/files/README.md).
 
 ---
 
 ## src/workers
 
-Procesos en segundo plano (background jobs), como colas de tareas, cron jobs o procesamiento asíncrono desacoplado del ciclo petición-respuesta.
+Procesos en segundo plano (background jobs) desacoplados del ciclo petición-respuesta.
+Actualmente implementa:
+* **`upload-cleanup.worker.ts`**: barrendero periódico de sesiones de subida multipart abandonadas o vencidas (> 24 horas), cancelando las subidas en S3 (`AbortMultipartUpload`) y marcando los registros como `EXPIRED` para evitar consumo innecesario de disco.
+* **`file-migration.worker.ts`**: proceso en segundo plano para migración gradual y segura de archivos desde `LOCAL` hacia `S3`, garantizando el orden estricto de commit antes de borrar en disco local y configurable desde el panel de administración.
 
 ---
 
@@ -264,16 +271,41 @@ Por ejemplo `chat/<conversationId>/2026/07/550e8400.pdf` (o `chat/2026/07/550e84
 
 ### Propósito del campo `provider`
 
-Indica en qué proveedor de almacenamiento vive físicamente ese archivo (`FileProvider`, hoy solo `LOCAL`). Como cada `StoredFile` declara su propio proveedor, el sistema podría convivir con archivos guardados en distintos proveedores a la vez (por ejemplo, durante una migración gradual de `LOCAL` a `S3`) sin ambigüedad sobre dónde buscar cada uno.
+Indica en qué proveedor de almacenamiento vive físicamente ese archivo (`FileProvider`: `LOCAL` o `S3`). Como cada `StoredFile` declara su propio proveedor, el sistema convive transparentemente con archivos guardados en distintos proveedores (por ejemplo, durante la migración en caliente de `LOCAL` a `S3`) sin ambigüedad sobre dónde buscar cada uno.
+
+### Arquitectura de Subida Dual (Archivos Pequeños vs Grandes)
+
+Para optimizar el uso de recursos y no saturar el event loop ni la memoria de Node.js, el sistema implementa dos caminos de subida:
+
+1. **Subida Directa (≤ 16 MiB)**:
+   * Endpoint: `POST /api/v1/files`.
+   * El archivo viaja como `multipart/form-data` al backend de Express (`multer`), con un techo duro de seguridad de 32 MB (`ABSOLUTE_MAX_UPLOAD_BYTES`).
+   * Se utiliza para avatares, fotos de grupo, notas de voz y adjuntos estándar pequeños.
+   * Se guarda en el proveedor configurado en `STORAGE_WRITE_PROVIDER` (`LOCAL` o `S3`).
+
+2. **Subida Chunked / Multipart (> 16 MiB hasta 2 GB)**:
+   * Módulo: `POST /api/v1/uploads`.
+   * El cliente corta el archivo en fragmentos de **8 MiB** y solicita URLs presignadas PUT a Link.
+   * La transferencia de bytes se realiza **directamente desde el navegador hacia el storage S3 / SeaweedFS**, sin que el servidor de Node.js toque los bytes ni consuma memoria RAM.
+   * Al finalizar todas las partes, Link verifica el tamaño real con `HeadObject` (invariante S1) y genera el `StoredFile` final.
+   * Detalle completo en [`src/modules/uploads/README.md`](./src/modules/uploads/README.md).
+
+### URLs Seguras de Descarga (`GET /api/v1/files/:id/content`)
+
+Se eliminó por completo la exposición estática de archivos (la ruta `/uploads` ya no existe). Todo acceso a archivos se realiza a través del endpoint unificado de contenido:
+* Las URLs públicas se firman con un token HMAC (`?t=...`, TTL 1 hora) o se autentican vía Bearer token.
+* **Archivos en `LOCAL`**: Express valida permisos y hace streaming mediante `res.sendFile()`.
+* **Archivos en `S3`**: Link responde con una redirección HTTP `302` hacia una URL presignada GET de corta duración (TTL 5 minutos) emitida por S3.
+* **Cabeceras de protección**: Se envían `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` y `Content-Disposition: attachment; filename*=UTF-8''...` para cualquier archivo potencialmente peligroso (HTML, SVG, ejecutables, etc.), previniendo ataques de XSS almacenado.
 
 ### Propósito del `checksum`
 
-Es un hash del contenido del archivo. Sirve para verificar que el archivo no se corrompió entre que se guardó y se leyó, y, más adelante, para detectar archivos duplicados sin tener que comparar su contenido byte a byte. Es nullable porque no todos los flujos de guardado lo calculan necesariamente desde el día uno.
+Es un hash del contenido del archivo. Sirve para verificar que el archivo no se corrompió entre que se guardó y se leyó, y para detectar archivos duplicados sin tener que comparar su contenido byte a byte.
 
 ### Ventajas de reutilizar `StoredFile` para cualquier recurso del sistema
 
 * Una sola definición de "qué es un archivo" para toda la aplicación, sin duplicar columnas técnicas en cada módulo.
-* Cambiar de proveedor de almacenamiento (local → MinIO, S3, R2) es un cambio en la capa de `src/storage` y en el valor de `provider`, no en los modelos de negocio (`User`, `Conversation`, `Message`, ni los que vengan después).
+* Cambiar de proveedor de almacenamiento (local → SeaweedFS, S3, R2) es un cambio en la capa de `src/storage` y en el valor de `provider`, no en los modelos de negocio (`User`, `Conversation`, `Message`, ni los que vengan después).
 * Cualquier funcionalidad futura que necesite archivos (documentos, íconos, exportaciones, etc.) reutiliza `StoredFile` en vez de crear su propia tabla de archivos.
 
 ### Diagrama de relaciones
@@ -290,6 +322,70 @@ User.avatarFile   Conversation   MessageFile
 ```
 
 `StoredFile` es el centro: `User` y `Conversation` lo referencian directamente (avatar e imagen), y `Message` lo referencia indirectamente a través de `MessageFile` (porque puede tener varios archivos adjuntos). En los tres casos, el archivo en sí y su información técnica viven solo en `StoredFile`; el resto de los modelos únicamente guardan una relación hacia él.
+
+---
+
+## Operaciones, Backup y Restauración (§6.4)
+
+El almacenamiento de archivos desacopla la metadata de los bytes físicos. Esto introduce dos dominios de persistencia:
+1. **Base de Datos PostgreSQL**: contiene las tablas `stored_files`, `file_uploads` y la metadata del filer de SeaweedFS (si se usa `weed filer -database=postgres2`).
+2. **Volúmenes de Storage**: los bloques y blobs binarios almacenados en disco local o en los volúmenes de SeaweedFS/S3.
+
+### Regla de Oro del Backup: Metadata PRIMERO, Bytes DESPUÉS
+
+```bash
+# 1. Respaldar PostgreSQL (metadata de Link y filer)
+pg_dump -U postgres -d chat_interno -F c -b -v -f /backups/chat_interno_$(date +%Y%m%d_%H%M%S).dump
+
+# 2. Respaldar Volúmenes de Storage (bytes físicos)
+rclone sync /var/seaweedfs/data remote_backup:seaweedfs-data/ --fast-list
+```
+
+> [!IMPORTANT]
+> **¿Por qué este orden?**
+> Si la metadata se respalda en `T1` y los bytes en `T2 > T1`, la base de datos solo conoce objetos creados hasta `T1`. Todos esos objetos garantizadamente existirán en el respaldo de bytes tomado en `T2`.
+> En el orden inverso (bytes primero, metadata después), cualquier archivo subido entre `T1` y `T2` quedaría registrado en la base de datos pero **ausente** del backup de bytes, produciendo referencias rotas irrecuperables. Los archivos subidos entre `T1` y `T2` con el orden correcto son simplemente huérfanos inofensivos que el barrendero de limpieza puede purgar posteriormente.
+
+### Regla de Oro de la Restauración: Bytes PRIMERO, Metadata DESPUÉS
+
+1. **Restaurar Bytes**: Sincronizar o descomprimir los volúmenes en el almacenamiento (`rclone copy remote_backup:seaweedfs-data/ /var/seaweedfs/data`).
+2. **Restaurar Base de Datos**: Ejecutar `pg_restore` de la base de datos PostgreSQL.
+3. **Iniciar Servicios**: Iniciar SeaweedFS y Link. De este modo, desde el primer milisegundo en que la base de datos responde consultas, todos los bytes físicos referenciados ya están disponibles en storage.
+
+---
+
+## Runbook de Operaciones y Troubleshooting
+
+### 1. "No puedo subir un archivo grande"
+* **Verificar cuota de subida en Admin**: Comprobar en el panel de administración (`Configuración > Tamaño máximo de archivo`) que el límite `maxUploadSizeMb` sea suficiente para el archivo.
+* **Verificar sesiones concurrentes**: Cada usuario tiene un tope de 5 subidas simultáneas activas (`PENDING` o `UPLOADING`). Si el usuario tiene subidas colgadas, debe abortarlas o esperar su vencimiento (24h).
+* **Verificar restricciones de tipo**: Comprobar si `fileTypeRestrictionMode` está en `ALLOWLIST` o `BLOCKLIST` y si el tipo MIME del archivo está bloqueado.
+* **Verificar CORS en SeaweedFS / S3**: La subida chunked se ejecuta directamente desde el navegador hacia S3. El bucket debe tener habilitada la política CORS permitiendo:
+  - `AllowedOrigins`: dominio del frontend (`https://link.example.org`).
+  - `AllowedMethods`: `GET`, `PUT`, `HEAD`.
+  - `AllowedHeaders`: `*`, `content-type`, `x-amz-*`.
+  - `ExposeHeaders`: `ETag`.
+* **Verificar Reverse Proxy (Nginx / Cloudflare)**: Para subidas directas (≤ 16 MiB), asegurar que `client_max_body_size` en Nginx sea al menos `16m` o `32m`. Para subidas multipart a S3 a través de Cloudflare, las partes de 8 MiB pasan holgadamente por el límite de 100 MB de Cloudflare Free/Pro.
+
+### 2. "Error 403 Forbidden en subida de partes (Desfase de reloj NTP)"
+* **Causa**: Las URLs presignadas de AWS S3 (SigV4) incluyen una marca de tiempo (`X-Amz-Date`). Si el reloj del servidor o del cliente difiere por más de 15 minutos respecto a la hora UTC real, S3 rechaza la petición con `RequestTimeTooSkewed` (403 Forbidden).
+* **Solución en Servidor**:
+  ```bash
+  timedatectl status
+  sudo timedatectl set-ntp on
+  sudo systemctl restart systemd-timesyncd # o chrony
+  ```
+
+### 3. "Espacio en disco bajo (sesiones abandonadas y purga de huérfanos)"
+* **Sesiones multipart incompletas**: Cuando un usuario interrumpe una subida de 2 GB cerrando el navegador, los fragmentos subidos consumen espacio en S3.
+* **Limpieza automática**: `upload-cleanup.worker.ts` se ejecuta periódicamente (por defecto cada 6 horas) y aborta en S3 cualquier sesión abandonada que supere las 24 horas de inactividad (`TTL_INACTIVE_HOURS = 24`), liberando los bytes en storage.
+* **Inspección manual en base de datos**:
+  ```sql
+  SELECT status, count(*), sum(total_size) / (1024*1024*1024) AS total_gb
+  FROM file_uploads
+  GROUP BY status;
+  ```
+* **Migración de almacenamiento**: Si se está migrando de `LOCAL` a `S3`, verificar en `AppSettings` que `fileMigrationDeleteLocalAfterCommit` esté habilitado si se requiere liberar el espacio en disco local inmediatamente tras verificar la copia en S3.
 
 ---
 

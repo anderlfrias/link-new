@@ -251,9 +251,9 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 
 `type` es `"PRIVATE"` (exactamente 2 miembros fijos), `"GROUP"` (3 o más) o `"SELF"` (exactamente 1: el propio usuario — "Mensajes guardados", ver 4.1.1). `name`/`imageFileId`/`imageFile` solo aplican a `GROUP`.
 
-`user.avatarFile` viene embebido (igual que los adjuntos de mensajes) para no tener que pedir cada avatar por separado: si no es `null`, construir la URL como `<origin-del-backend>/uploads/<avatarFile.path>` (sin autenticación, igual que cualquier otro `StoredFile` servido por `express.static`). Se cachea automáticamente en cada login de **ese** usuario — ver "Endpoint: foto de perfil" más abajo y `backend/src/modules/files/README.md`.
+`user.avatarFile` viene embebido (igual que los adjuntos de mensajes) para no tener que pedir cada avatar por separado: si no es `null`, la URL segura se resuelve como `/api/v1/files/<avatarFileId>/content` (los avatares son públicos entre usuarios del sistema — ver sección 9 y `backend/src/modules/files/README.md`). La ruta estática `/uploads` fue dada de baja por seguridad (ver sección 9).
 
-`imageFile` (imagen del grupo) viene embebido con el mismo criterio que `avatarFile` — `null` si el grupo no tiene foto (o es `PRIVATE`), y si no es `null` se construye la URL igual: `<origin-del-backend>/uploads/<imageFile.path>`.
+`imageFile` (imagen del grupo) viene embebido con el mismo criterio que `avatarFile` — `null` si el grupo no tiene foto (o es `PRIVATE`), y si no es `null` se resuelve mediante su endpoint de contenido `/api/v1/files/<imageFileId>/content?t=<token>`.
 
 ### 4.1 `POST /` — Crear conversación
 
@@ -446,8 +446,22 @@ Forma de un mensaje:
   "createdAt": "2026-07-24T10:00:00.000Z",
   "sender": { "id": "user-uuid", "name": "Juan", "email": "juan@x.com", "avatarFileId": null },
   "files": [
-    { "id": "messagefile-uuid", "messageId": "msg-uuid", "fileId": "file-uuid", "createdAt": "...",
-      "file": { "id": "file-uuid", "originalName": "foto.jpg", "mimeType": "image/jpeg", "path": "chat/....jpg", "extension": "jpg", "size": 245678, "provider": "LOCAL", "checksum": "...", "createdById": "user-uuid", "createdAt": "...", "deletedAt": null } }
+    {
+      "id": "messagefile-uuid",
+      "messageId": "msg-uuid",
+      "fileId": "file-uuid",
+      "createdAt": "2026-07-24T10:00:00.000Z",
+      "file": {
+        "id": "file-uuid",
+        "originalName": "foto.jpg",
+        "mimeType": "image/jpeg",
+        "extension": "jpg",
+        "size": 245678,
+        "url": "/api/v1/files/file-uuid/content?t=eyJh...",
+        "createdAt": "2026-07-24T10:00:00.000Z",
+        "deletedAt": null
+      }
+    }
   ],
   "replyToId": null,
   "replyTo": null,
@@ -561,7 +575,7 @@ Query params: `?before=<messageFileId>&limit=<1-100, default 50>` — misma pagi
     "mimeType": "image/jpeg",
     "extension": "jpg",
     "size": 245678,
-    "url": "http://localhost:4000/uploads/chat/....jpg",
+    "url": "/api/v1/files/file-uuid/content?t=eyJh...",
     "createdAt": "2026-07-24T10:00:00.000Z",
     "messageId": "msg-uuid",
     "senderId": "user-uuid"
@@ -647,11 +661,15 @@ Notas:
 
 ## 9. Adjuntos (archivos, fotos, etc.)
 
-Un mismo modelo (`StoredFile`) sirve para adjuntos de mensaje, imagen de conversación grupal, y (a futuro) avatar de usuario. Se sube **antes** de usarse — subís el archivo, te dan un `id`, y ese `id` es lo que mandás en `imageFileId` (conversaciones) o `fileIds` (mensajes).
+Un mismo modelo (`StoredFile`) sirve para adjuntos de mensaje, imagen de conversación grupal, y avatar de usuario. Se sube **antes** de usarse — subís el archivo, te dan un `id`, y ese `id` es lo que mandás en `imageFileId` (conversaciones) o `fileIds` (mensajes).
+
+Existen dos caminos de subida:
+1. **Camino directo** (`/api/v1/files`): pensado para adjuntos pequeños o notas de voz (≤ 16 MiB, techo duro de 32 MB en `file.route.ts`).
+2. **Camino chunked multipart** (`/api/v1/uploads`, sección 10): obligatorio para archivos grandes (> 16 MiB y hasta 2 GB+), subiendo en chunks de 8 MiB directamente a S3 / SeaweedFS mediante URLs presignadas.
 
 Base HTTP: `/api/v1/files`.
 
-### 9.1 `POST /` — Subir
+### 9.1 `POST /` — Subida directa (≤ 32 MB)
 
 `multipart/form-data`, campo `file` obligatorio, `conversationId` y `kind` opcionales:
 
@@ -667,11 +685,11 @@ await fetch("http://localhost:4000/api/v1/files", {
 });
 ```
 
-Sin restricción de tipo de archivo por defecto (subís lo que sea — csv, exe, lo que haga falta), salvo que un admin haya activado un allowlist/blocklist (`AppSettings.fileTypeRestrictionMode`, sección 12) — `400` si el tipo no está permitido. El límite de tamaño (`AppSettings.maxUploadSizeMb`, default **25 MB**, editable por un admin sin redeploy) también da `400` si se excede. Si mandás `conversationId`, además valida que seas miembro de esa conversación — `403` si no lo sos.
-
-`kind: "voice_note"` distingue una nota de voz grabada de un adjunto genérico: exige mime type `audio/*` (`400` si no) y valida la duración real del audio contra `AppSettings.maxVoiceNoteDurationSeconds` (`400` si se excede) — la duración se calcula en el backend a partir del archivo, nunca se confía en un valor mandado por el cliente. No se persiste ningún campo `kind` en la respuesta — el archivo se guarda igual sea cual sea.
-
-`conversationId` **no crea ninguna relación**: solo le dice al backend bajo qué conversación organizar el archivo en disco (`chat/<conversationId>/<yyyy>/<mm>/<uuid>.<ext>`, en vez de todo suelto bajo `chat/`). La relación real la creás después mandando el `id` que te devuelve esto en `fileIds` (mensajes) o `imageFileId` (conversaciones). Si no lo mandás, se guarda igual bajo `chat/<yyyy>/<mm>/<uuid>.<ext>`.
+- Rate limit: 60 subidas por ventana de 15 minutos por usuario (`uploadRateLimiter`).
+- Techo de seguridad fijo: 32 MB en `multer` (para no saturar RAM en el proceso de Node). Archivos mayores deben usar el camino chunked multipart (`/api/v1/uploads`).
+- Límite editable en runtime: `AppSettings.maxUploadSizeMb` (default 2048 MB).
+- Restricción de tipos de archivo: gobernada por `AppSettings.fileTypeRestrictionMode` (`ALLOWLIST` / `BLOCKLIST` / `DISABLED`).
+- `kind: "voice_note"`: exige MIME type `audio/*` y valida la duración real del buffer contra `AppSettings.maxVoiceNoteDurationSeconds`.
 
 → `201`:
 ```json
@@ -681,22 +699,171 @@ Sin restricción de tipo de archivo por defecto (subís lo que sea — csv, exe,
   "mimeType": "image/jpeg",
   "extension": "jpg",
   "size": 245678,
-  "url": "/uploads/chat/<conversationId>/2026/07/9f2b3c1a-....jpg",
-  "createdAt": "..."
+  "url": "/api/v1/files/file-uuid/content?t=eyJh...",
+  "createdAt": "2026-07-23T20:00:00.000Z",
+  "deletedAt": null
 }
 ```
 
-`url` es relativa al mismo host del backend (no lleva dominio) — armá la URL completa como `${backendBaseUrl}${url}` para mostrar la imagen/descargar el archivo. **Servir el archivo (`GET /uploads/...`) no requiere `Authorization`** — es estático y público una vez que tenés la URL (que incluye un UUID no adivinable). Solo subir/consultar metadata/borrar vía `/api/v1/files` requiere estar logueado.
+### 9.2 `GET /:id/content` — Descarga y visualización de contenido
 
-Si el frontend corre en otro origen que el backend (otro puerto en desarrollo, otro dominio en producción) y vas a mostrar la imagen con un `<img>`, necesitás que `/uploads` responda `Cross-Origin-Resource-Policy: cross-origin` — ya está así en `app.ts` (Helmet lo deja en `same-origin` por defecto para el resto de la API, pero esta ruta lo relaja explícitamente). Sin ese header el navegador bloquea la carga de la imagen aunque el request HTTP haya devuelto `200`.
+Sirve los bytes del archivo con autorización por request y cabeceras estrictas de seguridad.
 
-### 9.2 `GET /:id` — Metadata
+- **Autenticación**: acepta token firmado HMAC por query param `?t=<token>` (para etiquetas `<img>`, `<audio>`, `<video>` y descargas directas) o header `Authorization: Bearer <token>`. Los avatares públicos no requieren token.
+- **Forzar descarga**: `?download=1` fuerza `Content-Disposition: attachment`.
+- **Defensa en profundidad contra XSS almacenado (§9.1 S6)**:
+  - Solo se permite visualización `inline` para tipos seguros: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `audio/*` y `video/mp4`.
+  - Archivos SVG (`image/svg+xml`) y HTML (`text/html`) se descargan **siempre como `attachment`**, sin excepciones.
+  - Cabeceras añadidas: `X-Content-Type-Options: nosniff` y `Content-Security-Policy: default-src 'none'; sandbox`.
+- **Sanitización RFC 5987 (§9.1 S7)**: codificación `filename*=UTF-8''...` y sanitización de caracteres de control o saltos de línea (CRLF).
+- **Rate limiting**: 300 solicitudes por 15 minutos por usuario o IP (`downloadRateLimiter`).
+- **Almacenamiento S3**: si el archivo vive en S3 (`provider === "S3"`), responde un `302 Found` con una URL presignada de descarga directa con TTL de 5 minutos.
 
-Misma forma que la respuesta de subida. `404` si no existe o está borrado.
+> [!WARNING]
+> **Retiro de `/uploads` estático (cambio incompatible de seguridad S10)**:
+> La antigua ruta `/uploads/<path>` fue desmantelada. Ya no es posible descargar archivos de forma estática o anónima sin pasar por el gate de autorización de `/api/v1/files/:id/content`.
 
-### 9.3 `DELETE /:id`
+### 9.3 `GET /:id` — Metadata
 
-Borrado lógico, solo quien lo subió (`403` para cualquier otro). → `200` `{ "id": "..." }`. No borra el archivo físico ni valida si sigue en uso por algún mensaje/conversación — si ya lo referenciaste en un mensaje enviado, ese mensaje muestra un placeholder de "archivo eliminado" en vez del contenido (ver `files[].file.deletedAt`, sección 6). Para borrado físico real (libera espacio), ver `DELETE /admin/files/:id`, sección 13.2 — solo admin.
+Devuelve la metadata pública del archivo (`id`, `originalName`, `mimeType`, `extension`, `size`, `url`, `createdAt`, `deletedAt`). Requiere que el usuario sea el autor del archivo o administrador (`403` si no).
+
+### 9.4 `DELETE /:id` — Borrado lógico
+
+Borrado lógico (`deletedAt`). Solo el autor del archivo (`403` para cualquier otro). → `200` `{ "id": "..." }`. Los mensajes que referencien este archivo mostrarán un placeholder de "archivo eliminado". Para borrado físico del archivo en storage, ver sección 14.2 (solo administradores).
+
+---
+
+## 10. Subida de Archivos Grandes (Chunked / Multipart)
+
+Base HTTP: `/api/v1/uploads`. Requiere autenticación `Bearer`.
+
+Diseñado para subir archivos de gran tamaño (hasta 2 GB+) divididos en partes de **8 MiB** directamente al almacenamiento de objetos S3 / SeaweedFS, evitando pasar gigabytes de datos por el servidor Node.js y tolerando caídas de red o cortes de sesión (§4).
+
+### Flujo de subida:
+
+```text
+[Cliente]                        [Backend Link]                     [Storage S3 / SeaweedFS]
+   │                                   │                                       │
+   │ 1. POST /api/v1/uploads           │                                       │
+   ├──────────────────────────────────>│ CreateMultipartUpload                 │
+   │                                   ├──────────────────────────────────────>│
+   │    uploadSessionId + totalParts   │<──────────────────────────────────────┤
+   │<──────────────────────────────────┤                                       │
+   │                                   │                                       │
+   │ 2. POST .../:id/part-urls         │                                       │
+   ├──────────────────────────────────>│ GetPresignedPartUploadUrl (lote ≤ 20) │
+   │    array de URLs presignadas      │<──────────────────────────────────────┤
+   │<──────────────────────────────────┤                                       │
+   │                                   │                                       │
+   │ 3. HTTP PUT directo a cada URL    │                                       │
+   ├───────────────────────────────────┼──────────────────────────────────────>│ (concurrencia: 4 partes)
+   │                                   │                                       │
+   │ 4. POST .../:id/complete          │                                       │
+   ├──────────────────────────────────>│ ListParts (fuente autoritativa)       │
+   │                                   ├──────────────────────────────────────>│
+   │                                   │ CompleteMultipartUpload               │
+   │                                   ├──────────────────────────────────────>│
+   │                                   │ HeadObject (verificación tamaño real) │
+   │                                   ├──────────────────────────────────────>│
+   │    StoredFileResponse             │ (Crea StoredFile en Postgres)         │
+   │<──────────────────────────────────┤                                       │
+```
+
+### 10.1 `POST /` — Iniciar sesión de subida
+
+Crea una sesión de subida multipart en el storage y un registro `FileUpload` en estado `PENDING`.
+
+```json
+{
+  "name": "video_quirurgico.mp4",
+  "size": 104857600,
+  "mimeType": "video/mp4",
+  "conversationId": "conv-uuid"
+}
+```
+
+- Valida `size` contra `AppSettings.maxUploadSizeMb`.
+- Valida `mimeType` contra `AppSettings.fileTypeRestrictionMode`.
+- Valida cupo: máximo 5 sesiones activas concurrentes por usuario (`MAX_ACTIVE_UPLOADS_PER_USER`).
+
+→ `201`:
+```json
+{
+  "uploadSessionId": "session-uuid",
+  "partSize": 8388608,
+  "totalParts": 13,
+  "expiresAt": "2026-07-25T20:00:00.000Z"
+}
+```
+
+### 10.2 `GET /:id` — Consultar estado y reanudación
+
+Consulta el estado de la sesión y consulta en el storage las partes que ya fueron subidas exitosamente mediante `ListParts`:
+
+→ `200`:
+```json
+{
+  "id": "session-uuid",
+  "status": "UPLOADING",
+  "originalName": "video_quirurgico.mp4",
+  "mimeType": "video/mp4",
+  "declaredSize": 104857600,
+  "partSize": 8388608,
+  "totalParts": 13,
+  "uploadedParts": [
+    { "partNumber": 1, "size": 8388608 },
+    { "partNumber": 2, "size": 8388608 }
+  ],
+  "expiresAt": "2026-07-25T20:00:00.000Z"
+}
+```
+
+### 10.3 `POST /:id/part-urls` — Solicitar URLs presignadas para partes
+
+Pide URLs presignadas de subida directa (HTTP `PUT`) para un lote de partes.
+
+```json
+{
+  "partNumbers": [3, 4, 5, 6]
+}
+```
+
+- Máximo 20 partes por solicitud (`MAX_PART_URLS_BATCH = 20`).
+- Cada URL tiene un TTL de 15 minutos (`PART_URL_EXPIRES_IN_SECONDS = 900`).
+- Rate limit: 120 solicitudes por 15 minutos por usuario (`partUrlsRateLimiter`).
+
+→ `200`:
+```json
+[
+  { "partNumber": 3, "url": "https://s3.example.com/link-files/chat/...?partNumber=3&uploadId=...&X-Amz-Signature=..." },
+  { "partNumber": 4, "url": "https://s3.example.com/link-files/chat/...?partNumber=4&uploadId=...&X-Amz-Signature=..." }
+]
+```
+
+El cliente realiza un `PUT` binario con el fragmento de 8 MiB a cada URL presignada.
+
+### 10.4 `POST /:id/complete` — Completar y ensamblar subida
+
+Ensambla las partes en S3, verifica el tamaño real y crea el `StoredFile` definitivo:
+
+```json
+{
+  "checksum": "sha256-opcional..."
+}
+```
+
+- Consulta las partes confirmadas en el storage con `ListParts`. Si faltan partes, responde `400`.
+- Ensambla el objeto multipart con `CompleteMultipartUpload`.
+- **Invariante S1 (Verificación `HeadObject`)**: Consulta el tamaño real del objeto ensamblado en S3. Si supera `AppSettings.maxUploadSizeMb`, lo borra inmediatamente con `DeleteObject`, marca la sesión como `FAILED` y rechaza con `400`.
+- Crea el `StoredFile` definitivo con `provider = "S3"` y marca la sesión como `COMPLETED`.
+
+→ `200` con la respuesta estándar de `StoredFileResponse` (`id`, `name`, `size`, `url`).
+
+### 10.5 `DELETE /:id` — Cancelar subida
+
+Aborta la subida multipart en el storage mediante `AbortMultipartUpload`, liberando el espacio de las partes subidas, y pasa el estado de la sesión a `ABORTED`.
+
+→ `200` `{ "id": "session-uuid", "status": "ABORTED" }`.
 
 ---
 

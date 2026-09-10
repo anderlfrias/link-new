@@ -47,6 +47,100 @@ stateDiagram-v2
 
 ---
 
+## Parámetros de Fragmentación y Rendimiento
+
+* **Tamaño de parte**: **8 MiB** (`PART_SIZE_BYTES = 8 * 1024 * 1024`).
+  - Satisface el mínimo de S3 (5 MiB).
+  - Admite archivos de hasta 78 GiB dentro del límite de 10 000 partes de S3.
+  - Cada fragmento pasa holgadamente por el límite de 100 MB por request de Cloudflare.
+* **Lotes de presignado**: Hasta **20 partes** por llamada a `POST /:id/part-urls` con TTL de 15 minutos (900 segundos).
+* **Concurrencia cliente**: Recomendado 4 partes en paralelo (32 MiB en vuelo máximo), saturando la conexión sin ahogar el navegador ni la memoria.
+
+---
+
+## Detalle de Endpoints y Payloads
+
+### 1. `POST /api/v1/uploads` — Iniciar sesión
+Body:
+```json
+{
+  "originalName": "video_quirurgico.mp4",
+  "mimeType": "video/mp4",
+  "totalSize": 157286400,
+  "conversationId": "uuid-opcional"
+}
+```
+Respuesta `201 Created`:
+```json
+{
+  "id": "uuid-upload-session",
+  "chunkSize": 8388608,
+  "totalParts": 19,
+  "status": "PENDING"
+}
+```
+
+### 2. `POST /api/v1/uploads/:id/part-urls` — Obtener URLs de partes
+Body:
+```json
+{
+  "partNumbers": [1, 2, 3, 4]
+}
+```
+Respuesta `200 OK`:
+```json
+{
+  "parts": [
+    { "partNumber": 1, "url": "https://storage.../partNumber=1&X-Amz-Signature=..." },
+    { "partNumber": 2, "url": "https://storage.../partNumber=2&X-Amz-Signature=..." }
+  ]
+}
+```
+
+### 3. `GET /api/v1/uploads/:id` — Consultar progreso / Reanudación
+Respuesta `200 OK`:
+```json
+{
+  "id": "uuid-upload-session",
+  "status": "UPLOADING",
+  "totalParts": 19,
+  "chunkSize": 8388608,
+  "uploadedParts": [1, 2, 3]
+}
+```
+
+### 4. `POST /api/v1/uploads/:id/complete` — Ensamblar y finalizar
+Body: `{}` (Link consulta `ListParts` a S3 automáticamente para armar el manifiesto).
+
+Respuesta `201 Created`:
+```json
+{
+  "file": {
+    "id": "uuid-stored-file",
+    "originalName": "video_quirurgico.mp4",
+    "mimeType": "video/mp4",
+    "extension": "mp4",
+    "size": 157286400,
+    "url": "/api/v1/files/uuid-stored-file/content?t=...",
+    "createdAt": "2026-09-10T18:00:00.000Z"
+  }
+}
+```
+
+---
+
+## Proceso de Limpieza en Segundo Plano (`upload-cleanup.worker.ts`)
+
+Las subidas multipart que no llegan a completarse (por ejemplo, si el usuario cerró la pestaña o perdió la conexión definitivamente) dejan partes almacenadas en el bucket S3 ocupando espacio en disco.
+
+* **Frecuencia**: Se ejecuta periódicamente (o en el arranque).
+* **Criterio de expiración**: Sesiones en estado `PENDING` o `UPLOADING` cuya última actualización supere las **24 horas** (`TTL_INACTIVE_HOURS = 24`).
+* **Acción ejecutada**:
+  1. Llama a `s3.abortMultipartUpload(upload.objectKey, upload.uploadId)` para que SeaweedFS/S3 purgue físicamente los fragmentos.
+  2. Actualiza el estado de la sesión en base de datos a `EXPIRED`.
+
+---
+
 ## Garantías de seguridad implementadas
 
 1. **S1 — HeadObject obligatorio al completar**:

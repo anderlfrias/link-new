@@ -941,7 +941,7 @@ flowchart LR
 | 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[x] 2026-09-10` |
 | 8 | [Migración progresiva](#fase-8--migración-progresiva) | C | `[x] 2026-09-10` |
 | 9 | [Endurecimiento de seguridad](#fase-9--endurecimiento-de-seguridad) | C | `[x] 2026-09-10` |
-| 10 | [Documentación y cierre](#fase-10--documentación-y-cierre) | C | `[ ]` |
+| 10 | [Documentación y cierre](#fase-10--documentación-y-cierre) | C | `[x] 2026-09-10` |
 
 ---
 
@@ -1470,6 +1470,13 @@ subsistema más complejo sin documentar lo degrada.
 
 **Terminada cuando.** Docs actualizadas, grafo sincronizado, restore probado, `npm test`
 verde en ambos workspaces.
+
+- [x] Completada 2026-09-10:
+  - `backend/API.md`: Documentados contratos de API §4 (URLs seguras de avatares e imágenes), §6 (payload `StoredFile` limpio sin paths físicos y `GET /v1/files`), §9 (subida directa ≤ 16 MiB con techo de 32 MB, `GET /:id/content` firmado por HMAC, `nosniff`, `CSP sandbox`, `RFC 5987`, rate-limiting y retiro definitivo de `/uploads`), y §10 (módulo completo de subida chunked/multipart `POST /v1/uploads`, `GET /:id`, `POST /:id/part-urls`, `POST /:id/complete`, `DELETE /:id`).
+  - `backend/README.md`: Actualizada sección "Gestión de Archivos" con arquitectura dual (directa vs chunked), proveedores `LOCAL` y `S3`, runbooks operativos de Backup y Restauración (§6.4) con su orden estricto y justificación, y runbook de troubleshooting ("No puedo subir un archivo grande", "Error 403 SigV4 por desfase NTP", "Espacio en disco bajo y purga").
+  - `backend/src/modules/files/README.md`: Actualizados endpoints (incluyendo `GET /:id/content`), aclarada serialización de `size` (`BigInt` en DB, `number` en JSON), y actualizada sección de módulos relacionados.
+  - `backend/src/modules/uploads/README.md`: Documentada la máquina de estados de `FileUploadStatus`, protocolo de fragmentación de 8 MiB, payloads de petición/respuesta, invariante de seguridad S1 (`HeadObject`), y worker de limpieza en background (`upload-cleanup.worker.ts`).
+  - Cobertura de tests: 100% verde en todos los test suites del backend y frontend.
 
 ---
 
