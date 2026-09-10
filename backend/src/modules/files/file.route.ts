@@ -4,7 +4,7 @@ import multer from "multer";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { authenticate, requireRoles } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
-import { uploadRateLimiter } from "../../middlewares/rate-limit.middleware";
+import { downloadRateLimiter, uploadRateLimiter } from "../../middlewares/rate-limit.middleware";
 import * as FileController from "./file.controller";
 
 // memoryStorage: el StorageProvider (src/storage) trabaja siempre con buffers,
@@ -40,6 +40,7 @@ const router = Router();
 // Va ANTES de authenticate global porque etiquetas <img>/<audio> no envían headers.
 router.get(
   "/:id/content",
+  downloadRateLimiter,
   helmet.crossOriginResourcePolicy({ policy: "cross-origin" }),
   FileController.getContent,
 );

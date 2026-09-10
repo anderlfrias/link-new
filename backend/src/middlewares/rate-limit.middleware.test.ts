@@ -1,7 +1,13 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { loginIpRateLimiter, loginUserRateLimiter, uploadRateLimiter } from "./rate-limit.middleware";
+import {
+  downloadRateLimiter,
+  loginIpRateLimiter,
+  loginUserRateLimiter,
+  partUrlsRateLimiter,
+  uploadRateLimiter,
+} from "./rate-limit.middleware";
 
 const TOO_MANY_ATTEMPTS_BODY = {
   error: "Hiciste demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar.",
@@ -194,3 +200,68 @@ describe("uploadRateLimiter", () => {
     expect(blocked.status).toBe(429);
   }, 20000);
 });
+
+describe("partUrlsRateLimiter", () => {
+  function buildPartUrlsApp() {
+    const app = express();
+    app.use((req, _res, next) => {
+      const headerUser = req.headers["x-test-user-id"];
+      if (typeof headerUser === "string") {
+        (req as any).user = { internalUserId: headerUser };
+      }
+      next();
+    });
+    app.use(partUrlsRateLimiter);
+    app.post("/part-urls", (_req, res) => res.status(200).json({ urls: [] }));
+    return app;
+  }
+
+  it("permite solicitudes de part-urls y descuenta del cupo de 120", async () => {
+    const app = buildPartUrlsApp();
+    const userId = uniqueKey("part-user");
+
+    const res = await request(app).post("/part-urls").set("x-test-user-id", userId);
+    expect(res.status).toBe(200);
+    expect(res.headers["ratelimit-remaining"]).toBe("119");
+  });
+});
+
+describe("downloadRateLimiter", () => {
+  function buildDownloadApp() {
+    const app = express();
+    app.use((req, _res, next) => {
+      const headerUser = req.headers["x-test-user-id"];
+      if (typeof headerUser === "string") {
+        (req as any).user = { internalUserId: headerUser };
+      }
+      next();
+    });
+    app.use(downloadRateLimiter);
+    app.get("/content", (_req, res) => res.status(200).send("bytes"));
+    return app;
+  }
+
+  it("permite descargas legítimas y descuenta del cupo de 300", async () => {
+    const app = buildDownloadApp();
+    const userId = uniqueKey("dl-user");
+
+    const res = await request(app).get("/content").set("x-test-user-id", userId);
+    expect(res.status).toBe(200);
+    expect(res.headers["ratelimit-remaining"]).toBe("299");
+  });
+
+  it("dos usuarios distintos tienen cupos de descarga independientes", async () => {
+    const app = buildDownloadApp();
+    const userA = uniqueKey("dl-user-a");
+    const userB = uniqueKey("dl-user-b");
+
+    const resA = await request(app).get("/content").set("x-test-user-id", userA);
+    const resB = await request(app).get("/content").set("x-test-user-id", userB);
+
+    expect(resA.status).toBe(200);
+    expect(resB.status).toBe(200);
+    expect(resA.headers["ratelimit-remaining"]).toBe("299");
+    expect(resB.headers["ratelimit-remaining"]).toBe("299");
+  });
+});
+

@@ -548,4 +548,64 @@ describe("file.service", () => {
       });
     });
   });
+
+  describe("buildContentDisposition", () => {
+    it("permite inline para tipos seguros de la allowlist (png, jpeg, gif, webp, audio, video/mp4)", () => {
+      expect(buildContentDisposition("foto.png", "image/png")).toContain("inline;");
+      expect(buildContentDisposition("foto.jpg", "image/jpeg")).toContain("inline;");
+      expect(buildContentDisposition("anim.gif", "image/gif")).toContain("inline;");
+      expect(buildContentDisposition("foto.webp", "image/webp")).toContain("inline;");
+      expect(buildContentDisposition("nota.mp3", "audio/mpeg")).toContain("inline;");
+      expect(buildContentDisposition("clip.mp4", "video/mp4")).toContain("inline;");
+    });
+
+    it("fuerza attachment para SVG y HTML mitigando riesgo de XSS almacenado (§9.1 S6)", () => {
+      const svgDisposition = buildContentDisposition("vector.svg", "image/svg+xml");
+      expect(svgDisposition).toContain("attachment;");
+      expect(svgDisposition).not.toContain("inline;");
+
+      const htmlDisposition = buildContentDisposition("malicious.html", "text/html");
+      expect(htmlDisposition).toContain("attachment;");
+      expect(htmlDisposition).not.toContain("inline;");
+    });
+
+    it("fuerza attachment para otros tipos arbitrarios como PDF y ejecutables", () => {
+      expect(buildContentDisposition("doc.pdf", "application/pdf")).toContain("attachment;");
+      expect(buildContentDisposition("app.exe", "application/octet-stream")).toContain("attachment;");
+    });
+
+    it("fuerza attachment si forceDownload es true independientemente del mimeType", () => {
+      const disposition = buildContentDisposition("foto.png", "image/png", true);
+      expect(disposition).toContain("attachment;");
+      expect(disposition).not.toContain("inline;");
+    });
+
+    it("sanitiza caracteres de control y CRLF para evitar inyección de cabeceras (§9.1 S7)", () => {
+      const disposition = buildContentDisposition("malicious\r\nSet-Cookie: session=evil\r\n.pdf", "application/pdf");
+      expect(disposition).not.toContain("\r");
+      expect(disposition).not.toContain("\n");
+      expect(disposition).toContain("attachment;");
+    });
+
+    it("sanitiza comillas dobles, punto y coma y barras en el nombre ASCII", () => {
+      const disposition = buildContentDisposition('archivo"; "hack.pdf', "application/pdf");
+      expect(disposition).toContain('filename="archivo__ _hack.pdf"');
+    });
+
+    it("aplica fallback seguro cuando el nombre está vacío o sólo contiene caracteres no imprimibles", () => {
+      const emptyDisposition = buildContentDisposition("", "application/pdf");
+      expect(emptyDisposition).toContain('filename="archivo"');
+
+      const ctrlDisposition = buildContentDisposition("\x00\x01\x1f", "application/pdf");
+      expect(ctrlDisposition).toContain('filename="archivo"');
+    });
+
+    it("codifica nombres UTF-8 con acentos, paréntesis y emojis según RFC 5987", () => {
+      const disposition = buildContentDisposition("informe médico (2026) 📄.pdf", "application/pdf");
+      expect(disposition).toContain("filename*=UTF-8''");
+      expect(disposition).toContain("%20");
+      expect(disposition).toContain("%282026%29");
+      expect(disposition).toContain("%F0%9F%93%84");
+    });
+  });
 });

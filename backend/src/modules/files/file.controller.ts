@@ -91,6 +91,8 @@ export async function getContent(req: Request, res: Response, next: NextFunction
     res.setHeader("Content-Disposition", disposition);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
 
     if (file.provider === FileProvider.LOCAL) {
       const diskStorage = getProvider(FileProvider.LOCAL) as LocalDiskStorage;

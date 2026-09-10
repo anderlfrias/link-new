@@ -329,4 +329,17 @@ describe("GET /files/:id/content", () => {
       migrationIntervalMinutes: 60,
     });
   });
+
+  it("incluye cabeceras de seguridad nosniff y CSP sandbox en GET /files/:id/content (§9.1 S6)", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-123" });
+    vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
+
+    const res = await request(app).get("/files/f-123/content?t=valid-hmac");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["content-security-policy"]).toBe("default-src 'none'; sandbox");
+    expect(res.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+  });
 });

@@ -92,3 +92,17 @@ export const partUrlsRateLimiter = rateLimit({
     req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
   message: { error: "Demasiadas solicitudes de URLs de subida. Esperá unos minutos y volvé a intentar." },
 });
+
+// Rate limiter para descarga y visualización de archivos (LARGE_FILES_PLAN.md S5/S8).
+// Evita raspado o abuso masivo de ancho de banda sirviendo archivos adjuntos.
+// 300 peticiones por ventana de 15 minutos por usuario o IP es holgado para navegación interactiva regular.
+export const downloadRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+  message: { error: "Demasiadas solicitudes de descarga de archivos. Esperá unos minutos y volvé a intentar." },
+});
+

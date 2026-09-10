@@ -129,13 +129,16 @@ export function buildContentDisposition(
 
   const dispositionType = isInlineAllowed ? "inline" : "attachment";
 
-  const sanitizedAscii = originalName
+  const rawClean = (originalName || "")
     .replace(/[\x00-\x1f\x7f"\\;]/g, "_")
     .replace(/[^\x20-\x7e]/g, "_");
 
-  const encodedUtf8 = encodeURIComponent(originalName)
-    .replace(/['()]/g, escape)
-    .replace(/\*/g, "%2A");
+  const sanitizedAscii = rawClean.replace(/[_.\s]/g, "").length > 0 ? rawClean : "archivo";
+
+  const effectiveName =
+    originalName && originalName.replace(/[\x00-\x1f\x7f]/g, "").trim() ? originalName : "archivo";
+  const encodedUtf8 = encodeURIComponent(effectiveName)
+    .replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 
   return `${dispositionType}; filename="${sanitizedAscii}"; filename*=UTF-8''${encodedUtf8}`;
 }

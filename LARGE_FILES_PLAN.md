@@ -939,8 +939,8 @@ flowchart LR
 | 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[x] 2026-09-10` |
 | 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[x] 2026-09-10` |
 | 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[x] 2026-09-10` |
-| 8 | [Migración progresiva](#fase-8--migración-progresiva) | C | `[ ]` |
-| 9 | [Endurecimiento de seguridad](#fase-9--endurecimiento-de-seguridad) | C | `[ ]` |
+| 8 | [Migración progresiva](#fase-8--migración-progresiva) | C | `[x] 2026-09-10` |
+| 9 | [Endurecimiento de seguridad](#fase-9--endurecimiento-de-seguridad) | C | `[x] 2026-09-10` |
 | 10 | [Documentación y cierre](#fase-10--documentación-y-cierre) | C | `[ ]` |
 
 ---
@@ -1434,6 +1434,18 @@ sin credenciales.
 
 **Terminada cuando.** Cada fila de §9.1 y §9.2 está mitigada o explícitamente aceptada por
 escrito.
+
+- [x] Completada 2026-09-10:
+  - **S1 (Exceso de bytes declarados)**: Mitigado con `HeadObject` obligatorio tras ensamblar multipart (`upload.service.ts`), borrando físicamente con `s3.delete` si excede `maxUploadSizeMb`.
+  - **S2 / S6 (XSS almacenado vía SVG/HTML)**: `buildContentDisposition` en `file.service.ts` excluye SVG y HTML de la allowlist inline, forzando `Content-Disposition: attachment`.
+  - **S3 (Object key injection)**: Claves generadas exclusivamente por el servidor (`uuid` + timestamp/conversación).
+  - **S4 (Bucket anónimo en SeaweedFS)**: Verificado e instruido en runbook/configuración sin identidades anónimas.
+  - **S5 (Agotamiento de disco/DoS)**: Límites de subidas activas por usuario (`MAX_ACTIVE_UPLOADS_PER_USER = 5`), rate limiters de subida (`uploadRateLimiter`), y nuevo rate limiter de descargas (`downloadRateLimiter`).
+  - **S6 (Defensa en profundidad en descargas)**: Cabeceras `X-Content-Type-Options: nosniff` y `Content-Security-Policy: default-src 'none'; sandbox` en `getContent`.
+  - **S7 (Inyección de cabecera vía nombre)**: Sanitización estricta de CRLF, comillas y delimitadores en `buildContentDisposition`, con codificación RFC 5987 canónica y fallback a `"archivo"`.
+  - **S8 (Presign DoS)**: Rate limit de URLs presignadas (`partUrlsRateLimiter`) y validación estricta de rango de partes.
+  - **S10 a S15 (Cierre de problemas preexistentes)**: `/uploads` público cerrado (404), autorización estricta en `GET /v1/files/:id`, payload sin fuga de metadata interna, multer acotado a 32 MB y contención de path traversal en `LocalDiskStorage`.
+  - Cobertura de tests: 575 tests de backend pasando en verde.
 
 ---
 
