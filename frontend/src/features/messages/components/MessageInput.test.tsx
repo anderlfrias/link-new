@@ -373,6 +373,49 @@ describe("MessageInput", () => {
     })]);
     expect(pasteEvent.defaultPrevented).toBe(true);
   });
+
+  it("permite enviar mensajes de texto mientras un adjunto se encuentra subiendo (§8.3)", async () => {
+    const user = userEvent.setup();
+    const uploadingAttachment = {
+      localId: "att-uploading-1",
+      file: new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", { type: "video/mp4" }),
+      status: "uploading",
+    };
+
+    const attachmentsStateWithUploading = {
+      ...defaultAttachmentsState,
+      attachments: [uploadingAttachment],
+      isUploading: true,
+      fileIds: [],
+      removeSentAttachments: vi.fn(),
+    };
+
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={attachmentsStateWithUploading as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Agregá un mensaje (opcional)");
+    await user.type(textarea, "Texto mientras el video sigue subiendo");
+
+    const sendButton = screen.getByRole("button", { name: "Enviar mensaje" });
+    expect(sendButton).toBeEnabled();
+
+    await user.click(sendButton);
+
+    expect(onSend).toHaveBeenCalledWith("Texto mientras el video sigue subiendo", undefined);
+    // No debe abortar ni resetear la bandeja de adjuntos en curso
+    expect(defaultAttachmentsState.reset).not.toHaveBeenCalled();
+    expect(attachmentsStateWithUploading.removeSentAttachments).not.toHaveBeenCalled();
+  });
 });
 
 

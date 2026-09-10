@@ -90,7 +90,11 @@ export function MessageInput({
   const {
     attachments,
     addFiles,
+    pauseAttachment,
+    resumeAttachment,
+    retryAttachment,
     removeAttachment,
+    removeSentAttachments,
     reset: resetAttachments,
     isUploading,
     fileIds,
@@ -151,17 +155,24 @@ export function MessageInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [reactionsPickerOpen]);
 
-  const canSend = (Boolean(value.trim()) || fileIds.length > 0) && !sending && !isUploading;
+  // §8.3: canSend deja de mirar isUploading global.
+  // Permite enviar texto mientras los adjuntos suben, o enviar cuando al menos un adjunto está listo.
+  const canSend = (Boolean(value.trim()) || fileIds.length > 0) && !sending;
 
   async function submit() {
     if (!canSend) return;
     const content = value.trim();
+    const readyFileIds = [...fileIds];
     setSending(true);
     setValue("");
     onStopTyping();
     try {
-      await onSend(content, fileIds.length > 0 ? fileIds : undefined);
-      resetAttachments();
+      await onSend(content, readyFileIds.length > 0 ? readyFileIds : undefined);
+      if (readyFileIds.length > 0) {
+        removeSentAttachments(readyFileIds);
+      } else if (attachments.length === 0) {
+        resetAttachments();
+      }
     } finally {
       setSending(false);
     }
@@ -292,6 +303,13 @@ export function MessageInput({
               key={attachment.localId}
               attachment={attachment}
               onRemove={() => removeAttachment(attachment.localId)}
+              onPause={
+                attachment.uploader ? () => pauseAttachment(attachment.localId) : undefined
+              }
+              onResume={
+                attachment.uploader ? () => resumeAttachment(attachment.localId) : undefined
+              }
+              onRetry={() => retryAttachment(attachment.localId)}
             />
           ))}
         </div>

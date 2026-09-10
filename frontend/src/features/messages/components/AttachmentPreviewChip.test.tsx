@@ -40,14 +40,16 @@ describe("AttachmentPreviewChip", () => {
       status: "done",
     };
 
-    const { container } = render(<AttachmentPreviewChip attachment={attachment} onRemove={vi.fn()} />);
+    const { container } = render(
+      <AttachmentPreviewChip attachment={attachment} onRemove={vi.fn()} />,
+    );
 
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(file);
     const img = container.querySelector("img");
     expect(img).toHaveAttribute("src", "blob:mock-url");
   });
 
-  it("displays error message when status is error", () => {
+  it("displays error message and handles retry button", () => {
     const file = new File(["test-data"], "archivo.zip", { type: "application/zip" });
     const attachment: PendingAttachment = {
       localId: "loc-3",
@@ -55,9 +57,82 @@ describe("AttachmentPreviewChip", () => {
       status: "error",
       error: "Archivo demasiado grande",
     };
+    const onRetry = vi.fn();
 
-    render(<AttachmentPreviewChip attachment={attachment} onRemove={vi.fn()} />);
+    render(
+      <AttachmentPreviewChip
+        attachment={attachment}
+        onRemove={vi.fn()}
+        onRetry={onRetry}
+      />,
+    );
 
     expect(screen.getByText("Archivo demasiado grande")).toBeInTheDocument();
+
+    const retryBtn = screen.getByLabelText("Reintentar subida");
+    fireEvent.click(retryBtn);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("displays progress and handles pause button while uploading", () => {
+    const file = new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", {
+      type: "video/mp4",
+    });
+    const attachment: PendingAttachment = {
+      localId: "loc-4",
+      file,
+      status: "uploading",
+      progress: {
+        loadedBytes: 10 * 1024 * 1024,
+        totalBytes: 20 * 1024 * 1024,
+        percentage: 50,
+      },
+    };
+    const onPause = vi.fn();
+
+    render(
+      <AttachmentPreviewChip
+        attachment={attachment}
+        onRemove={vi.fn()}
+        onPause={onPause}
+      />,
+    );
+
+    expect(screen.getByText(/50%/)).toBeInTheDocument();
+
+    const pauseBtn = screen.getByLabelText("Pausar subida");
+    fireEvent.click(pauseBtn);
+    expect(onPause).toHaveBeenCalledTimes(1);
+  });
+
+  it("displays paused state and handles resume button", () => {
+    const file = new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", {
+      type: "video/mp4",
+    });
+    const attachment: PendingAttachment = {
+      localId: "loc-5",
+      file,
+      status: "paused",
+      progress: {
+        loadedBytes: 8 * 1024 * 1024,
+        totalBytes: 20 * 1024 * 1024,
+        percentage: 40,
+      },
+    };
+    const onResume = vi.fn();
+
+    render(
+      <AttachmentPreviewChip
+        attachment={attachment}
+        onRemove={vi.fn()}
+        onResume={onResume}
+      />,
+    );
+
+    expect(screen.getByText(/Pausado • 40%/)).toBeInTheDocument();
+
+    const resumeBtn = screen.getByLabelText("Reanudar subida");
+    fireEvent.click(resumeBtn);
+    expect(onResume).toHaveBeenCalledTimes(1);
   });
 });

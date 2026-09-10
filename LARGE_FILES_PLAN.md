@@ -937,7 +937,7 @@ flowchart LR
 | 3 | [Provider S3](#fase-3--provider-s3) | C | `[x] 2026-09-10` |
 | 4 | [Backend del upload chunked](#fase-4--backend-del-upload-chunked) | C | `[x] 2026-09-10` |
 | 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[x] 2026-09-10` |
-| 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[ ]` |
+| 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[x] 2026-09-10` |
 | 7 | [Reanudación y reintentos](#fase-7--reanudación-y-reintentos) | C | `[ ]` |
 | 8 | [Migración progresiva](#fase-8--migración-progresiva) | C | `[ ]` |
 | 9 | [Endurecimiento de seguridad](#fase-9--endurecimiento-de-seguridad) | C | `[ ]` |
@@ -1300,6 +1300,45 @@ testearlo aislado con XHR mockeado.
 
 **Terminada cuando.** Un usuario sube 2 GB desde el chat, ve `%`/velocidad/ETA, puede
 cancelar, y puede escribir mientras sube.
+
+**Cerrada 2026-09-10 — notas para quien retome el plan:**
+
+- **Cliente de API de Uploads (`frontend/src/features/files/api/uploads.api.ts`):**
+  - Implementadas `initiateUpload`, `getUploadStatus`, `getPartUrls`, `completeUpload` y `abortUpload` comunicándose con los endpoints del backend montados bajo `/v1/uploads`.
+  - Tipado estricto en `upload.types.ts`.
+- **Motor puro `ChunkedUploader` (`frontend/src/features/files/lib/chunked-uploader.ts`):**
+  - Desarrollado sin acoplamiento a React para permitir pruebas unitarias totalmente aisladas.
+  - Particionado exacto en slices según el `partSize` acordado en la sesión (8 MiB), incluyendo la última parte parcial.
+  - Cola con concurrencia máxima de 4 transferencias simultáneas.
+  - Pre-firmado por lotes (`fetchPartUrlsBatch` de hasta 20 partes por solicitud).
+  - Peticiones PUT con `XMLHttpRequest` para capturar `xhr.upload.onprogress` y alimentar el progreso en bytes acumulados en vuelo + completados.
+  - Re-presign inmediato en respuestas HTTP 403 (S8 / expiración de firma) invalidando la URL en cache y solicitando una nueva.
+  - Reintentos con backoff exponencial para errores de transporte (hasta 5 reintentos por parte).
+  - Métodos `pause()`, `resume()` y `cancel()` (abortando XHRs activos y limpiando workers y bytes en vuelo).
+- **Métricas de subida con velocidad EMA y ETA (`use-upload-progress.ts`):**
+  - Cálculo de velocidad mediante Media Móvil Exponencial (EMA, alfa = 0.25).
+  - Suavizado y formateo humano de velocidad ("12.5 MB/s") y tiempo restante ("45 s", "2 min", "1 h 12 min").
+  - Invariante §8.4 cumplido: el ETA se suprime durante los primeros 3 segundos de subida continua para evitar ruido.
+- **Integración y bifurcación de camino (`use-message-attachments.ts`):**
+  - Umbral interno `CHUNKED_UPLOAD_THRESHOLD_BYTES = 16 * 1024 * 1024` (16 MiB).
+  - Archivos directos (≤ 16 MiB) continúan por `uploadFile` (con compresión WebP para imágenes).
+  - Archivos pesados (> 16 MiB) inician `ChunkedUploader` y exponen estado y progreso detallado en `PendingAttachment`.
+  - Acciones expuestas: `pauseAttachment`, `resumeAttachment`, `retryAttachment`, `removeAttachment` (cancela si está en vuelo) y `removeSentAttachments` (solo retira los archivos enviados en el mensaje actual).
+- **Desbloqueo del Composer (§8.3 / B6) en `MessageInput.tsx`:**
+  - `canSend` deja de evaluar `!isUploading` globalmente. Un usuario puede escribir y enviar mensajes de texto inmediatamente aunque haya archivos pesados subiendo en la bandeja de la conversación.
+  - Al enviar, únicamente los archivos en estado `done` se envían en `fileIds`, manteniéndose los adjuntos en curso en la bandeja.
+- **UI de progreso y controles en `AttachmentPreviewChip.tsx`:**
+  - Barra de progreso integrada en la parte inferior del chip.
+  - Visualización en tiempo real de porcentaje, velocidad y ETA.
+  - Botones interactivos con microanimaciones para pausar, reanudar y reintentar.
+- **Pruebas unitarias:**
+  - `uploads.api.test.ts`: 5 tests pasando.
+  - `chunked-uploader.test.ts`: 7 tests pasando (particionado exacto, concurrencia 4, 403 re-presign, reintentos con backoff, pausa/reanudación, cancelación con abort, y progreso suave).
+  - `use-upload-progress.test.ts`: 6 tests pasando (formateo ETA, supresión durante 3s, cálculo EMA, reseteo al terminar).
+  - `use-message-attachments.test.ts`: 9 tests pasando (camino directo, camino chunked, pausa/reanudación, retiro selectivo al enviar, validaciones de cuotas y tipos).
+  - `AttachmentPreviewChip.test.tsx`: 5 tests pasando (renderizado normal, imagen, error con retry, progreso con pausa, pausado con reanudar).
+  - `MessageInput.test.tsx`: 10 tests pasando (incluyendo el envío de texto no bloqueado por subidas en curso).
+  - Total monorepo: 1163 tests en verde (550 backend + 613 frontend).
 
 ---
 

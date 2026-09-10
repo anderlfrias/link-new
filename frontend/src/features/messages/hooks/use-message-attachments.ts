@@ -4,10 +4,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { uploadFile } from "@/features/files/api/files.api";
+import {
+  ChunkedUploader,
+  type ChunkedUploadProgress,
+  type ChunkedUploadStatus,
+} from "@/features/files/lib/chunked-uploader";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
+import { isImageMimeType } from "@/utils/file-format";
 import type { UploadedFile } from "@/features/files/types/file.types";
 
-export type AttachmentStatus = "uploading" | "done" | "error";
+/** Umbral interno que divide el camino directo (≤ 16 MiB) del chunked (> 16 MiB) (§4, §12). */
+export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 16 * 1024 * 1024;
+
+export type AttachmentStatus =
+  | "uploading"
+  | "done"
+  | "error"
+  | "initiating"
+  | "retrying"
+  | "paused"
+  | "resuming"
+  | "completing"
+  | "canceled";
 
 export interface PendingAttachment {
   localId: string;
@@ -15,6 +33,8 @@ export interface PendingAttachment {
   status: AttachmentStatus;
   uploaded?: UploadedFile;
   error?: string;
+  progress?: ChunkedUploadProgress;
+  uploader?: ChunkedUploader;
 }
 
 /** Los tres rechazos que ameritan interrumpir al usuario con un modal en vez de dejarlo solo en
@@ -40,7 +60,7 @@ export interface AttachmentValidationError {
 /// Mensajes que arma `file.service.ts#uploadFile` para estos dos casos —
 /// únicos en todo el backend a esa función (ver grep), así que reconocerlos
 /// acá por texto es seguro: no hay otro endpoint que produzca este formato.
-/// MulterError (techo fijo de 500MB, `ABSOLUTE_MAX_UPLOAD_BYTES`) usa su
+/// MulterError (techo fijo de 32MB, `ABSOLUTE_MAX_UPLOAD_BYTES`) usa su
 /// propio mensaje default de multer ("File too large") — se trata igual como
 /// límite de tamaño, aunque ese techo no lo edita un admin.
 function classifyUploadError(message: string): AttachmentFailureReason | null {
@@ -88,15 +108,115 @@ export function useMessageAttachments(conversationId: string) {
     attachmentsCountRef.current = attachments.length;
   }, [attachments]);
 
+  const startUpload = useCallback(
+    (fileToUpload: File, localId: string) => {
+      if (!token) return;
+
+      if (fileToUpload.size > CHUNKED_UPLOAD_THRESHOLD_BYTES) {
+        // Camino chunked (> 16 MiB) directo a S3 vía multipart
+        const uploader = new ChunkedUploader({
+          file: fileToUpload,
+          token,
+          conversationId,
+          onStatusChange: (newStatus: ChunkedUploadStatus) => {
+            setAttachments((prev) =>
+              prev.map((att) =>
+                att.localId === localId
+                  ? {
+                      ...att,
+                      status: newStatus,
+                    }
+                  : att,
+              ),
+            );
+          },
+          onProgress: (progress: ChunkedUploadProgress) => {
+            setAttachments((prev) =>
+              prev.map((att) => (att.localId === localId ? { ...att, progress } : att)),
+            );
+          },
+        });
+
+        setAttachments((prev) =>
+          prev.map((att) =>
+            att.localId === localId
+              ? {
+                  ...att,
+                  uploader,
+                  status: "initiating",
+                  progress: {
+                    loadedBytes: 0,
+                    totalBytes: fileToUpload.size,
+                    percentage: 0,
+                  },
+                }
+              : att,
+          ),
+        );
+
+        uploader
+          .start()
+          .then((uploaded) => {
+            setAttachments((prev) =>
+              prev.map((att) =>
+                att.localId === localId ? { ...att, status: "done", uploaded } : att,
+              ),
+            );
+          })
+          .catch((error) => {
+            if (uploader.getStatus() === "canceled") return;
+            const message = error instanceof Error ? error.message : "Error al subir";
+            setAttachments((prev) =>
+              prev.map((att) =>
+                att.localId === localId ? { ...att, status: "error", error: message } : att,
+              ),
+            );
+
+            const reason = classifyUploadError(message);
+            if (reason) {
+              setValidationErrors((prev) => [
+                ...prev,
+                { id: localId, fileName: fileToUpload.name, reason },
+              ]);
+            }
+          });
+      } else {
+        // Camino directo (≤ 16 MiB) vía POST /v1/files
+        uploadFile(token, fileToUpload, conversationId)
+          .then((uploaded) => {
+            setAttachments((prev) =>
+              prev.map((att) =>
+                att.localId === localId ? { ...att, status: "done", uploaded } : att,
+              ),
+            );
+          })
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : "Error al subir";
+            setAttachments((prev) =>
+              prev.map((att) =>
+                att.localId === localId ? { ...att, status: "error", error: message } : att,
+              ),
+            );
+
+            const reason = classifyUploadError(message);
+            if (reason) {
+              setValidationErrors((prev) => [
+                ...prev,
+                { id: localId, fileName: fileToUpload.name, reason },
+              ]);
+            }
+          });
+      }
+    },
+    [token, conversationId],
+  );
+
   const addFiles = useCallback(
     (files: FileList | File[]) => {
       if (!token) return;
       const incoming = Array.from(files);
 
-      // Tope de cantidad por mensaje: se aplica ANTES de subir nada — los
-      // archivos que exceden el límite ni se agregan como chip (a diferencia
-      // de un rechazo por tipo/tamaño, acá no hay "el archivo se sube y
-      // falla", el archivo nunca llega a intentarse).
+      // Tope de cantidad por mensaje: se aplica ANTES de subir nada
       const remainingSlots =
         maxFilesPerMessage == null
           ? incoming.length
@@ -109,7 +229,11 @@ export function useMessageAttachments(conversationId: string) {
           ...prev,
           {
             id: `too-many-files-${Date.now()}`,
-            reason: { kind: "too-many-files", limit: maxFilesPerMessage, attemptedCount: incoming.length },
+            reason: {
+              kind: "too-many-files",
+              limit: maxFilesPerMessage,
+              attemptedCount: incoming.length,
+            },
           },
         ]);
       }
@@ -118,66 +242,113 @@ export function useMessageAttachments(conversationId: string) {
         const localId = `${Date.now()}-${nextId.current++}`;
         setAttachments((prev) => [...prev, { localId, file, status: "uploading" }]);
 
-        compressImage(file, file.name, IMAGE_COMPRESSION_PRESETS.message)
-          .then((compressed) => {
-            // Reemplaza el archivo mostrado en el chip por el comprimido —
-            // así el tamaño que ve el usuario ya refleja lo que se sube.
-            if (compressed !== file) {
-              setAttachments((prev) =>
-                prev.map((attachment) =>
-                  attachment.localId === localId ? { ...attachment, file: compressed } : attachment,
-                ),
-              );
-            }
-            return uploadFile(token, compressed, conversationId);
-          })
-          .then((uploaded) => {
-            setAttachments((prev) =>
-              prev.map((attachment) =>
-                attachment.localId === localId ? { ...attachment, status: "done", uploaded } : attachment,
-              ),
-            );
-          })
-          .catch((error) => {
-            const message = error instanceof Error ? error.message : "Error al subir";
-            setAttachments((prev) =>
-              prev.map((attachment) =>
-                attachment.localId === localId ? { ...attachment, status: "error", error: message } : attachment,
-              ),
-            );
-
-            // El archivo se queda en `attachments` (con su chip en rojo) para
-            // que el usuario pueda quitarlo a mano o reemplazarlo antes de
-            // enviar — el modal es una explicación adicional, no un
-            // auto-descarte.
-            const reason = classifyUploadError(message);
-            if (reason) {
-              setValidationErrors((prev) => [...prev, { id: localId, fileName: file.name, reason }]);
-            }
-          });
+        if (isImageMimeType(file.type)) {
+          compressImage(file, file.name, IMAGE_COMPRESSION_PRESETS.message)
+            .then((compressed) => {
+              if (compressed !== file) {
+                setAttachments((prev) =>
+                  prev.map((attachment) =>
+                    attachment.localId === localId
+                      ? { ...attachment, file: compressed }
+                      : attachment,
+                  ),
+                );
+              }
+              startUpload(compressed, localId);
+            })
+            .catch(() => {
+              startUpload(file, localId);
+            });
+        } else {
+          startUpload(file, localId);
+        }
       });
     },
-    [token, conversationId, maxFilesPerMessage],
+    [token, maxFilesPerMessage, startUpload],
+  );
+
+  const pauseAttachment = useCallback((localId: string) => {
+    setAttachments((prev) =>
+      prev.map((att) => {
+        if (att.localId === localId && att.uploader) {
+          att.uploader.pause();
+          return { ...att, status: "paused" };
+        }
+        return att;
+      }),
+    );
+  }, []);
+
+  const resumeAttachment = useCallback((localId: string) => {
+    setAttachments((prev) =>
+      prev.map((att) => {
+        if (att.localId === localId && att.uploader) {
+          void att.uploader.resume();
+          return { ...att, status: "uploading" };
+        }
+        return att;
+      }),
+    );
+  }, []);
+
+  const retryAttachment = useCallback(
+    (localId: string) => {
+      const target = attachments.find((att) => att.localId === localId);
+      if (!target) return;
+
+      setAttachments((prev) =>
+        prev.map((att) =>
+          att.localId === localId ? { ...att, status: "uploading", error: undefined } : att,
+        ),
+      );
+      startUpload(target.file, localId);
+    },
+    [attachments, startUpload],
   );
 
   const removeAttachment = useCallback((localId: string) => {
-    setAttachments((prev) => prev.filter((attachment) => attachment.localId !== localId));
+    setAttachments((prev) => {
+      const target = prev.find((att) => att.localId === localId);
+      if (target?.uploader && target.status !== "done") {
+        void target.uploader.cancel();
+      }
+      return prev.filter((att) => att.localId !== localId);
+    });
     setValidationErrors((prev) => prev.filter((entry) => entry.id !== localId));
   }, []);
 
-  // Cierra el modal actual (el primero de la cola) sin tocar `attachments` —
-  // el archivo rechazado (si lo hay) sigue seleccionado, ver el comentario en
-  // el catch de `addFiles`.
+  /** Remueve únicamente los adjuntos que acaban de ser enviados en un mensaje (§8.3). */
+  const removeSentAttachments = useCallback((sentFileIds: string[]) => {
+    setAttachments((prev) =>
+      prev.filter((att) => !att.uploaded || !sentFileIds.includes(att.uploaded.id)),
+    );
+  }, []);
+
   const dismissValidationError = useCallback((id: string) => {
     setValidationErrors((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
   const reset = useCallback(() => {
-    setAttachments([]);
+    setAttachments((prev) => {
+      for (const att of prev) {
+        if (att.uploader && att.status !== "done") {
+          void att.uploader.cancel();
+        }
+      }
+      return [];
+    });
     setValidationErrors([]);
   }, []);
 
-  const isUploading = attachments.some((attachment) => attachment.status === "uploading");
+  const isUploading = attachments.some(
+    (att) =>
+      att.status === "uploading" ||
+      att.status === "initiating" ||
+      att.status === "retrying" ||
+      att.status === "resuming" ||
+      att.status === "completing",
+  );
+
   const fileIds = attachments
     .filter((attachment) => attachment.status === "done" && attachment.uploaded)
     .map((attachment) => attachment.uploaded!.id);
@@ -185,7 +356,11 @@ export function useMessageAttachments(conversationId: string) {
   return {
     attachments,
     addFiles,
+    pauseAttachment,
+    resumeAttachment,
+    retryAttachment,
     removeAttachment,
+    removeSentAttachments,
     reset,
     isUploading,
     fileIds,
