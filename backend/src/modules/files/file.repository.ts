@@ -152,3 +152,39 @@ export function aggregateFilesForAdmin(filters: AdminFileFilters) {
     _count: true,
   });
 }
+
+/// Obtiene un lote de archivos almacenados localmente para migración progresiva a S3 (§7.4).
+/// Ordena por tamaño ascendente (más chicos primero).
+export function findBatchForMigration(limit: number) {
+  return prisma.storedFile.findMany({
+    where: {
+      provider: FileProvider.LOCAL,
+      deletedAt: null,
+    },
+    orderBy: {
+      size: "asc",
+    },
+    take: limit,
+  });
+}
+
+/// Actualiza el proveedor de almacenamiento de un archivo tras su verificación exitosa en S3 (§7.4).
+export function updateFileProvider(id: string, provider: FileProvider, path?: string) {
+  return prisma.storedFile.update({
+    where: { id },
+    data: {
+      provider,
+      ...(path ? { path } : {}),
+    },
+  });
+}
+
+/// Cuenta los archivos activos por proveedor (LOCAL vs S3) para estadísticas de administración (§7.4).
+export async function countFilesByProvider(): Promise<{ local: number; s3: number; total: number }> {
+  const [local, s3] = await Promise.all([
+    prisma.storedFile.count({ where: { provider: FileProvider.LOCAL, deletedAt: null } }),
+    prisma.storedFile.count({ where: { provider: FileProvider.S3, deletedAt: null } }),
+  ]);
+  return { local, s3, total: local + s3 };
+}
+

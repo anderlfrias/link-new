@@ -54,6 +54,10 @@ interface DraftState {
   orphanFileRetentionHours: string;
   softDeletedFilePurgeDays: string;
   uploadCleanupDryRun: boolean;
+  fileMigrationEnabled: boolean;
+  fileMigrationBatchSize: string;
+  fileMigrationIntervalMinutes: string;
+  fileMigrationDeleteLocalAfterCommit: boolean;
 }
 
 /** Una categoría cuenta como "marcada" si TODOS sus patterns están en la lista guardada —
@@ -127,6 +131,10 @@ function toDraft(settings: AdminSettings): DraftState {
     softDeletedFilePurgeDays:
       settings.softDeletedFilePurgeDays == null ? "" : String(settings.softDeletedFilePurgeDays),
     uploadCleanupDryRun: settings.uploadCleanupDryRun ?? false,
+    fileMigrationEnabled: settings.fileMigrationEnabled ?? false,
+    fileMigrationBatchSize: String(settings.fileMigrationBatchSize ?? 50),
+    fileMigrationIntervalMinutes: String(settings.fileMigrationIntervalMinutes ?? 60),
+    fileMigrationDeleteLocalAfterCommit: settings.fileMigrationDeleteLocalAfterCommit ?? false,
   };
 }
 
@@ -192,6 +200,16 @@ function validate(draft: DraftState): FieldErrors {
     }
   }
 
+  const batchSize = Number(draft.fileMigrationBatchSize);
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) {
+    errors.fileMigrationBatchSize = "Debe ser un número entero entre 1 y 500.";
+  }
+
+  const intervalMinutes = Number(draft.fileMigrationIntervalMinutes);
+  if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1) {
+    errors.fileMigrationIntervalMinutes = "Debe ser un número entero mayor a 0.";
+  }
+
   return errors;
 }
 
@@ -231,6 +249,10 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     softDeletedFilePurgeDays:
       draft.softDeletedFilePurgeDays.trim() === "" ? null : Number(draft.softDeletedFilePurgeDays),
     uploadCleanupDryRun: draft.uploadCleanupDryRun,
+    fileMigrationEnabled: draft.fileMigrationEnabled,
+    fileMigrationBatchSize: Number(draft.fileMigrationBatchSize),
+    fileMigrationIntervalMinutes: Number(draft.fileMigrationIntervalMinutes),
+    fileMigrationDeleteLocalAfterCommit: draft.fileMigrationDeleteLocalAfterCommit,
   };
 }
 
@@ -432,6 +454,64 @@ export function AdminSettingsPanel() {
                     onChange={(event) => updateField("uploadCleanupDryRun", event.target.checked)}
                     label="Modo simulación (Dry Run: registrar en logs sin borrar)"
                   />
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              Migración progresiva a S3 (SeaweedFS)
+            </h3>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <Checkbox
+                  checked={draft.fileMigrationEnabled}
+                  onChange={(event) => updateField("fileMigrationEnabled", event.target.checked)}
+                  label="Habilitar worker de migración progresiva a S3"
+                />
+                <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                  Transfiere periódicamente archivos almacenados en disco local al storage S3 de manera segura e idempotente.
+                </p>
+              </div>
+
+              {draft.fileMigrationEnabled && (
+                <div className="flex flex-col gap-3 border-l-2 border-brand-accent/30 pl-4">
+                  <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    Tamaño del lote de migración (archivos por ciclo)
+                    <Input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={draft.fileMigrationBatchSize}
+                      onChange={(event) => updateField("fileMigrationBatchSize", event.target.value)}
+                      error={errors.fileMigrationBatchSize}
+                    />
+                  </label>
+
+                  <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    Intervalo de ejecución (minutos)
+                    <Input
+                      type="number"
+                      min={1}
+                      value={draft.fileMigrationIntervalMinutes}
+                      onChange={(event) => updateField("fileMigrationIntervalMinutes", event.target.value)}
+                      error={errors.fileMigrationIntervalMinutes}
+                    />
+                  </label>
+
+                  <div className="flex flex-col gap-1">
+                    <Checkbox
+                      checked={draft.fileMigrationDeleteLocalAfterCommit}
+                      onChange={(event) =>
+                        updateField("fileMigrationDeleteLocalAfterCommit", event.target.checked)
+                      }
+                      label="Eliminar archivo local tras confirmar subida a S3"
+                    />
+                    <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                      Libera espacio en el disco local una vez que el archivo fue verificado e indexado en S3. Si está desactivado, el archivo local se conserva como respaldo.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

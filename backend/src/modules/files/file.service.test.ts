@@ -42,6 +42,7 @@ import {
   generateFileToken,
   getFile,
   getFileChecksum,
+  getFileStorageStats,
   listFilesForAdmin,
   storeAvatar,
   toStoredFileResponse,
@@ -454,6 +455,7 @@ describe("file.service", () => {
         groupImageOfConversationCount: 0,
         messageAttachmentCount: 2,
       });
+      expect(result.files[0].provider).toBe("LOCAL");
     });
 
     // LARGE_FILES_PLAN.md §5.1: _sum.size vuelve bigint | null con la
@@ -518,6 +520,32 @@ describe("file.service", () => {
       vi.mocked(FileRepository.findActiveById).mockResolvedValue(null);
 
       await expect(adminDeleteFile("nonexistent")).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("getFileStorageStats", () => {
+    it("devuelve los conteos por provider y la configuración del worker", async () => {
+      vi.mocked(FileRepository.countFilesByProvider).mockResolvedValue({
+        local: 42,
+        s3: 158,
+        total: 200,
+      });
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        fileMigrationEnabled: true,
+        fileMigrationBatchSize: 25,
+        fileMigrationIntervalMinutes: 15,
+      } as any);
+
+      const stats = await getFileStorageStats();
+
+      expect(stats).toEqual({
+        localCount: 42,
+        s3Count: 158,
+        totalCount: 200,
+        migrationEnabled: true,
+        migrationBatchSize: 25,
+        migrationIntervalMinutes: 15,
+      });
     });
   });
 });

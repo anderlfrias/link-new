@@ -15,6 +15,7 @@ export interface AdminFileListItem {
   extension: string;
   size: number;
   url: string;
+  provider?: "LOCAL" | "S3";
   createdAt: string;
   createdBy: { id: string; name: string; email: string } | null;
   usage: AdminFileUsage;
@@ -24,6 +25,15 @@ export interface AdminFileListResponse {
   files: AdminFileListItem[];
   totalCount: number;
   totalSize: number;
+}
+
+export interface AdminFileStatsResponse {
+  localCount: number;
+  s3Count: number;
+  totalCount: number;
+  migrationEnabled: boolean;
+  migrationBatchSize: number;
+  migrationIntervalMinutes: number;
 }
 
 /** Filtros que arma el panel — no incluye paginación (eso lo agrega el hook). */

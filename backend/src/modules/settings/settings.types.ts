@@ -31,6 +31,10 @@ export type UpdateSettingsInput = Partial<
     | "orphanFileRetentionHours"
     | "softDeletedFilePurgeDays"
     | "uploadCleanupDryRun"
+    | "fileMigrationEnabled"
+    | "fileMigrationBatchSize"
+    | "fileMigrationIntervalMinutes"
+    | "fileMigrationDeleteLocalAfterCommit"
   >
 >;
 

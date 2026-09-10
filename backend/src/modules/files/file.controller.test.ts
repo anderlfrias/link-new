@@ -8,10 +8,11 @@ vi.mock("./file.service", () => ({
   deleteFile: vi.fn(),
   listFilesForAdmin: vi.fn(),
   adminDeleteFile: vi.fn(),
+  getFileStorageStats: vi.fn(),
 }));
 
 import * as FileService from "./file.service";
-import { deleteAdmin, getById, listAdmin, remove, upload } from "./file.controller";
+import { deleteAdmin, getById, getStatsAdmin, listAdmin, remove, upload } from "./file.controller";
 
 describe("file.controller", () => {
   const mockUser = {
@@ -165,6 +166,30 @@ describe("file.controller", () => {
 
       expect(FileService.adminDeleteFile).toHaveBeenCalledWith("f-1");
       expect(res.json).toHaveBeenCalledWith({ id: "f-1" });
+    });
+  });
+
+  describe("getStatsAdmin", () => {
+    it("obtiene estadísticas de almacenamiento y responde json", async () => {
+      const req = createMockRequest();
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const mockStats = {
+        localCount: 10,
+        s3Count: 90,
+        totalCount: 100,
+        migrationEnabled: false,
+        migrationBatchSize: 50,
+        migrationIntervalMinutes: 60,
+      };
+      vi.mocked(FileService.getFileStorageStats).mockResolvedValue(mockStats);
+
+      await getStatsAdmin(req, res, next);
+
+      expect(FileService.getFileStorageStats).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(mockStats);
+      expect(next).not.toHaveBeenCalled();
     });
   });
 });

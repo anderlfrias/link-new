@@ -58,5 +58,6 @@ export default router;
 /// algo que un usuario normal nunca puede hacer sobre archivos que no subió.
 export const adminFileRouter = Router();
 adminFileRouter.use(authenticate, attachInternalUser, requireRoles(ADMIN_ROLE));
+adminFileRouter.get("/stats", FileController.getStatsAdmin);
 adminFileRouter.get("/", FileController.listAdmin);
 adminFileRouter.delete("/:id", FileController.deleteAdmin);

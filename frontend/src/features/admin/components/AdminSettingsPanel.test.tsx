@@ -49,6 +49,14 @@ describe("AdminSettingsPanel", () => {
     allowMessageDeleteForEveryone: true,
     messageDeleteForEveryoneTimeLimitMinutes: 60,
     allowStickersAndGifs: true,
+    uploadCleanupEnabled: false,
+    orphanFileRetentionHours: null,
+    softDeletedFilePurgeDays: null,
+    uploadCleanupDryRun: false,
+    fileMigrationEnabled: false,
+    fileMigrationBatchSize: 50,
+    fileMigrationIntervalMinutes: 60,
+    fileMigrationDeleteLocalAfterCommit: false,
   };
 
   beforeEach(() => {
@@ -151,5 +159,82 @@ describe("AdminSettingsPanel", () => {
         maxUploadSizeMb: 50,
       }),
     );
+  });
+
+  it("permite configurar y guardar opciones de migración progresiva a S3", async () => {
+    vi.mocked(useAdminSettings).mockReturnValue({
+      settings: defaultSettings,
+      status: "ready",
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    mockSave.mockResolvedValueOnce({
+      ...defaultSettings,
+      fileMigrationEnabled: true,
+      fileMigrationBatchSize: 100,
+      fileMigrationIntervalMinutes: 30,
+      fileMigrationDeleteLocalAfterCommit: true,
+    });
+
+    const user = userEvent.setup();
+    render(<AdminSettingsPanel />);
+
+    const enableCheckbox = screen.getByRole("checkbox", {
+      name: "Habilitar worker de migración progresiva a S3",
+    });
+    expect(enableCheckbox).not.toBeChecked();
+
+    await user.click(enableCheckbox);
+    expect(enableCheckbox).toBeChecked();
+
+    const batchInput = screen.getByLabelText(/Tamaño del lote de migración/i);
+    await user.clear(batchInput);
+    await user.type(batchInput, "100");
+
+    const intervalInput = screen.getByLabelText(/Intervalo de ejecución \(minutos\)/i);
+    await user.clear(intervalInput);
+    await user.type(intervalInput, "30");
+
+    const deleteLocalCheckbox = screen.getByRole("checkbox", {
+      name: "Eliminar archivo local tras confirmar subida a S3",
+    });
+    await user.click(deleteLocalCheckbox);
+
+    const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileMigrationEnabled: true,
+        fileMigrationBatchSize: 100,
+        fileMigrationIntervalMinutes: 30,
+        fileMigrationDeleteLocalAfterCommit: true,
+      }),
+    );
+  });
+
+  it("invalida el formulario si el tamaño de lote de migración excede 500", async () => {
+    vi.mocked(useAdminSettings).mockReturnValue({
+      settings: {
+        ...defaultSettings,
+        fileMigrationEnabled: true,
+      },
+      status: "ready",
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    const user = userEvent.setup();
+    render(<AdminSettingsPanel />);
+
+    const batchInput = screen.getByLabelText(/Tamaño del lote de migración/i);
+    await user.clear(batchInput);
+    await user.type(batchInput, "999");
+
+    expect(screen.getByText("Debe ser un número entero entre 1 y 500.")).toBeInTheDocument();
+    const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(saveButton).toBeDisabled();
   });
 });

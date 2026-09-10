@@ -107,6 +107,33 @@ describe("S3Storage", () => {
     });
   });
 
+  describe("saveStream", () => {
+    it("envía PutObjectCommand con stream, size y contentType", async () => {
+      mockSend.mockResolvedValue({});
+      const stream = Readable.from(["chunk1", "chunk2"]);
+
+      const result = await storage.saveStream(stream, "chat\\2026\\09\\file.pdf", {
+        size: 12,
+        mimeType: "application/pdf",
+      });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "PutObject",
+          Bucket: "test-bucket",
+          Key: "chat/2026/09/file.pdf",
+          Body: stream,
+          ContentLength: 12,
+          ContentType: "application/pdf",
+        }),
+      );
+      expect(result).toEqual({
+        path: "chat/2026/09/file.pdf",
+        size: 12,
+      });
+    });
+  });
+
   describe("delete", () => {
     it("envía DeleteObjectCommand con bucket y key normalizada", async () => {
       mockSend.mockResolvedValue({});

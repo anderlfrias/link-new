@@ -47,6 +47,10 @@ export const updateSettingsSchema = yup
     orphanFileRetentionHours: yup.number().integer().min(1).nullable(),
     softDeletedFilePurgeDays: yup.number().integer().min(1).nullable(),
     uploadCleanupDryRun: yup.boolean(),
+    fileMigrationEnabled: yup.boolean(),
+    fileMigrationBatchSize: yup.number().integer().min(1).max(500),
+    fileMigrationIntervalMinutes: yup.number().integer().min(1),
+    fileMigrationDeleteLocalAfterCommit: yup.boolean(),
   })
   .test(
     "at-least-one-field",
@@ -79,5 +83,9 @@ export const updateSettingsSchema = yup
       value.uploadCleanupEnabled !== undefined ||
       value.orphanFileRetentionHours !== undefined ||
       value.softDeletedFilePurgeDays !== undefined ||
-      value.uploadCleanupDryRun !== undefined,
+      value.uploadCleanupDryRun !== undefined ||
+      value.fileMigrationEnabled !== undefined ||
+      value.fileMigrationBatchSize !== undefined ||
+      value.fileMigrationIntervalMinutes !== undefined ||
+      value.fileMigrationDeleteLocalAfterCommit !== undefined,
   );

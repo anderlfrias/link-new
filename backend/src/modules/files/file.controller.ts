@@ -174,3 +174,13 @@ export async function deleteAdmin(req: Request, res: Response, next: NextFunctio
     next(error);
   }
 }
+
+export async function getStatsAdmin(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const stats = await FileService.getFileStorageStats();
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+}
+

@@ -77,6 +77,27 @@ export class S3Storage implements StorageProvider {
     };
   }
 
+  async saveStream(
+    stream: NodeJS.ReadableStream,
+    relativePath: string,
+    options?: { size?: number; mimeType?: string },
+  ): Promise<SavedFile> {
+    const key = this.normalizeKey(relativePath);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: stream as any,
+        ContentLength: options?.size,
+        ContentType: options?.mimeType,
+      }),
+    );
+    return {
+      path: key,
+      size: options?.size ?? 0,
+    };
+  }
+
   async delete(relativePath: string): Promise<void> {
     const key = this.normalizeKey(relativePath);
     await this.client.send(

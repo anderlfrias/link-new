@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { listAdminFiles, deleteAdminFile } from "./admin-files.api";
+import { listAdminFiles, deleteAdminFile, getAdminFileStats } from "./admin-files.api";
 import { apiRequest } from "@/lib/api-client";
 
 vi.mock("@/lib/api-client", () => ({
@@ -44,4 +44,24 @@ describe("admin-files.api", () => {
     });
     expect(result).toEqual({ id: "file-99" });
   });
+
+  it("getAdminFileStats sends GET request to /v1/admin/files/stats", async () => {
+    const mockStats = {
+      localCount: 12,
+      s3Count: 88,
+      totalCount: 100,
+      migrationEnabled: true,
+      migrationBatchSize: 50,
+      migrationIntervalMinutes: 60,
+    };
+    vi.mocked(apiRequest).mockResolvedValueOnce(mockStats);
+
+    const result = await getAdminFileStats("adm-token");
+
+    expect(apiRequest).toHaveBeenCalledWith("/v1/admin/files/stats", {
+      token: "adm-token",
+    });
+    expect(result).toEqual(mockStats);
+  });
 });
+

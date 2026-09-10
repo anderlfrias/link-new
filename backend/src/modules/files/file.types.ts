@@ -1,3 +1,5 @@
+import { FileProvider } from "@prisma/client";
+
 export interface UploadedFile {
   originalname: string;
   mimetype: string;
@@ -56,6 +58,7 @@ export interface AdminFileUsage {
 }
 
 export interface AdminFileListItem extends StoredFileResponse {
+  provider: FileProvider;
   createdBy: { id: string; name: string; email: string } | null;
   usage: AdminFileUsage;
 }
@@ -66,4 +69,13 @@ export interface AdminFileListResult {
   /// página actual — para el resumen de espacio usado en la UI.
   totalCount: number;
   totalSize: number;
+}
+
+export interface FileStorageStatsResponse {
+  localCount: number;
+  s3Count: number;
+  totalCount: number;
+  migrationEnabled: boolean;
+  migrationBatchSize: number;
+  migrationIntervalMinutes: number;
 }

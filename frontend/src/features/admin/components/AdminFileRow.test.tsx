@@ -65,4 +65,24 @@ describe("AdminFileRow", () => {
 
     expect(handleDelete).toHaveBeenCalledWith(sampleFile);
   });
+
+  it("renders S3 provider badge when file.provider is S3", () => {
+    const s3File: AdminFileListItem = {
+      ...sampleFile,
+      provider: "S3",
+    };
+
+    render(<AdminFileRow file={s3File} onDelete={vi.fn()} />);
+    expect(screen.getByText("S3")).toBeInTheDocument();
+  });
+
+  it("renders Local provider badge when file.provider is LOCAL", () => {
+    const localFile: AdminFileListItem = {
+      ...sampleFile,
+      provider: "LOCAL",
+    };
+
+    render(<AdminFileRow file={localFile} onDelete={vi.fn()} />);
+    expect(screen.getByText("Local")).toBeInTheDocument();
+  });
 });

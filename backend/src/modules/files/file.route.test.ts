@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
 import * as fileRepository from "./file.repository";
-import fileRouter from "./file.route";
+import fileRouter, { adminFileRouter } from "./file.route";
 import * as FileService from "./file.service";
 
 // LARGE_FILES_PLAN.md Fase 1 (B2/S13, S14): este archivo cubre justo lo que
@@ -34,6 +34,7 @@ vi.mock("./file.service", () => ({
   deleteFile: vi.fn(),
   listFilesForAdmin: vi.fn(),
   adminDeleteFile: vi.fn(),
+  getFileStorageStats: vi.fn(),
   verifyFileToken: vi.fn(),
   canAccessFile: vi.fn(),
   buildContentDisposition: vi.fn((name: string, mime: string) => `inline; filename="${name}"`),
@@ -65,6 +66,10 @@ vi.mock("../../storage", () => ({
 
 vi.mock("../auth/jwt", () => ({
   verifyToken: vi.fn((token: string) => {
+    if (token.startsWith("admin-token:")) {
+      const id = token.slice("admin-token:".length);
+      return { id: `ext-${id}`, email: `${id}@example.com`, roles: ["admin"] };
+    }
     if (token.startsWith("user-token:")) {
       const id = token.slice("user-token:".length);
       return { id: `ext-${id}`, email: `${id}@example.com`, roles: ["user"] };
@@ -91,6 +96,7 @@ vi.mock("../../config/prisma", () => ({
 function buildTestApp() {
   const app = express();
   app.use("/files", fileRouter);
+  app.use("/admin/files", adminFileRouter);
   app.use(errorHandler);
   return app;
 }
@@ -297,5 +303,30 @@ describe("GET /files/:id/content", () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe("https://s3.example.com/link-files/file.png?sig=123");
+  });
+
+  it("GET /admin/files/stats responde estadísticas de almacenamiento para administradores", async () => {
+    vi.mocked(FileService.getFileStorageStats).mockResolvedValue({
+      localCount: 15,
+      s3Count: 85,
+      totalCount: 100,
+      migrationEnabled: true,
+      migrationBatchSize: 50,
+      migrationIntervalMinutes: 60,
+    });
+
+    const res = await request(app)
+      .get("/admin/files/stats")
+      .set("Authorization", "Bearer admin-token:admin-user");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      localCount: 15,
+      s3Count: 85,
+      totalCount: 100,
+      migrationEnabled: true,
+      migrationBatchSize: 50,
+      migrationIntervalMinutes: 60,
+    });
   });
 });

@@ -26,6 +26,11 @@ export interface MultipartUploadPart {
 
 export interface StorageProvider {
   save(buffer: Buffer, relativePath: string): Promise<SavedFile>;
+  saveStream?(
+    stream: NodeJS.ReadableStream,
+    relativePath: string,
+    options?: { size?: number; mimeType?: string },
+  ): Promise<SavedFile>;
   delete(relativePath: string): Promise<void>;
   /// Construye la URL pública a partir de la ruta relativa. Solo este método
   /// sabe cómo se sirve un archivo (estático en disco, bucket firmado, CDN, ...).

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { IconAlertCircle, IconLoader2 } from "@tabler/icons-react";
 import { useAdminFiles } from "@/features/admin/hooks/use-admin-files";
+import { useAdminFileStats } from "@/features/admin/hooks/use-admin-file-stats";
 import { useDeleteAdminFile } from "@/features/admin/hooks/use-delete-admin-file";
 import { AdminFileRow } from "@/features/admin/components/AdminFileRow";
 import { DeleteFileConfirmModal } from "@/features/admin/components/DeleteFileConfirmModal";
@@ -37,6 +38,7 @@ export function AdminFilesPanel() {
   const [filters, setFilters] = useState<AdminFileFilters>({});
   const { files, status, error, hasMore, loadingMore, loadMore, totalCount, totalSize, refetch, removeFile } =
     useAdminFiles(filters);
+  const { stats, refetch: refetchStats } = useAdminFileStats();
   const { remove, pending: deletePending, error: deleteError } = useDeleteAdminFile();
   const [fileToDelete, setFileToDelete] = useState<AdminFileListItem | null>(null);
 
@@ -56,6 +58,7 @@ export function AdminFilesPanel() {
     if (ok) {
       removeFile(fileToDelete.id);
       setFileToDelete(null);
+      refetchStats();
     }
   }
 
@@ -64,6 +67,27 @@ export function AdminFilesPanel() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Archivos</h2>
+
+          {stats && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black/5 bg-neutral-50/60 p-3.5 text-xs text-neutral-600 dark:border-white/10 dark:bg-neutral-900/40 dark:text-neutral-300">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="font-medium text-brand-ink dark:text-white">Almacenamiento:</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                  Disco local: <strong className="text-brand-ink dark:text-white">{stats.localCount}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                  SeaweedFS (S3): <strong className="text-brand-ink dark:text-white">{stats.s3Count}</strong>
+                </span>
+              </div>
+              {stats.migrationEnabled && (
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                  Migración activa ({stats.migrationBatchSize}/lote · {stats.migrationIntervalMinutes} min)
+                </span>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleApplyFilters} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Select

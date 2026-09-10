@@ -50,6 +50,14 @@ export interface AdminSettings {
   softDeletedFilePurgeDays: number | null;
   /** Si es true, simula en logs sin borrar físicamente. */
   uploadCleanupDryRun: boolean;
+  /** Interruptor maestro del worker de migración progresiva a S3. */
+  fileMigrationEnabled: boolean;
+  /** Cantidad de archivos a migrar por lote. */
+  fileMigrationBatchSize: number;
+  /** Intervalo en minutos entre cada ejecución del worker. */
+  fileMigrationIntervalMinutes: number;
+  /** Si es true, elimina el archivo local de disco tras verificar y comitear en S3. */
+  fileMigrationDeleteLocalAfterCommit: boolean;
 }
 
 export type UpdateAdminSettingsPayload = Partial<AdminSettings>;

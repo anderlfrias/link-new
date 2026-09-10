@@ -14,6 +14,7 @@ import {
   AdminFileFilters,
   AdminFileListOptions,
   AdminFileListResult,
+  FileStorageStatsResponse,
   StoredFileResponse,
   UploadedFile,
   UploadKind,
@@ -309,6 +310,7 @@ export async function listFilesForAdmin(
 
   const files = rows.map((file) => ({
     ...toStoredFileResponse(file),
+    provider: file.provider,
     createdBy: file.createdBy
       ? { id: file.createdBy.id, name: file.createdBy.name, email: file.createdBy.email }
       : null,
@@ -351,3 +353,21 @@ export async function adminDeleteFile(fileId: string): Promise<{ id: string }> {
   await FileRepository.softDelete(fileId);
   return { id: fileId };
 }
+
+/// Retorna estadísticas de almacenamiento (LOCAL vs S3) y estado de migración para el panel admin (§7.4).
+export async function getFileStorageStats(): Promise<FileStorageStatsResponse> {
+  const [counts, settings] = await Promise.all([
+    FileRepository.countFilesByProvider(),
+    SettingsService.getSettings(),
+  ]);
+
+  return {
+    localCount: counts.local,
+    s3Count: counts.s3,
+    totalCount: counts.total,
+    migrationEnabled: settings.fileMigrationEnabled,
+    migrationBatchSize: settings.fileMigrationBatchSize,
+    migrationIntervalMinutes: settings.fileMigrationIntervalMinutes,
+  };
+}
+

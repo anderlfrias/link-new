@@ -1401,6 +1401,16 @@ apagado.
 deleted_at IS NULL` llega a 0 y todos los mensajes históricos siguen mostrando sus
 adjuntos.
 
+- [x] Completada 2026-09-10:
+  - `AppSettings`: campos de configuración `fileMigrationEnabled`, `fileMigrationBatchSize`, `fileMigrationIntervalMinutes`, `fileMigrationDeleteLocalAfterCommit`.
+  - `s3.storage.ts`: soporte para `saveStream` en `StorageProvider` para migración directa vía stream con bajo consumo de memoria.
+  - `file.repository.ts` & `file.service.ts`: loteo de migración ordenado `size: "asc"` (`findBatchForMigration`), actualización de proveedor (`updateFileProvider`) y estadísticas (`countFilesByProvider`, `getFileStorageStats`).
+  - Endpoint de administración: `GET /v1/admin/files/stats` con autenticación admin.
+  - `file-migration.worker.ts`: worker con invariante estricto de orden (leer stream local → subir a S3 → verificar tamaño con HeadObject → commit Postgres `provider='S3'` → borrado local opcional tras commit), reintentos idempotentes y programación dinámica.
+  - Panel admin frontend (`AdminFilesPanel`, `AdminFileRow`, `AdminSettingsPanel`): banner informativo de conteo Local vs S3, badge de migración activa, badges de provider en listado y controles de configuración con validaciones.
+  - Hook `useAdminFileStats`: obtención reactiva de métricas de almacenamiento.
+  - Cobertura completa de tests unitarios: 563 tests pasando en backend y 640 en frontend (1203 tests en total).
+
 ---
 
 ### Fase 9 — Endurecimiento de seguridad

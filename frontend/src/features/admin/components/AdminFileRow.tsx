@@ -24,7 +24,18 @@ export function AdminFileRow({ file, onDelete }: AdminFileRowProps) {
           {formatFileSize(file.size)} · {uploaderLabel} · {new Date(file.createdAt).toLocaleDateString("es-AR")}
         </p>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+        {file.provider && (
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              file.provider === "S3"
+                ? "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                : "bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400"
+            }`}
+          >
+            {file.provider === "S3" ? "S3" : "Local"}
+          </span>
+        )}
         {usageLabels.length === 0 ? (
           <span className="rounded-full bg-black/5 px-2 py-0.5 text-[11px] text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
             Sin uso

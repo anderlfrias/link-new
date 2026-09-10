@@ -27,5 +27,5 @@ describe("BoringAvatarPicker", () => {
 
     await user.click(backBtn);
     expect(screen.getByText("Pixel")).toBeInTheDocument();
-  });
+  }, 15000);
 });

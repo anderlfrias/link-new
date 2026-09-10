@@ -170,5 +170,31 @@ describe("settings.validator", () => {
       expect(result.orphanFileRetentionHours).toBeNull();
       expect(result.softDeletedFilePurgeDays).toBeNull();
     });
+
+    it("accepts valid progressive file migration settings", async () => {
+      const payload = {
+        fileMigrationEnabled: true,
+        fileMigrationBatchSize: 100,
+        fileMigrationIntervalMinutes: 30,
+        fileMigrationDeleteLocalAfterCommit: true,
+      };
+
+      const result = await updateSettingsSchema.validate(payload);
+      expect(result).toMatchObject(payload);
+    });
+
+    it("rejects invalid progressive file migration settings constraints", async () => {
+      await expect(
+        updateSettingsSchema.validate({ fileMigrationBatchSize: 0 }),
+      ).rejects.toThrow();
+
+      await expect(
+        updateSettingsSchema.validate({ fileMigrationBatchSize: 501 }),
+      ).rejects.toThrow();
+
+      await expect(
+        updateSettingsSchema.validate({ fileMigrationIntervalMinutes: 0 }),
+      ).rejects.toThrow();
+    });
   });
 });

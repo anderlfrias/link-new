@@ -550,6 +550,17 @@ model AppSettings {
   /// Si es true, el worker solo loguea las acciones en modo simulación sin borrar nada.
   uploadCleanupDryRun      Boolean @default(false) @map("upload_cleanup_dry_run")
 
+  // Migración progresiva de archivos a S3 (ver LARGE_FILES_PLAN.md §7.4, §11 Fase 8).
+  // Defaults false/50/60: apagado por defecto para control manual desde el panel admin.
+  /// Interruptor maestro del worker de migración progresiva de LOCAL a S3.
+  fileMigrationEnabled                Boolean @default(false) @map("file_migration_enabled")
+  /// Cantidad de archivos por pasada del worker (más chicos primero).
+  fileMigrationBatchSize              Int     @default(50) @map("file_migration_batch_size")
+  /// Intervalo en minutos entre cada pasada del worker.
+  fileMigrationIntervalMinutes        Int     @default(60) @map("file_migration_interval_minutes")
+  /// Si es true, elimina físicamente el archivo local solo tras verificar y commitear en S3.
+  fileMigrationDeleteLocalAfterCommit Boolean @default(false) @map("file_migration_delete_local_after_commit")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

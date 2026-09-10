@@ -4,6 +4,7 @@ import env from "./config/env";
 import { initSocket } from "./socket";
 import { startMessageRetentionWorker } from "./workers/message-retention.worker";
 import { startUploadCleanupWorker } from "./workers/upload-cleanup.worker";
+import { startFileMigrationWorker } from "./workers/file-migration.worker";
 
 const PORT = env.PORT;
 
@@ -25,6 +26,7 @@ httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
 initSocket(httpServer);
 startMessageRetentionWorker();
 startUploadCleanupWorker();
+startFileMigrationWorker();
 
 httpServer.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);

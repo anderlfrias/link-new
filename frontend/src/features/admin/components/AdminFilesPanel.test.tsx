@@ -3,10 +3,15 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AdminFilesPanel } from "./AdminFilesPanel";
 import { useAdminFiles } from "@/features/admin/hooks/use-admin-files";
+import { useAdminFileStats } from "@/features/admin/hooks/use-admin-file-stats";
 import { useDeleteAdminFile } from "@/features/admin/hooks/use-delete-admin-file";
 
 vi.mock("@/features/admin/hooks/use-admin-files", () => ({
   useAdminFiles: vi.fn(),
+}));
+
+vi.mock("@/features/admin/hooks/use-admin-file-stats", () => ({
+  useAdminFileStats: vi.fn(),
 }));
 
 vi.mock("@/features/admin/hooks/use-delete-admin-file", () => ({
@@ -50,8 +55,16 @@ describe("AdminFilesPanel", () => {
   const mockRefetch = vi.fn();
   const mockRemove = vi.fn();
 
+  const mockRefetchStats = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAdminFileStats).mockReturnValue({
+      stats: null,
+      status: "ready",
+      error: null,
+      refetch: mockRefetchStats,
+    });
     vi.mocked(useDeleteAdminFile).mockReturnValue({
       remove: mockRemove,
       pending: false,
@@ -213,5 +226,52 @@ describe("AdminFilesPanel", () => {
     expect(screen.getByPlaceholderText("Nombre de archivo")).toHaveValue("");
     const lastCallArgs = vi.mocked(useAdminFiles).mock.calls.at(-1)?.[0];
     expect(lastCallArgs).toEqual({});
+  });
+
+  it("muestra el resumen de almacenamiento y badge de migración cuando stats está disponible", () => {
+    vi.mocked(useAdminFiles).mockReturnValue(mockUseAdminFilesReturn() as any);
+    vi.mocked(useAdminFileStats).mockReturnValue({
+      stats: {
+        localCount: 42,
+        s3Count: 158,
+        totalCount: 200,
+        migrationEnabled: true,
+        migrationBatchSize: 50,
+        migrationIntervalMinutes: 30,
+      },
+      status: "ready",
+      error: null,
+      refetch: mockRefetchStats,
+    });
+
+    render(<AdminFilesPanel />);
+
+    expect(screen.getByText("Almacenamiento:")).toBeInTheDocument();
+    expect(screen.getByText(/Disco local:/i)).toBeInTheDocument();
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.getByText(/SeaweedFS \(S3\):/i)).toBeInTheDocument();
+    expect(screen.getByText("158")).toBeInTheDocument();
+    expect(screen.getByText("Migración activa (50/lote · 30 min)")).toBeInTheDocument();
+  });
+
+  it("al confirmar eliminación exitosa de un archivo también se llama a refetchStats", async () => {
+    vi.mocked(useAdminFiles).mockReturnValue(
+      mockUseAdminFilesReturn({
+        files: [mockFile],
+        totalCount: 1,
+        totalSize: 51200,
+        removeFile: mockRemoveFile,
+      }) as any,
+    );
+    mockRemove.mockResolvedValueOnce(true);
+
+    const user = userEvent.setup();
+    render(<AdminFilesPanel />);
+
+    await user.click(screen.getByRole("button", { name: "Eliminar estudio.png" }));
+    await user.click(screen.getByRole("button", { name: "Eliminar definitivamente" }));
+
+    expect(mockRemove).toHaveBeenCalledWith("f-1");
+    expect(mockRefetchStats).toHaveBeenCalled();
   });
 });
