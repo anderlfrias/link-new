@@ -45,13 +45,22 @@ vi.mock("./file.repository", () => ({
 }));
 
 vi.mock("../../storage", () => ({
-  getProvider: vi.fn(() => ({
-    getAbsolutePath: vi.fn(() => tempFilePath),
-  })),
+  getProvider: vi.fn((provider?: string) => {
+    if (provider === "S3") {
+      return {
+        getPresignedDownloadUrl: vi.fn().mockResolvedValue("https://s3.example.com/link-files/file.png?sig=123"),
+      };
+    }
+    return {
+      getAbsolutePath: vi.fn(() => tempFilePath),
+    };
+  }),
   getWriteProvider: vi.fn(() => ({
     provider: "LOCAL",
     storage: { save: vi.fn() },
   })),
+  LocalDiskStorage: vi.fn(),
+  S3Storage: vi.fn(),
 }));
 
 vi.mock("../auth/jwt", () => ({
@@ -272,5 +281,21 @@ describe("GET /files/:id/content", () => {
 
     expect(res.status).toBe(200);
     expect(res.text).toBe("contenido de prueba para range");
+  });
+
+  it("responde 302 Found redirigiendo a la URL presignada cuando file.provider es S3", async () => {
+    const s3File = {
+      ...mockFile,
+      id: "f-s3-1",
+      provider: "S3",
+    };
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(s3File as any);
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-s3-1" });
+    vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
+
+    const res = await request(app).get("/files/f-s3-1/content?t=valid-hmac");
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe("https://s3.example.com/link-files/file.png?sig=123");
   });
 });

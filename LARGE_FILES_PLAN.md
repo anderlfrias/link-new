@@ -933,8 +933,8 @@ flowchart LR
 |---|---|---|---|
 | 0 | [Verificación SeaweedFS + Cloudflare](#fase-0--verificación-seaweedfs--cloudflare) | B | `[ ]` |
 | 1 | [Modelo de datos y bugs presentes](#fase-1--modelo-de-datos-y-bugs-presentes) | A | `[x] 2026-09-10` |
-| 2 | [Lectura unificada y cierre de `/uploads`](#fase-2--lectura-unificada-y-cierre-de-uploads) | A | `[ ]` |
-| 3 | [Provider S3](#fase-3--provider-s3) | C | `[ ]` |
+| 2 | [Lectura unificada y cierre de `/uploads`](#fase-2--lectura-unificada-y-cierre-de-uploads) | A | `[x] 2026-09-10` |
+| 3 | [Provider S3](#fase-3--provider-s3) | C | `[x] 2026-09-10` |
 | 4 | [Backend del upload chunked](#fase-4--backend-del-upload-chunked) | C | `[ ]` |
 | 5 | [Limpieza y ciclo de vida](#fase-5--limpieza-y-ciclo-de-vida) | C | `[ ]` |
 | 6 | [Frontend del upload chunked](#fase-6--frontend-del-upload-chunked) | C | `[ ]` |
@@ -1142,6 +1142,28 @@ verificar `provider = S3`, que se ve en el chat y que se descarga.
 
 **Terminada cuando.** Un archivo nuevo aterriza en SeaweedFS y se sirve por `/content`, y
 uno viejo en `LOCAL` sigue funcionando **en la misma pantalla**.
+
+**Cerrada 2026-09-10 — notas para quien retome el plan:**
+
+- **Implementación de `S3Storage` (`src/storage/s3.storage.ts`):** implementa la interfaz
+  común `StorageProvider` usando `@aws-sdk/client-s3` (`PutObjectCommand`, `DeleteObjectCommand`,
+  `HeadObjectCommand`, `GetObjectCommand`) con soporte de `Range`, normalización de keys (sin backslashes
+  ni leading slashes), y `forcePathStyle: true` configurado para compatibilidad con SeaweedFS S3 gateway.
+- **Redirección 302 a presigned GET en `/content` (§4.5):** `file.controller.ts` detecta cuando
+  `file.provider === FileProvider.S3`, genera una URL presignada con TTL de 5 minutos mediante
+  `@aws-sdk/s3-request-presigner`, inyectando `ResponseContentDisposition` y `ResponseContentType` para
+  preservar la sanitización RFC 5987 y forzado a `attachment` para SVGs, y responde con `res.redirect(302, presignedUrl)`.
+- **Configuración y rollback sin downtime (`src/storage/index.ts` + `env.ts`):**
+  `getProvider(FileProvider.S3)` resuelve a la instancia de `S3Storage`. `getWriteProvider()` lee
+  `env.STORAGE_WRITE_PROVIDER`: si es `"S3"`, los archivos nuevos van a SeaweedFS con `provider = S3`;
+  si es `"LOCAL"`, van a disco local. El rollback ante contingencias se efectúa cambiando la variable de entorno
+  sin revertir código.
+- **Pruebas unitarias añadidas:**
+  - `src/storage/s3.storage.test.ts`: 8 tests cubriendo `save`, `delete`, `stat`, `createReadStream` (con/sin Range),
+    `getPresignedDownloadUrl` y `getPublicUrl`.
+  - `src/storage/index.test.ts`: ampliado para verificar resolución dinámica de S3 y selección de `getWriteProvider()`.
+  - `src/modules/files/file.route.test.ts`: test de integración verificando redirección 302 hacia la URL presignada para archivos en S3.
+  - Suite completa: 495 tests en backend y 589 tests en frontend pasando (1084 tests verdes en total).
 
 ---
 

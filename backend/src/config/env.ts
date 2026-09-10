@@ -28,6 +28,19 @@ const schema = yup.object({
   // Secreto para firmar tokens HMAC en URLs de archivos (/v1/files/:id/content?t=...).
   // Si no se define, se utiliza EXTERNAL_AUTH_JWT_SECRET como fallback seguro.
   FILE_URL_SIGNING_SECRET: yup.string().optional(),
+  // Almacenamiento S3 (SeaweedFS / MinIO / AWS S3) — LARGE_FILES_PLAN.md Fase 3
+  STORAGE_WRITE_PROVIDER: yup.string().oneOf(["LOCAL", "S3"]).default("LOCAL"),
+  S3_ENDPOINT: yup.string().optional(),
+  S3_REGION: yup.string().default("us-east-1"),
+  S3_BUCKET: yup.string().default("link-files"),
+  S3_ACCESS_KEY_ID: yup.string().optional(),
+  S3_SECRET_ACCESS_KEY: yup.string().optional(),
+  S3_FORCE_PATH_STYLE: yup
+    .boolean()
+    .transform((value, originalValue) =>
+      typeof originalValue === "string" ? originalValue.toLowerCase() === "true" : Boolean(value),
+    )
+    .default(true),
 });
 
 let env: yup.InferType<typeof schema>;

@@ -1,7 +1,6 @@
 import { FileProvider } from "@prisma/client";
 import { prisma } from "../../config/prisma";
-import { getProvider } from "../../storage";
-import { LocalDiskStorage } from "../../storage/local-disk.storage";
+import { getProvider, LocalDiskStorage, S3Storage } from "../../storage";
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
 import { mapTokenToUser, verifyToken } from "../auth/jwt";
 import * as FileRepository from "./file.repository";
@@ -104,7 +103,18 @@ export async function getContent(req: Request, res: Response, next: NextFunction
       return;
     }
 
-    // Proveedor S3: reservado para Fase 3 (302 redirect a presigned GET)
+    if (file.provider === FileProvider.S3) {
+      const s3Storage = getProvider(FileProvider.S3) as S3Storage;
+      const presignedUrl = await s3Storage.getPresignedDownloadUrl(
+        file.path,
+        300,
+        disposition,
+        file.mimeType,
+      );
+      res.redirect(302, presignedUrl);
+      return;
+    }
+
     throw new BadRequestError(`Unsupported file provider: ${file.provider}`);
   } catch (error) {
     next(error);
