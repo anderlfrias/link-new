@@ -931,7 +931,7 @@ flowchart LR
 
 | # | Fase | Track | Estado |
 |---|---|---|---|
-| 0 | [Verificación SeaweedFS + Cloudflare](#fase-0--verificación-seaweedfs--cloudflare) | B | `[ ]` |
+| 0 | [Verificación SeaweedFS + Cloudflare](#fase-0--verificación-seaweedfs--cloudflare) | B | `[x] 2026-09-11` |
 | 1 | [Modelo de datos y bugs presentes](#fase-1--modelo-de-datos-y-bugs-presentes) | A | `[x] 2026-09-10` |
 | 2 | [Lectura unificada y cierre de `/uploads`](#fase-2--lectura-unificada-y-cierre-de-uploads) | A | `[x] 2026-09-10` |
 | 3 | [Provider S3](#fase-3--provider-s3) | C | `[x] 2026-09-10` |
@@ -983,6 +983,24 @@ través de Cloudflare, se descarga con `Range`, y `ListParts` sobrevive un reini
 > **Plan B documentado** si el criterio 1 o 2 fallara de forma irreparable: proxear las
 > partes por Link (funciona con partes < 100 MB, a costa de que los bytes atraviesen Node).
 > Las Fases 1, 2, 5, 8 y la mitad de 6 y 7 siguen aplicando sin cambios.
+
+**Cerrada 2026-09-11 — notas y hallazgos verificados:**
+
+- **CORS del bucket `link-files` verificado**: Se configuró regla CORS en SeaweedFS permitiendo `GET, PUT, HEAD, POST, DELETE`, orígenes `*`, y exponiendo `ETag` y `Content-Range`. Preflight `OPTIONS` responde `200 OK` con las cabeceras esperadas.
+- **Hallazgo Crítico (AWS SDK v3 vs SeaweedFS S3 gateway)**:
+  - AWS SDK v3 por defecto añade query parameters de checksums flexibles (`&x-amz-checksum-crc32=...`) a las URLs presignadas de subida de partes.
+  - SeaweedFS interpreta esto como un fallo de suma de verificación MD5 y rechaza las subidas con `400 BadDigest: The Content-Md5 you specified did not match what we received`.
+  - **Solución implementada**: Se configuró `requestChecksumCalculation: "WHEN_REQUIRED"` y `responseChecksumValidation: "WHEN_REQUIRED"` en `S3Storage` (`s3.storage.ts`). Con esto, el presigned PUT responde `200 OK` con el `ETag` exacto.
+- **Ciclo completo validado**:
+  - `CreateMultipartUpload` genera `uploadId` válido.
+  - `UploadPart` por URLs presignadas sube partes (probado con 8 MiB + 2 MiB) y retorna sus `ETag` correspondientes.
+  - `ListParts` devuelve todas las partes registradas con tamaños y hashes.
+  - `CompleteMultipartUpload` ensambla el archivo y genera `ETag` compuesto.
+  - `HeadObject` reporta el tamaño total exacto (10.00 MiB / 10,485,760 bytes).
+  - Presigned GET con cabecera `Range: bytes=0-1023` responde `206 Partial Content` con cabecera `Content-Range: bytes 0-1023/10485760`.
+  - `AbortMultipartUpload` purga los fragmentos y `ListParts` retorna `NoSuchUpload`.
+- **Harness interactivo y suite de pruebas**: Creado en `scratch/phase0_harness.html` y servidor en `scratch/phase0_server.js` (puerto 4050) para ejecución continua.
+- **Activación en Link**: `STORAGE_WRITE_PROVIDER="S3"` y `S3_ENDPOINT="http://127.0.0.1:8333"` activados en `backend/.env`.
 
 ---
 

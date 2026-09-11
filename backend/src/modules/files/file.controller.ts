@@ -1,3 +1,4 @@
+import { NextFunction, Request, Response } from "express";
 import { FileProvider } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { getProvider, LocalDiskStorage, S3Storage } from "../../storage";

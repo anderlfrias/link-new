@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListPartsCommand,
+  ListPartsCommandOutput,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -47,6 +48,8 @@ export class S3Storage implements StorageProvider {
       region,
       endpoint,
       forcePathStyle,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
       credentials:
         accessKeyId && secretAccessKey
           ? {
@@ -208,7 +211,7 @@ export class S3Storage implements StorageProvider {
     let isTruncated = true;
 
     while (isTruncated) {
-      const response = await this.client.send(
+      const response: ListPartsCommandOutput = await this.client.send(
         new ListPartsCommand({
           Bucket: this.bucket,
           Key: key,

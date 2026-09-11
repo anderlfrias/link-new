@@ -75,6 +75,7 @@ vi.mock("../config/env", () => ({
   },
 }));
 
+import { S3Client } from "@aws-sdk/client-s3";
 import { S3Storage } from "./s3.storage";
 
 describe("S3Storage", () => {
@@ -83,6 +84,18 @@ describe("S3Storage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage = new S3Storage();
+  });
+
+  describe("constructor", () => {
+    it("configura requestChecksumCalculation y responseChecksumValidation en WHEN_REQUIRED para compatibilidad con SeaweedFS", () => {
+      expect(S3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestChecksumCalculation: "WHEN_REQUIRED",
+          responseChecksumValidation: "WHEN_REQUIRED",
+          forcePathStyle: true,
+        }),
+      );
+    });
   });
 
   describe("save", () => {
