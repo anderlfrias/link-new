@@ -148,6 +148,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onOpenDetails={() => setShowDetails(true)}
         />
         <MessageList
+          key={conversationId}
+          conversationId={conversationId}
           messages={messages}
           status={messagesStatus}
           currentUserId={currentUserId}

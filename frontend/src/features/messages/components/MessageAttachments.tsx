@@ -62,7 +62,12 @@ export function MessageAttachments({ files, isOwn }: MessageAttachmentsProps) {
               className="block w-full cursor-pointer overflow-hidden rounded-lg border-0 bg-transparent p-0"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={file.originalName} className="max-h-64 w-full object-cover" />
+              <img
+                src={url}
+                alt={file.originalName}
+                loading="eager"
+                className="max-h-64 min-h-[140px] w-full object-cover rounded-lg bg-black/5 dark:bg-white/5"
+              />
             </button>
           );
         }

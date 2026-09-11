@@ -65,18 +65,26 @@ export function useMessages(conversationId: string) {
   // Carga inicial + marcar como leído (ver backend/API.md sección 7).
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
     setStatus("loading");
     setMessages([]);
     setHasMore(true);
     setLoadingMore(false);
     listMessages(token, conversationId, { limit: PAGE_SIZE })
       .then((data) => {
+        if (cancelled) return;
         setMessages(data);
         setHasMore(data.length === PAGE_SIZE);
         setStatus("ready");
         markConversationRead(token, conversationId).catch(() => {});
       })
-      .catch(() => setStatus("error"));
+      .catch(() => {
+        if (cancelled) return;
+        setStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token, conversationId]);
 
   // join/leave de la room — necesario para recibir message:* (ver backend/API.md sección 3.1).

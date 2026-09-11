@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconChevronDown, IconLoader2 } from "@tabler/icons-react";
 import { MessageBubble } from "@/features/messages/components/MessageBubble";
 import { TypingIndicator } from "@/features/messages/components/TypingIndicator";
@@ -11,6 +11,7 @@ import type { MessagesStatus } from "@/features/messages/hooks/use-messages";
 import type { ConversationType } from "@/features/conversations/types/conversation.types";
 
 interface MessageListProps {
+  conversationId?: string;
   messages: Message[];
   status: MessagesStatus;
   currentUserId: string;
@@ -40,6 +41,7 @@ const chatBackgroundStyle = {
 } as const;
 
 export function MessageList({
+  conversationId,
   messages,
   status,
   currentUserId,
@@ -54,11 +56,32 @@ export function MessageList({
   onForwardMessage,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const messagesBottomRef = useRef<HTMLDivElement>(null);
   const prevScrollHeightRef = useRef<number>(0);
   const prevScrollTopRef = useRef<number>(0);
   const prevFirstMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
   const isNearBottomRef = useRef(true);
+  // Indica si el usuario desplazó conscientemente la vista hacia arriba para leer el historial.
+  // Mientras sea false, cualquier cambio de tamaño (imágenes cargando, audio, fuentes, mensajes nuevos)
+  // DEBE mantener la vista 100% clavada al fondo ("scroll completo sin importar qué").
+  const userHasScrolledUpRef = useRef(false);
+  const hasScrolledToBottomRef = useRef(false);
+
+  // Si cambia el conversationId dentro de la misma instancia, reiniciar refs para evitar que
+  // mensajes de la conversación previa interfieran con el cálculo de altura o anclaje.
+  const prevConvIdRef = useRef(conversationId);
+  if (prevConvIdRef.current !== conversationId) {
+    prevConvIdRef.current = conversationId;
+    prevFirstMessageIdRef.current = null;
+    prevLastMessageIdRef.current = null;
+    prevScrollHeightRef.current = 0;
+    prevScrollTopRef.current = 0;
+    isNearBottomRef.current = true;
+    userHasScrolledUpRef.current = false;
+    hasScrolledToBottomRef.current = false;
+  }
 
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [newMessagesBelow, setNewMessagesBelow] = useState(0);
@@ -87,19 +110,89 @@ export function MessageList({
     };
   }, []);
 
-  // Al estar listos los mensajes en la carga inicial, posicionar al final
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (behavior === "smooth") {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    } else {
+      container.scrollTop = container.scrollHeight;
+      if (typeof messagesBottomRef.current?.scrollIntoView === "function") {
+        messagesBottomRef.current.scrollIntoView({ behavior: "instant", block: "end" });
+      }
+    }
+    userHasScrolledUpRef.current = false;
+    isNearBottomRef.current = true;
+    hasScrolledToBottomRef.current = true;
+    setShowScrollBottom(false);
+    setNewMessagesBelow(0);
+    prevScrollHeightRef.current = container.scrollHeight;
+    prevScrollTopRef.current = container.scrollTop;
+  }, []);
+
+  // Al estar listos los mensajes en la carga inicial, posicionar al fondo de forma inmediata
+  // y re-confirmar con requestAnimationFrame y micro-timeouts para asegurar que cualquier
+  // layout flex, fuentes o imágenes en caché queden completamente al fondo.
   useEffect(() => {
     if (status === "ready" && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-      isNearBottomRef.current = true;
-      setShowScrollBottom(false);
-      setNewMessagesBelow(0);
-      prevScrollHeightRef.current = containerRef.current.scrollHeight;
-      prevScrollTopRef.current = containerRef.current.scrollTop;
-      prevFirstMessageIdRef.current = messages[0]?.id ?? null;
-      prevLastMessageIdRef.current = messages[messages.length - 1]?.id ?? null;
+      userHasScrolledUpRef.current = false;
+      scrollToBottom("auto");
+      const raf = requestAnimationFrame(() => {
+        if (!userHasScrolledUpRef.current) {
+          scrollToBottom("auto");
+        }
+      });
+      const t1 = setTimeout(() => {
+        if (!userHasScrolledUpRef.current) scrollToBottom("auto");
+      }, 50);
+      const t2 = setTimeout(() => {
+        if (!userHasScrolledUpRef.current) scrollToBottom("auto");
+      }, 200);
+      const t3 = setTimeout(() => {
+        if (!userHasScrolledUpRef.current) scrollToBottom("auto");
+      }, 600);
+
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
-  }, [status]);
+  }, [status, conversationId, scrollToBottom]);
+
+  // Auto-scroll pinning: mientras el usuario no haya scrolleado voluntariamente hacia arriba,
+  // cualquier cambio de tamaño (imágenes cargando, audio player, notas de voz, avatares, etc.)
+  // debe mantener la vista 100% pegada al fondo.
+  useEffect(() => {
+    const target = contentRef.current;
+    if (!target) return;
+
+    function handlePinToBottom() {
+      if (!userHasScrolledUpRef.current && containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        if (typeof messagesBottomRef.current?.scrollIntoView === "function") {
+          messagesBottomRef.current.scrollIntoView({ behavior: "instant", block: "end" });
+        }
+        prevScrollHeightRef.current = containerRef.current.scrollHeight;
+        prevScrollTopRef.current = containerRef.current.scrollTop;
+      }
+    }
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(handlePinToBottom);
+      observer.observe(target);
+    }
+
+    // Capturar eventos load de imágenes/multimedia en fase de captura dentro del contenedor de mensajes
+    target.addEventListener("load", handlePinToBottom, true);
+
+    return () => {
+      if (observer) observer.disconnect();
+      target.removeEventListener("load", handlePinToBottom, true);
+    };
+  }, [status, conversationId]);
 
   // Anclaje de scroll en layout antes de que el navegador pinte el DOM
   useLayoutEffect(() => {
@@ -109,7 +202,7 @@ export function MessageList({
     const firstId = messages[0]?.id;
     const lastId = messages[messages.length - 1]?.id;
 
-    // Caso 1: Se cargaron mensajes anteriores al inicio del array
+    // Caso 1: Se cargaron mensajes anteriores al inicio del array (paginación hacia arriba)
     if (prevFirstMessageIdRef.current && firstId !== prevFirstMessageIdRef.current) {
       const heightDiff = container.scrollHeight - prevScrollHeightRef.current;
       if (heightDiff > 0) {
@@ -118,22 +211,22 @@ export function MessageList({
     }
     // Caso 2: Nuevo mensaje agregado al final del array
     else if (prevLastMessageIdRef.current && lastId !== prevLastMessageIdRef.current) {
-      if (isNearBottomRef.current) {
-        container.scrollTop = container.scrollHeight;
+      if (!userHasScrolledUpRef.current) {
+        scrollToBottom("auto");
       } else {
         setNewMessagesBelow((prev) => prev + 1);
       }
     }
-    // Caso 3: Carga inicial
+    // Caso 3: Carga inicial de la conversación
     else if (!prevFirstMessageIdRef.current && status === "ready") {
-      container.scrollTop = container.scrollHeight;
+      scrollToBottom("auto");
     }
 
     prevFirstMessageIdRef.current = firstId ?? null;
     prevLastMessageIdRef.current = lastId ?? null;
     prevScrollHeightRef.current = container.scrollHeight;
     prevScrollTopRef.current = container.scrollTop;
-  }, [messages, status]);
+  }, [messages, status, scrollToBottom]);
 
   function handleScroll() {
     const container = containerRef.current;
@@ -143,6 +236,17 @@ export function MessageList({
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     const isNearBottom = distanceFromBottom < STICK_TO_BOTTOM_THRESHOLD;
     isNearBottomRef.current = isNearBottom;
+
+    // Solo consideramos que el usuario subió voluntariamente si:
+    // 1. scrollTop se redujo respecto al frame anterior (desplazamiento hacia arriba, no simple crecimiento de scrollHeight).
+    // 2. Está a más de STICK_TO_BOTTOM_THRESHOLD del fondo.
+    const isScrollingUp = scrollTop < prevScrollTopRef.current - 5;
+    if (isScrollingUp && distanceFromBottom > STICK_TO_BOTTOM_THRESHOLD) {
+      userHasScrolledUpRef.current = true;
+    } else if (distanceFromBottom <= 40) {
+      // El usuario regresó al fondo: reactivar anclaje automático incondicional
+      userHasScrolledUpRef.current = false;
+    }
 
     prevScrollHeightRef.current = scrollHeight;
     prevScrollTopRef.current = scrollTop;
@@ -155,19 +259,24 @@ export function MessageList({
       setNewMessagesBelow(0);
     }
 
-    // Cargar mensajes más antiguos al llegar al umbral superior
-    if (scrollTop < LOAD_MORE_THRESHOLD && hasMore && !loadingMore && messages.length > 0) {
+    // Cargar mensajes más antiguos ÚNICAMENTE si:
+    // 1. El usuario está navegando hacia arriba en el historial (userHasScrolledUpRef.current === true).
+    // 2. El usuario se está desplazando HACIA ARRIBA en este scroll (isScrollingUp === true).
+    // 3. El contenedor tiene altura real para scroll (scrollHeight > clientHeight + 10).
+    // 4. Está cerca del tope (scrollTop < LOAD_MORE_THRESHOLD).
+    // 5. Hay más mensajes en el servidor y no hay una petición en curso.
+    const isScrollable = scrollHeight > clientHeight + 10;
+    if (
+      userHasScrolledUpRef.current &&
+      isScrollingUp &&
+      isScrollable &&
+      scrollTop < LOAD_MORE_THRESHOLD &&
+      hasMore &&
+      !loadingMore &&
+      messages.length > 0
+    ) {
       onLoadMore();
     }
-  }
-
-  function scrollToBottom() {
-    const container = containerRef.current;
-    if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    setNewMessagesBelow(0);
-    isNearBottomRef.current = true;
-    setShowScrollBottom(false);
   }
 
   if (status === "loading" || status === "idle") {
@@ -196,9 +305,13 @@ export function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="min-w-0 flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-4 py-4"
-        style={chatBackgroundStyle}
+        className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4"
+        style={{
+          ...chatBackgroundStyle,
+          overflowAnchor: "auto",
+        }}
       >
+        <div ref={contentRef} className="space-y-2 min-w-0">
         {/* Indicador de inicio de la conversación */}
         {!hasMore && messages.length > 0 && (
           <div className="my-4 flex justify-center">
@@ -274,6 +387,15 @@ export function MessageList({
             <TypingIndicator />
           </div>
         )}
+
+        {/* Centinela invisible al fondo para scrollIntoView y anclaje nativo */}
+        <div
+          ref={messagesBottomRef}
+          aria-hidden="true"
+          className="h-px w-full shrink-0 pointer-events-none"
+          style={{ overflowAnchor: "auto" }}
+        />
+        </div>
       </div>
 
       {/* Botón flotante para bajar a los mensajes más recientes */}
@@ -287,7 +409,7 @@ export function MessageList({
       >
         <button
           type="button"
-          onClick={scrollToBottom}
+          onClick={() => scrollToBottom("smooth")}
           aria-label="Bajar a los mensajes más recientes"
           title="Bajar a los mensajes más recientes"
           className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/95 dark:bg-neutral-800/95 text-neutral-700 dark:text-neutral-200 shadow-md hover:shadow-xl border border-neutral-200/80 dark:border-neutral-700 backdrop-blur-sm transition-all duration-200 hover:scale-110 active:scale-95 hover:text-brand-blue dark:hover:text-brand-blue-light focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
