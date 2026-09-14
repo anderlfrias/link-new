@@ -48,6 +48,14 @@ describe("settings.service", () => {
     allowMessageDeleteForEveryone: true,
     messageDeleteForEveryoneTimeLimitMinutes: 60,
     allowStickersAndGifs: true,
+    uploadCleanupEnabled: false,
+    orphanFileRetentionHours: 24,
+    softDeletedFilePurgeDays: null,
+    uploadCleanupDryRun: false,
+    fileMigrationEnabled: false,
+    fileMigrationBatchSize: 50,
+    fileMigrationIntervalMinutes: 60,
+    fileMigrationDeleteLocalAfterCommit: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -106,6 +114,14 @@ describe("settings.service", () => {
       expect(raw.allowGroupOverrideChangeGroupInfo).toBeUndefined();
       expect(raw.allowGroupOverrideDeleteGroup).toBeUndefined();
       expect(raw.messageRetentionDays).toBeUndefined();
+      expect(raw.uploadCleanupEnabled).toBeUndefined();
+      expect(raw.orphanFileRetentionHours).toBeUndefined();
+      expect(raw.softDeletedFilePurgeDays).toBeUndefined();
+      expect(raw.uploadCleanupDryRun).toBeUndefined();
+      expect(raw.fileMigrationEnabled).toBeUndefined();
+      expect(raw.fileMigrationBatchSize).toBeUndefined();
+      expect(raw.fileMigrationIntervalMinutes).toBeUndefined();
+      expect(raw.fileMigrationDeleteLocalAfterCommit).toBeUndefined();
       expect(raw.createdAt).toBeUndefined();
       expect(raw.updatedAt).toBeUndefined();
     });

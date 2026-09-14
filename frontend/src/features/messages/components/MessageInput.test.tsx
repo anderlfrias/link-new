@@ -72,6 +72,10 @@ describe("MessageInput", () => {
     fileIds: string[];
     validationErrors: unknown[];
     dismissValidationError: ReturnType<typeof vi.fn>;
+    resumableSession: unknown;
+    resumableMismatchError: unknown;
+    resumeSessionWithFile: ReturnType<typeof vi.fn>;
+    discardResumableSession: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {

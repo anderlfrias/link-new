@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
+import { UnauthorizedError } from "../../utils/errors";
 import * as fileRepository from "./file.repository";
 import fileRouter, { adminFileRouter } from "./file.route";
 import * as FileService from "./file.service";
@@ -215,7 +216,9 @@ describe("GET /files/:id/content", () => {
 
   it("retorna 401 si el token HMAC en ?t= es inválido", async () => {
     vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
-    vi.mocked(FileService.verifyFileToken).mockReturnValue(null);
+    vi.mocked(FileService.verifyFileToken).mockImplementation(() => {
+      throw new UnauthorizedError("Token de archivo inválido o expirado");
+    });
 
     const res = await request(app).get("/files/f-123/content?t=invalid-hmac");
     expect(res.status).toBe(401);
@@ -224,7 +227,7 @@ describe("GET /files/:id/content", () => {
 
   it("retorna 403 si el usuario del token HMAC no tiene acceso (canAccessFile = false)", async () => {
     vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
-    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-intruder", fileId: "f-123" });
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-intruder" });
     vi.mocked(FileService.canAccessFile).mockResolvedValue(false);
 
     const res = await request(app).get("/files/f-123/content?t=valid-hmac");
@@ -234,7 +237,7 @@ describe("GET /files/:id/content", () => {
 
   it("retorna 200 con streaming y headers si el token HMAC es válido y tiene acceso", async () => {
     vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
-    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-123" });
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner" });
     vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
     vi.mocked(FileService.buildContentDisposition).mockReturnValue('inline; filename="test.txt"');
 
@@ -250,7 +253,7 @@ describe("GET /files/:id/content", () => {
 
   it("soporta Range request retornando 206 Partial Content", async () => {
     vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
-    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-123" });
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner" });
     vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
 
     const res = await request(app)
@@ -296,7 +299,7 @@ describe("GET /files/:id/content", () => {
       provider: "S3",
     };
     vi.mocked(fileRepository.findActiveById).mockResolvedValue(s3File as any);
-    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-s3-1" });
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner" });
     vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
 
     const res = await request(app).get("/files/f-s3-1/content?t=valid-hmac");
@@ -332,7 +335,7 @@ describe("GET /files/:id/content", () => {
 
   it("incluye cabeceras de seguridad nosniff y CSP sandbox en GET /files/:id/content (§9.1 S6)", async () => {
     vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
-    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner", fileId: "f-123" });
+    vi.mocked(FileService.verifyFileToken).mockReturnValue({ userId: "u-owner" });
     vi.mocked(FileService.canAccessFile).mockResolvedValue(true);
 
     const res = await request(app).get("/files/f-123/content?t=valid-hmac");

@@ -320,7 +320,7 @@ export class ChunkedUploader {
         }
       }
 
-      if (this.isPaused || this.isCanceled || this.status === "offline") {
+      if (this.isPaused || this.isCanceled || this.getStatus() === "offline") {
         this.activeWorkers--;
         this.pendingParts.unshift(partNumber);
         return;

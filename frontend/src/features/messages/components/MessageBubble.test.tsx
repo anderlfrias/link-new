@@ -313,6 +313,7 @@ describe("MessageBubble", () => {
           createdAt: "2026-09-09T10:00:00Z",
           file: {
             id: "f-1",
+            url: "/uploads/stickers/test.webp",
             path: "stickers/test.webp",
             originalName: "test.webp",
             mimeType: "image/webp",
@@ -408,6 +409,7 @@ describe("MessageBubble", () => {
           createdAt: "2026-09-09T10:00:00Z",
           file: {
             id: "f-img-1",
+            url: "/uploads/chat/photo.jpg",
             path: "chat/photo.jpg",
             originalName: "foto.jpg",
             mimeType: "image/jpeg",
@@ -473,6 +475,7 @@ describe("MessageBubble", () => {
           createdAt: "2026-09-09T10:00:00Z",
           file: {
             id: "f-img-2",
+            url: "/uploads/chat/reporte.png",
             path: "chat/reporte.png",
             originalName: "reporte.png",
             mimeType: "image/png",
@@ -539,6 +542,7 @@ describe("MessageBubble", () => {
           createdAt: "2026-09-09T10:00:00Z",
           file: {
             id: "f-1",
+            url: "/uploads/stickers/test.webp",
             path: "stickers/test.webp",
             originalName: "test.webp",
             mimeType: "image/webp",

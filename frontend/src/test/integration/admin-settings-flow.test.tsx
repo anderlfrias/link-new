@@ -45,6 +45,14 @@ const initialSettings: AdminSettings = {
   allowMessageDeleteForEveryone: true,
   messageDeleteForEveryoneTimeLimitMinutes: 60,
   allowStickersAndGifs: true,
+  uploadCleanupEnabled: false,
+  orphanFileRetentionHours: null,
+  softDeletedFilePurgeDays: null,
+  uploadCleanupDryRun: false,
+  fileMigrationEnabled: false,
+  fileMigrationBatchSize: 50,
+  fileMigrationIntervalMinutes: 60,
+  fileMigrationDeleteLocalAfterCommit: false,
 };
 
 describe("Flujo clave: AdminSettingsPanel", () => {

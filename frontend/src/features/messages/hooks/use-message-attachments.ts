@@ -22,17 +22,7 @@ import type { UploadedFile } from "@/features/files/types/file.types";
 /** Umbral interno que divide el camino directo (≤ 16 MiB) del chunked (> 16 MiB) (§4, §12). */
 export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 16 * 1024 * 1024;
 
-export type AttachmentStatus =
-  | "uploading"
-  | "done"
-  | "error"
-  | "initiating"
-  | "retrying"
-  | "paused"
-  | "resuming"
-  | "offline"
-  | "completing"
-  | "canceled";
+export type AttachmentStatus = ChunkedUploadStatus;
 
 export interface PendingAttachment {
   localId: string;
