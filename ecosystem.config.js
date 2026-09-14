@@ -48,7 +48,7 @@ module.exports = {
       // hay que correr "npm run build --workspace=frontend" de nuevo.
       env: {
         NODE_ENV: "production",
-        PORT: 3000,
+        PORT: 3027,
       },
       // Next.js sí es stateless (sin Socket.IO) — a diferencia del backend,
       // subir `instances` acá es seguro si hace falta escalar.
