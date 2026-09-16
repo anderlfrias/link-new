@@ -1,8 +1,9 @@
-import { ChatAuditAction, ConversationType, GroupPermissionLevel } from "@prisma/client";
+import { AuditAction, ConversationType, GroupPermissionLevel } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { getIO } from "../../socket";
 import { conversationRoomName, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
+import * as AuditService from "../audit/audit.service";
 import * as SettingsService from "../settings/settings.service";
 import { UpdateGroupSettingsInput } from "../settings/settings.types";
 import * as ConversationRepository from "./conversation.repository";
@@ -165,10 +166,11 @@ export async function createConversation(
     memberIds: [currentUserId, ...otherMemberIds],
   });
 
-  await ConversationRepository.logAudit({
+  await AuditService.record({
     userId: currentUserId,
-    action: ChatAuditAction.CREATE_CONVERSATION,
+    action: AuditAction.CREATE_CONVERSATION,
     conversationId: conversation.id,
+    metadata: { conversationType: conversation.type },
   });
 
   // Una PRIVATE recién creada todavía no tiene mensajes (`lastMessageId` null),
@@ -208,10 +210,11 @@ export async function getOrCreateSelfChat(currentUserId: string): Promise<Conver
     memberIds: [currentUserId],
   });
 
-  await ConversationRepository.logAudit({
+  await AuditService.record({
     userId: currentUserId,
-    action: ChatAuditAction.CREATE_CONVERSATION,
+    action: AuditAction.CREATE_CONVERSATION,
     conversationId: conversation.id,
+    metadata: { conversationType: ConversationType.SELF },
   });
 
   return conversation;
@@ -303,17 +306,17 @@ export async function updateConversation(
   });
 
   if (trimmedName !== undefined) {
-    await ConversationRepository.logAudit({
+    await AuditService.record({
       userId: currentUserId,
-      action: ChatAuditAction.CHANGE_NAME,
+      action: AuditAction.CHANGE_NAME,
       conversationId,
       metadata: { from: conversation.name, to: updated.name },
     });
   }
   if (input.imageFileId !== undefined) {
-    await ConversationRepository.logAudit({
+    await AuditService.record({
       userId: currentUserId,
-      action: ChatAuditAction.CHANGE_IMAGE,
+      action: AuditAction.CHANGE_IMAGE,
       conversationId,
       metadata: { from: conversation.imageFileId, to: updated.imageFileId },
     });
@@ -361,11 +364,11 @@ export async function addMembers(
   await ConversationRepository.addMembers(conversationId, newUserIds);
   await Promise.all(
     newUserIds.map((userId) =>
-      ConversationRepository.logAudit({
+      AuditService.record({
         userId: currentUserId,
-        action: ChatAuditAction.ADD_MEMBER,
+        action: AuditAction.ADD_MEMBER,
         conversationId,
-        metadata: { addedUserId: userId },
+        metadata: { memberId: userId },
       }),
     ),
   );
@@ -415,11 +418,11 @@ export async function removeMember(
   }
 
   await ConversationRepository.removeMember(conversationId, targetUserId);
-  await ConversationRepository.logAudit({
+  await AuditService.record({
     userId: currentUserId,
-    action: ChatAuditAction.REMOVE_MEMBER,
+    action: AuditAction.REMOVE_MEMBER,
     conversationId,
-    metadata: { removedUserId: targetUserId, self: isSelf },
+    metadata: { memberId: targetUserId },
   });
 
   const io = getIO();
@@ -520,11 +523,11 @@ export async function setMemberAdminStatus(
   }
 
   await ConversationRepository.setMemberAdmin(conversationId, targetUserId, isAdmin);
-  await ConversationRepository.logAudit({
+  await AuditService.record({
     userId: currentUserId,
-    action: ChatAuditAction.SET_GROUP_ADMIN,
+    action: AuditAction.SET_GROUP_ADMIN,
     conversationId,
-    metadata: { targetUserId, isAdmin },
+    metadata: { memberId: targetUserId, isAdmin },
   });
 
   getIO().to(conversationRoomName(conversationId)).emit(CONVERSATION_EVENTS.MEMBER_ADMIN_CHANGED, {

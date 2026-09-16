@@ -1,4 +1,7 @@
-import { AppSettings, ConversationGroupSettings } from "@prisma/client";
+import { AppSettings, AuditAction, ConversationGroupSettings } from "@prisma/client";
+import { prisma } from "../../config/prisma";
+import * as AuditRepository from "../audit/audit.repository";
+import * as AuditService from "../audit/audit.service";
 import * as SettingsRepository from "./settings.repository";
 import {
   EffectiveGroupSettings,
@@ -43,9 +46,56 @@ export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
   };
 }
 
+export function diffSettings(
+  before: AppSettings,
+  input: UpdateSettingsInput,
+): Record<string, { from: unknown; to: unknown }> {
+  const changed: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of Object.keys(input) as Array<keyof UpdateSettingsInput>) {
+    const fromVal = before[key as keyof AppSettings];
+    const toVal = input[key];
+    if (toVal !== undefined) {
+      if (Array.isArray(fromVal) && Array.isArray(toVal)) {
+        if (JSON.stringify(fromVal) !== JSON.stringify(toVal)) {
+          changed[key] = { from: fromVal, to: toVal };
+        }
+      } else if (toVal !== fromVal) {
+        changed[key] = { from: fromVal, to: toVal };
+      }
+    }
+  }
+  return changed;
+}
+
 export async function updateSettings(input: UpdateSettingsInput): Promise<AppSettings> {
-  cached = await SettingsRepository.update(input);
-  return cached;
+  const before = await getSettings();
+  const changed = diffSettings(before, input);
+
+  // Una PATCH que no cambia nada no genera rastro: una fila de auditoría vacía
+  // solo agrega ruido a la revisión.
+  if (Object.keys(changed).length === 0) {
+    return before;
+  }
+
+  // Efecto y rastro en la misma transacción: que la configuración global de la
+  // instalación pueda cambiar sin dejar constancia de quién la cambió es el
+  // agujero que esta fase cierra (LOGGING_PLAN.md §2.2 problema 2).
+  const [updated] = await prisma.$transaction([
+    SettingsRepository.update(input),
+    AuditRepository.createOperation(
+      AuditService.buildAuditData({
+        action: AuditAction.UPDATE_SETTINGS,
+        targetType: "AppSettings",
+        targetId: SettingsRepository.SETTINGS_ID,
+        metadata: { changed },
+      }),
+    ),
+  ]);
+
+  // El cache de módulo se refresca recién acá: si la transacción falla, el
+  // cache tiene que seguir reflejando lo que hay en la base.
+  cached = updated;
+  return updated;
 }
 
 /// Combina `AppSettings` (global, cacheado) con el override de un grupo

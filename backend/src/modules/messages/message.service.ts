@@ -1,4 +1,5 @@
-import { ChatAuditAction, ConversationType, MessageFile, MessageType, StoredFile } from "@prisma/client";
+import { AuditAction, ConversationType, MessageFile, MessageType, StoredFile } from "@prisma/client";
+import * as AuditService from "../audit/audit.service";
 import {
   assertMembership,
   buildLastMessagePreview,
@@ -137,12 +138,16 @@ function assertWithinTimeLimit(sentAt: Date, limitMinutes: number | null, action
   }
 }
 
+type DeliverAuditParam =
+  | { action: typeof AuditAction.SEND_MESSAGE; metadata: { messageType: MessageType; fileCount: number } }
+  | { action: typeof AuditAction.FORWARD_MESSAGE; metadata: { fromConversationId: string } };
+
 interface CreateAndDeliverParams {
   content: string;
   fileIds?: string[];
   replyToId?: string;
   forwardedFromId?: string;
-  auditAction: ChatAuditAction;
+  auditAction: DeliverAuditParam;
   type?: MessageType;
 }
 
@@ -150,7 +155,7 @@ interface CreateAndDeliverParams {
 /// auditarla, calcular entrega/recibos, emitir por socket, refrescar la
 /// lista de conversaciones de cada miembro, y mandar push a quien no está
 /// conectado. Lo único que cambia entre las dos es CÓMO se validó/armó
-/// `content`/`fileIds` antes de llegar acá, y qué `ChatAuditAction` corresponde.
+/// `content`/`fileIds` antes de llegar acá, y qué `AuditAction` corresponde.
 async function createAndDeliverMessage(
   currentUserId: string,
   conversationId: string,
@@ -167,12 +172,25 @@ async function createAndDeliverMessage(
     forwardedFromId: params.forwardedFromId,
   });
 
-  await MessageRepository.logAudit({
-    userId: currentUserId,
-    action: params.auditAction,
-    conversationId,
-    messageId: message.id,
-  });
+  if (params.auditAction.action === AuditAction.SEND_MESSAGE) {
+    const audit = params.auditAction;
+    await AuditService.record({
+      userId: currentUserId,
+      action: AuditAction.SEND_MESSAGE,
+      conversationId,
+      messageId: message.id,
+      metadata: audit.metadata,
+    });
+  } else {
+    const audit = params.auditAction;
+    await AuditService.record({
+      userId: currentUserId,
+      action: AuditAction.FORWARD_MESSAGE,
+      conversationId,
+      messageId: message.id,
+      metadata: audit.metadata,
+    });
+  }
 
   // Quien ya está conectado a la room lo recibe en el acto: eso ES "entregado"
   // (ver markDelivered en conversation.service.ts). El resto queda en "sent"
@@ -253,7 +271,13 @@ export async function sendMessage(
     content: input.content.trim(),
     fileIds,
     replyToId: input.replyToId,
-    auditAction: ChatAuditAction.SEND_MESSAGE,
+    auditAction: {
+      action: AuditAction.SEND_MESSAGE,
+      metadata: {
+        messageType: input.type === "STICKER" ? MessageType.STICKER : MessageType.TEXT,
+        fileCount: fileIds.length,
+      },
+    },
     type: input.type === "STICKER" ? MessageType.STICKER : undefined,
   });
 }
@@ -284,7 +308,12 @@ export async function forwardMessage(
     content: source.content,
     fileIds: source.files.map((file) => file.fileId),
     forwardedFromId: source.id,
-    auditAction: ChatAuditAction.FORWARD_MESSAGE,
+    auditAction: {
+      action: AuditAction.FORWARD_MESSAGE,
+      metadata: {
+        fromConversationId: source.conversationId,
+      },
+    },
   });
 }
 
@@ -355,9 +384,9 @@ export async function editMessage(
   assertWithinTimeLimit(message.createdAt, settings.messageEditTimeLimitMinutes, "edit");
 
   const updated = await MessageRepository.updateContent(messageId, input.content.trim());
-  await MessageRepository.logAudit({
+  await AuditService.record({
     userId: currentUserId,
-    action: ChatAuditAction.EDIT_MESSAGE,
+    action: AuditAction.EDIT_MESSAGE,
     conversationId,
     messageId,
   });
@@ -398,9 +427,9 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
   }
 
   const deleted = await MessageRepository.softDelete(messageId, currentUserId);
-  await MessageRepository.logAudit({
+  await AuditService.record({
     userId: currentUserId,
-    action: ChatAuditAction.DELETE_MESSAGE,
+    action: AuditAction.DELETE_MESSAGE,
     conversationId,
     messageId,
     metadata: { deletedOwnMessage: isOwnMessage },

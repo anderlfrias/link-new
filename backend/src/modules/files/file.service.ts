@@ -1,14 +1,17 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import path from "path";
 import { parseBuffer } from "music-metadata";
-import { FileTypeRestrictionMode, StoredFile } from "@prisma/client";
+import { AuditAction, FileTypeRestrictionMode, StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import env from "../../config/env";
+import { prisma } from "../../config/prisma";
 import { getLogger } from "../../config/request-context";
 import { getProvider, getWriteProvider, storage } from "../../storage";
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
 import { isConversationMember } from "../conversations/conversation.repository";
+import * as AuditRepository from "../audit/audit.repository";
+import * as AuditService from "../audit/audit.service";
 import * as SettingsService from "../settings/settings.service";
 import * as FileRepository from "./file.repository";
 import {
@@ -354,7 +357,18 @@ export async function adminDeleteFile(fileId: string): Promise<{ id: string }> {
     getLogger().error({ fileId, err: error }, "failed to delete physical file");
   }
 
-  await FileRepository.softDelete(fileId);
+  const [deleted] = await prisma.$transaction([
+    FileRepository.softDelete(fileId),
+    AuditRepository.createOperation(
+      AuditService.buildAuditData({
+        action: AuditAction.ADMIN_DELETE_FILE,
+        targetType: "StoredFile",
+        targetId: fileId,
+        metadata: { provider: file.provider, sizeBytes: Number(file.size), mimeType: file.mimeType },
+      }),
+    ),
+  ]);
+
   return { id: fileId };
 }
 

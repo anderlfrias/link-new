@@ -1,5 +1,5 @@
 import {
-  ChatAuditAction,
+  AuditAction,
   ConversationGroupSettings,
   ConversationType,
   GroupPermissionLevel,
@@ -20,9 +20,19 @@ vi.mock("../../socket", () => ({
 
 vi.mock("./conversation.repository");
 vi.mock("../settings/settings.service");
+vi.mock("../audit/audit.service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../audit/audit.service")>();
+  return {
+    ...actual,
+    record: vi.fn(actual.record),
+  };
+});
+vi.mock("../audit/audit.repository");
 
 import { getIO } from "../../socket";
 import * as SettingsService from "../settings/settings.service";
+import * as AuditService from "../audit/audit.service";
+import * as AuditRepository from "../audit/audit.repository";
 import * as ConversationRepository from "./conversation.repository";
 import { CONVERSATION_EVENTS } from "./conversation.socket";
 import {
@@ -447,6 +457,32 @@ describe("conversation.service", () => {
       expect(result).toBe(createdConv);
       expect(mockEmit).toHaveBeenCalledWith(CONVERSATION_EVENTS.CREATED, createdConv);
     });
+
+    it("devuelve la conversación creada aunque la auditoría falle al escribir", async () => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
+        maxGroupMembers: 10,
+      } as any);
+      vi.mocked(ConversationRepository.countExistingUsers).mockResolvedValue(2);
+      const createdConv = buildMockConversation({
+        type: ConversationType.GROUP,
+        members: [
+          buildMockMember({ userId: "u-1" }),
+          buildMockMember({ userId: "u-2" }),
+          buildMockMember({ userId: "u-3" }),
+        ],
+      });
+      vi.mocked(ConversationRepository.createConversation).mockResolvedValue(createdConv);
+      vi.mocked(AuditRepository.create).mockRejectedValueOnce(new Error("Audit DB down"));
+
+      const result = await createConversation(
+        "u-1",
+        { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "Nuevo Grupo" },
+        [],
+      );
+
+      expect(result).toBe(createdConv);
+    });
   });
 
   describe("getOrCreateSelfChat", () => {
@@ -550,15 +586,15 @@ describe("conversation.service", () => {
       );
 
       expect(result).toBe(updated);
-      expect(ConversationRepository.logAudit).toHaveBeenCalledWith(
+      expect(AuditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ChatAuditAction.CHANGE_NAME,
+          action: AuditAction.CHANGE_NAME,
           metadata: { from: "Nombre Viejo", to: "Nombre Nuevo" },
         }),
       );
-      expect(ConversationRepository.logAudit).toHaveBeenCalledWith(
+      expect(AuditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ChatAuditAction.CHANGE_IMAGE,
+          action: AuditAction.CHANGE_IMAGE,
           metadata: { from: "img-old", to: "img-new" },
         }),
       );
@@ -576,7 +612,7 @@ describe("conversation.service", () => {
 
       await updateConversation("admin-1", "c-1", {}, []);
 
-      expect(ConversationRepository.logAudit).not.toHaveBeenCalled();
+      expect(AuditService.record).not.toHaveBeenCalled();
     });
   });
 
@@ -639,10 +675,10 @@ describe("conversation.service", () => {
       const result = await addMembers("u-1", "c-1", ["u-nuevo"], []);
 
       expect(ConversationRepository.addMembers).toHaveBeenCalledWith("c-1", ["u-nuevo"]);
-      expect(ConversationRepository.logAudit).toHaveBeenCalledWith(
+      expect(AuditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: ChatAuditAction.ADD_MEMBER,
-          metadata: { addedUserId: "u-nuevo" },
+          action: AuditAction.ADD_MEMBER,
+          metadata: { memberId: "u-nuevo" },
         }),
       );
       expect(mockEmit).toHaveBeenCalledWith(

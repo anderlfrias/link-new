@@ -1,4 +1,4 @@
-import { ChatAuditAction, MessageType, Prisma } from "@prisma/client";
+import { MessageType, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 
 const withRelations = {
@@ -144,22 +144,4 @@ export async function softDeleteOlderThan(cutoffDate: Date): Promise<number> {
     data: { deletedAt: new Date() },
   });
   return result.count;
-}
-
-export function logAudit(params: {
-  userId: string;
-  action: ChatAuditAction;
-  conversationId: string;
-  messageId: string;
-  metadata?: Prisma.InputJsonValue;
-}) {
-  return prisma.chatAuditLog.create({
-    data: {
-      userId: params.userId,
-      action: params.action,
-      conversationId: params.conversationId,
-      messageId: params.messageId,
-      metadata: params.metadata,
-    },
-  });
 }

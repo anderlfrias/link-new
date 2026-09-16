@@ -1,4 +1,4 @@
-import { ChatAuditAction, ConversationType, MessageType } from "@prisma/client";
+import { AuditAction, ConversationType, MessageType } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 
@@ -42,11 +42,13 @@ vi.mock("../push/push.service", () => ({
   notifyUsers: vi.fn(),
 }));
 vi.mock("../settings/settings.service");
+vi.mock("../audit/audit.service");
 
 import { getConnectedUserIds } from "../../socket/rooms";
 import * as ConversationService from "../conversations/conversation.service";
 import * as PushService from "../push/push.service";
 import * as SettingsService from "../settings/settings.service";
+import * as AuditService from "../audit/audit.service";
 import * as MessageRepository from "./message.repository";
 import { MESSAGE_EVENTS } from "./message.socket";
 import {
@@ -232,6 +234,13 @@ describe("message.service", () => {
         }),
       );
       expect(result.id).toBe("msg-forwarded");
+      expect(AuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.FORWARD_MESSAGE,
+          conversationId: "conv-target",
+          metadata: { fromConversationId: "conv-source" },
+        }),
+      );
     });
 
     it("rechaza si el mensaje de origen no existe", async () => {
@@ -391,6 +400,13 @@ describe("message.service", () => {
 
       expect(MessageRepository.updateContent).toHaveBeenCalledWith("msg-1", "Contenido editado");
       expect(mockEmit).toHaveBeenCalledWith(MESSAGE_EVENTS.UPDATED, expect.objectContaining({ content: "Contenido editado" }));
+      expect(AuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.EDIT_MESSAGE,
+          conversationId: "conv-1",
+          messageId: "msg-1",
+        }),
+      );
       expect(result.content).toBe("Contenido editado");
     });
 
@@ -481,6 +497,14 @@ describe("message.service", () => {
         deletedAt: deletedDate,
       });
       expect(result.deletedAt).toBe(deletedDate);
+      expect(AuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.DELETE_MESSAGE,
+          conversationId: "conv-1",
+          messageId: "msg-1",
+          metadata: { deletedOwnMessage: true },
+        }),
+      );
     });
 
     it("creador de la conversación puede borrar mensajes ajenos por moderación sin límite de tiempo", async () => {

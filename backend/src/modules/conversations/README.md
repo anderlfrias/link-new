@@ -171,7 +171,7 @@ Cada `ConversationMember` tiene un campo `isAdmin` (default `false`), independie
 * El creador **nunca** puede ser degradado — invariante de negocio, no solo de UI.
 * Promover/degradar a alguien que ya tiene ese estado es rechazado (`400`, no-op).
 
-Cada cambio escribe un `ChatAuditLog` (`SET_GROUP_ADMIN`, `metadata: { targetUserId, isAdmin }`) y emite `conversation:member_admin_changed` (ver [Eventos de socket](#eventos-de-socket)).
+Cada cambio escribe un `AuditLog` (`SET_GROUP_ADMIN`, `metadata: { memberId, isAdmin }`) y emite `conversation:member_admin_changed` (ver [Eventos de socket](#eventos-de-socket)).
 
 ## Eliminar chat (borrado "para mí")
 
@@ -182,11 +182,11 @@ No existe un endpoint para "desocultar" explícitamente — reaparece sola, sin 
 * **Llega un mensaje nuevo** en esa conversación (de cualquiera de los dos miembros, incluido uno mismo): `messages/message.service.ts#notifyConversationListChanged` limpia `hiddenAt` para todos los miembros antes de emitir `conversation:updated` — así "escribirle de nuevo a alguien que había eliminado" también le desoculta el chat a quien escribe.
 * **Se reinicia el chat con ese contacto** (`POST /` de arriba, camino de reuso de `PRIVATE` existente): si quien pide la conversación la tenía oculta, `createConversation` le limpia `hiddenAt` antes de devolverla.
 
-Es idempotente eliminar un chat ya oculto (vuelve a fijar `hiddenAt` a la fecha actual, sin error) y no genera ningún `ChatAuditLog` — es preferencia/estado personal, mismo criterio que [Fijar y favoritos](#fijar-y-favoritos), no una acción sobre la conversación en sí.
+Es idempotente eliminar un chat ya oculto (vuelve a fijar `hiddenAt` a la fecha actual, sin error) y no genera ningún `AuditLog` — es preferencia/estado personal, mismo criterio que [Fijar y favoritos](#fijar-y-favoritos), no una acción sobre la conversación en sí.
 
 ## Fijar y favoritos
 
-`ConversationMember.isPinned`/`isFavorite` (ambos default `false`) son **preferencias personales de organización**, no propiedades de la conversación — cada miembro tiene las suyas, independientes de las del resto (fijar un chat no lo fija para nadie más). `GET /` (arriba) ordena las fijadas por el usuario que llama primero — el resto del orden (`lastMessageAt`/`createdAt` desc) se preserva sin cambios dentro de cada grupo (fijadas / no fijadas). Nada de esto se audita en `ChatAuditLog` (ver [Auditoría](#auditoría)) — es preferencia personal, no una acción sobre el grupo.
+`ConversationMember.isPinned`/`isFavorite` (ambos default `false`) son **preferencias personales de organización**, no propiedades de la conversación — cada miembro tiene las suyas, independientes de las del resto (fijar un chat no lo fija para nadie más). `GET /` (arriba) ordena las fijadas por el usuario que llama primero — el resto del orden (`lastMessageAt`/`createdAt` desc) se preserva sin cambios dentro de cada grupo (fijadas / no fijadas). Nada de esto se audita en `AuditLog` (ver [Auditoría](#auditoría)) — es preferencia personal, no una acción sobre el grupo.
 
 `PATCH /:id/pin`/`PATCH /:id/favorite` (`conversation.service.ts#setConversationPinned`/`setConversationFavorite`) son **self-only**: siempre actúan sobre la propia membresía de quien llama, nunca sobre otro miembro (a diferencia de `setMemberAdminStatus`). Por eso mismo, el evento de socket (`conversation:member_preference_changed`, ver [Eventos de socket](#eventos-de-socket)) se emite **solo a la room personal** de quien hizo el cambio, nunca a la room de la conversación — filtrarlo ahí expondría esta preferencia privada al resto de los miembros.
 
@@ -217,7 +217,7 @@ Es una aproximación por corte de tiempo — la misma que ya usa `countUnread` p
 
 ## Auditoría
 
-Cada operación que cambia el estado de una conversación escribe un `ChatAuditLog` (`CREATE_CONVERSATION`, `ADD_MEMBER`, `REMOVE_MEMBER`, `CHANGE_NAME`, `CHANGE_IMAGE`, `SET_GROUP_ADMIN`), con el `userId` de quien la ejecutó. `SEND_MESSAGE`/`EDIT_MESSAGE`/`DELETE_MESSAGE` los escribirá el módulo `messages`, no este.
+Cada operación que cambia el estado de una conversación escribe un `AuditLog` (`CREATE_CONVERSATION`, `ADD_MEMBER`, `REMOVE_MEMBER`, `CHANGE_NAME`, `CHANGE_IMAGE`, `SET_GROUP_ADMIN`), con el `userId` de quien la ejecutó. `SEND_MESSAGE`/`EDIT_MESSAGE`/`DELETE_MESSAGE` los escribirá el módulo `messages`, no este.
 
 ## Eventos de socket
 

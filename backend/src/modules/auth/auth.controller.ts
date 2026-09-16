@@ -1,7 +1,32 @@
 import { NextFunction, Request, Response } from "express";
-import { BadRequestError } from "../../utils/errors";
+import { AuditAction } from "@prisma/client";
+import {
+  BadRequestError,
+  ForbiddenError,
+  ServiceUnavailableError,
+  UnauthorizedError,
+} from "../../utils/errors";
+import * as AuditService from "../audit/audit.service";
 import * as AuthService from "./auth.service";
 import { mapTokenToUser, verifyToken } from "./jwt";
+
+export function mapLoginFailureReason(
+  error: unknown,
+): "forbidden_by_provider" | "invalid_credentials" | "provider_error" | "provider_unreachable" {
+  if (error instanceof ForbiddenError) {
+    return "forbidden_by_provider";
+  }
+  if (error instanceof UnauthorizedError) {
+    return "invalid_credentials";
+  }
+  if (error instanceof ServiceUnavailableError) {
+    if (error.code === "provider_unreachable") {
+      return "provider_unreachable";
+    }
+    return "provider_error";
+  }
+  return "provider_error";
+}
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
@@ -13,6 +38,12 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const token = await AuthService.login(user, password);
     const mappedUser = mapTokenToUser(verifyToken(token));
     const internalUser = await AuthService.upsertUsuario(mappedUser);
+
+    void AuditService.record({
+      action: AuditAction.LOGIN,
+      userId: internalUser.id,
+      actorEmail: mappedUser.email,
+    });
 
     res.json({
       token,
@@ -41,6 +72,19 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       internalUser.syncProfileWithIntegration,
     );
   } catch (error) {
+    // El intento fallido se registra con la identidad INTENTADA y sin userId:
+    // puede no existir ningún User local para ese usuario (ver el comentario de
+    // `userId` en el schema). `record` nunca tira, así que esto no puede
+    // enmascarar el error original que se propaga abajo.
+    // BadRequestError (falta de user/password) no es un intento de autenticación y no se audita.
+    if (!(error instanceof BadRequestError)) {
+      void AuditService.record({
+        action: AuditAction.LOGIN_FAILED,
+        userId: null,
+        actorEmail: typeof req.body?.user === "string" ? req.body.user : null,
+        metadata: { reason: mapLoginFailureReason(error) },
+      });
+    }
     next(error);
   }
 }

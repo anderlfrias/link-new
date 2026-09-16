@@ -29,6 +29,22 @@ vi.mock("../settings/settings.service");
 vi.mock("music-metadata", () => ({
   parseBuffer: vi.fn(),
 }));
+vi.mock("../../config/prisma", () => ({
+  prisma: {
+    $transaction: vi.fn(),
+  },
+}));
+vi.mock("../audit/audit.repository", () => ({
+  createOperation: vi.fn((data) => ({ __operation: "audit.create", data })),
+}));
+vi.mock("../audit/audit.service", () => ({
+  buildAuditData: vi.fn((params) => ({ ...params, built: true })),
+}));
+
+import { prisma } from "../../config/prisma";
+import * as AuditRepository from "../audit/audit.repository";
+import * as AuditService from "../audit/audit.service";
+import { AuditAction } from "@prisma/client";
 
 import { storage } from "../../storage";
 import { isConversationMember } from "../conversations/conversation.repository";
@@ -428,6 +444,74 @@ describe("file.service", () => {
       vi.mocked(FileRepository.findActiveById).mockResolvedValue(null);
 
       await expect(deleteFile("u-owner", "nonexistent")).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("adminDeleteFile", () => {
+    it("adminDeleteFile exitoso -> $transaction con 2 operaciones y metadata sin nombre de archivo", async () => {
+      const file = buildMockStoredFile({
+        id: "file-admin-1",
+        originalName: "documento_privado.pdf",
+        provider: "LOCAL",
+        size: 5242880n,
+        mimeType: "application/pdf",
+        path: "chat/conv-1/doc.pdf",
+      });
+      vi.mocked(FileRepository.findActiveById).mockResolvedValue(file as any);
+      const mockOpDelete = { __op: "softDelete" };
+      vi.mocked(FileRepository.softDelete).mockReturnValue(mockOpDelete as any);
+      vi.mocked(prisma.$transaction).mockResolvedValue([file, {}]);
+
+      const result = await adminDeleteFile("file-admin-1");
+
+      expect(mockStorage.delete).toHaveBeenCalledWith("chat/conv-1/doc.pdf");
+      expect(prisma.$transaction).toHaveBeenCalledWith([
+        mockOpDelete,
+        expect.objectContaining({ __operation: "audit.create" }),
+      ]);
+      expect(AuditService.buildAuditData).toHaveBeenCalledWith({
+        action: AuditAction.ADMIN_DELETE_FILE,
+        targetType: "StoredFile",
+        targetId: "file-admin-1",
+        metadata: {
+          provider: "LOCAL",
+          sizeBytes: 5242880,
+          mimeType: "application/pdf",
+        },
+      });
+
+      // Asegurar que el nombre original del archivo NO fue pasado a la auditoría
+      const auditCall = vi.mocked(AuditService.buildAuditData).mock.calls[0][0];
+      expect(JSON.stringify(auditCall)).not.toContain("documento_privado.pdf");
+      expect(result).toEqual({ id: "file-admin-1" });
+    });
+
+    it("si la transacción rechaza -> adminDeleteFile tira (el fallo se propaga)", async () => {
+      const file = buildMockStoredFile({ id: "file-admin-2", path: "chat/doc2.pdf" });
+      vi.mocked(FileRepository.findActiveById).mockResolvedValue(file as any);
+      vi.mocked(FileRepository.softDelete).mockReturnValue({} as any);
+      vi.mocked(prisma.$transaction).mockRejectedValue(new Error("DB transaction failed"));
+
+      await expect(adminDeleteFile("file-admin-2")).rejects.toThrow("DB transaction failed");
+    });
+
+    it("el fallo del borrado físico sigue siendo no bloqueante", async () => {
+      const file = buildMockStoredFile({ id: "file-admin-3", path: "chat/doc3.pdf" });
+      vi.mocked(FileRepository.findActiveById).mockResolvedValue(file as any);
+      mockStorage.delete.mockRejectedValueOnce(new Error("Disk IO error"));
+      vi.mocked(FileRepository.softDelete).mockReturnValue({} as any);
+      vi.mocked(prisma.$transaction).mockResolvedValue([file, {}]);
+
+      const result = await adminDeleteFile("file-admin-3");
+
+      expect(result).toEqual({ id: "file-admin-3" });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("lanza NotFoundError si el archivo no existe", async () => {
+      vi.mocked(FileRepository.findActiveById).mockResolvedValue(null);
+
+      await expect(adminDeleteFile("missing")).rejects.toThrow(NotFoundError);
     });
   });
 

@@ -145,13 +145,13 @@ npm run prisma:sync --workspace=backend
 > Si menciona **borrar** o **recrear** la tabla `chat_audit_logs`, pará: algo del `@@map` quedó mal
 > escrito, y aceptarlo destruiría el audit trail existente.
 
-- [ ] Enum renombrado a `AuditAction` con `@@map("chat_audit_action")` intacto y 4 valores nuevos
-- [ ] Modelo renombrado a `AuditLog` con `@@map("chat_audit_logs")` intacto
-- [ ] `userId` nullable; `actorEmail`, `targetType`, `targetId`, `ip`, `userAgent`, `requestId` agregados
-- [ ] 2 índices nuevos
-- [ ] Las 3 back-relations actualizadas
-- [ ] `db push` aplicado y su plan revisado (sin drops)
-- [ ] `npm run build --workspace=backend` compila (el rename rompe los ~28 imports de
+- [x] Enum renombrado a `AuditAction` con `@@map("chat_audit_action")` intacto y 4 valores nuevos
+- [x] Modelo renombrado a `AuditLog` con `@@map("chat_audit_logs")` intacto
+- [x] `userId` nullable; `actorEmail`, `targetType`, `targetId`, `ip`, `userAgent`, `requestId` agregados
+- [x] 2 índices nuevos
+- [x] Las 3 back-relations actualizadas
+- [x] `db push` aplicado y su plan revisado (sin drops)
+- [x] `npm run build --workspace=backend` compila (el rename rompe los ~28 imports de
       `ChatAuditAction` — corregirlos es parte de §3.3)
 
 ---
@@ -309,22 +309,22 @@ Siguiendo la convención de los otros `modules/*/README.md`. Tiene que decir, co
 - Que agregar una acción nueva es: valor en el enum + entrada en `AuditMetadataMap` + fila en la
   tabla de este README. Los tres, no dos.
 
-- [ ] `audit.types.ts` con el `AuditMetadataMap` completo y sus comentarios de por qué
-- [ ] `audit.repository.ts` con `create` y `createOperation`
-- [ ] `audit.service.ts` con `buildAuditData` y `record`
-- [ ] `README.md` del módulo
+- [x] `audit.types.ts` con el `AuditMetadataMap` completo y sus comentarios de por qué
+- [x] `audit.repository.ts` con `create` y `createOperation`
+- [x] `audit.service.ts` con `buildAuditData` y `record`
+- [x] `README.md` del módulo
 
 ### Tests obligatorios — `audit.service.test.ts`
 
-- [ ] `buildAuditData` completa `ip`, `userAgent`, `requestId` y `userId` desde el contexto
+- [x] `buildAuditData` completa `ip`, `userAgent`, `requestId` y `userId` desde el contexto
       (correlo dentro de un `runWithContext` con un meta armado)
-- [ ] Un `userId` explícito **gana** sobre el del contexto
-- [ ] Fuera de todo contexto, `buildAuditData` no tira y deja esos campos `undefined`/`null`
-- [ ] `record` llama al repositorio una vez con los datos armados
-- [ ] **`record` NO tira si el repositorio rechaza** — y logueó en `error` (este es el test que
+- [x] Un `userId` explícito **gana** sobre el del contexto
+- [x] Fuera de todo contexto, `buildAuditData` no tira y deja esos campos `undefined`/`null`
+- [x] `record` llama al repositorio una vez con los datos armados
+- [x] **`record` NO tira si el repositorio rechaza** — y logueó en `error` (este es el test que
       justifica el diseño; si falla, una caída de la base al auditar rompe el chat)
-- [ ] Una acción con `metadata: undefined` declarado (`EDIT_MESSAGE`) guarda `metadata` nulo
-- [ ] TypeScript rechaza `metadata` de la forma equivocada para una acción (verificalo a mano con
+- [x] Una acción con `metadata: undefined` declarado (`EDIT_MESSAGE`) guarda `metadata` nulo
+- [x] TypeScript rechaza `metadata` de la forma equivocada para una acción (verificalo a mano con
       un `// @ts-expect-error` en el test: si compila, el contrato no está haciendo nada)
 
 ---
@@ -348,14 +348,14 @@ Siguiendo la convención de los otros `modules/*/README.md`. Tiene que decir, co
 > cambio observable: los tests existentes que asumían la propagación del error hay que
 > actualizarlos, no borrarlos.
 
-- [ ] Los dos `logAudit` duplicados eliminados
-- [ ] Las 11 llamadas migradas a `AuditService.record`
-- [ ] Todos los `ChatAuditAction` renombrados
-- [ ] `metadata` completado donde el contrato lo exige
-- [ ] `npm run test --workspace=backend` en verde con los tests existentes de
+- [x] Los dos `logAudit` duplicados eliminados
+- [x] Las 11 llamadas migradas a `AuditService.record`
+- [x] Todos los `ChatAuditAction` renombrados
+- [x] `metadata` completado donde el contrato lo exige
+- [x] `npm run test --workspace=backend` en verde con los tests existentes de
       `conversation.service.test.ts` y `message.service.test.ts` **actualizados** (ya assertean
       sobre `logAudit`: ahora deben assertear sobre `AuditService.record`)
-- [ ] Un test nuevo verifica que **una acción de chat sigue funcionando si la auditoría falla**
+- [x] Un test nuevo verifica que **una acción de chat sigue funcionando si la auditoría falla**
       (ej. `createConversation` devuelve la conversación aunque `record` no pueda escribir)
 
 ---
@@ -416,20 +416,20 @@ El mapeo tiene que reflejar lo que `auth.service.ts#login` realmente tira, sin i
 > Si te resulta desproporcionado, usá `provider_error` para ambas y **anotalo en el README del
 > módulo**; lo que no vale es adivinar.
 
-- [ ] `LOGIN` registrado con `userId` y `actorEmail` explícitos
-- [ ] `LOGIN_FAILED` registrado en el `catch`, con `userId: null` y la identidad intentada
-- [ ] `BadRequestError` (campos faltantes) **no** genera fila
-- [ ] Se registran `ip` y `userAgent` (vienen del contexto, no hay que pasarlos)
+- [x] `LOGIN` registrado con `userId` y `actorEmail` explícitos
+- [x] `LOGIN_FAILED` registrado en el `catch`, con `userId: null` y la identidad intentada
+- [x] `BadRequestError` (campos faltantes) **no** genera fila
+- [x] Se registran `ip` y `userAgent` (vienen del contexto, no hay que pasarlos)
 
 ### Tests obligatorios — extender `auth.controller.test.ts`
 
-- [ ] Login exitoso → una fila `LOGIN` con el `userId` interno y el email
-- [ ] 403 de EXTERNAL_AUTH → una fila `LOGIN_FAILED` con `reason: "forbidden_by_provider"` y `userId: null`
-- [ ] 401 de EXTERNAL_AUTH → `reason: "invalid_credentials"`
-- [ ] `fetch` que tira → `reason: "provider_unreachable"` (o el que hayas documentado)
-- [ ] Request sin usuario/contraseña → **ninguna** fila de auditoría
-- [ ] **El error original se sigue propagando** al cliente con el mismo status y mensaje que antes
-- [ ] La contraseña **no** aparece en ningún campo de la fila (asserteá sobre el objeto completo)
+- [x] Login exitoso → una fila `LOGIN` con el `userId` interno y el email
+- [x] 403 de EXTERNAL_AUTH → una fila `LOGIN_FAILED` con `reason: "forbidden_by_provider"` y `userId: null`
+- [x] 401 de EXTERNAL_AUTH → `reason: "invalid_credentials"`
+- [x] `fetch` que tira → `reason: "provider_unreachable"` (o el que hayas documentado)
+- [x] Request sin usuario/contraseña → **ninguna** fila de auditoría
+- [x] **El error original se sigue propagando** al cliente con el mismo status y mensaje que antes
+- [x] La contraseña **no** aparece en ningún campo de la fila (asserteá sobre el objeto completo)
 
 ---
 
@@ -512,28 +512,28 @@ Dos detalles:
   Leé esa nota antes de tocar esto.
 - El campo del nombre de archivo se llama `originalName` — es el que **no** va en el `metadata`.
 
-- [ ] `updateSettings` audita en transacción, con el diff como metadata
-- [ ] `diffSettings` exportada y con tests propios
-- [ ] Una PATCH sin cambios reales no genera fila
-- [ ] `cached` se actualiza solo si la transacción tuvo éxito
-- [ ] `adminDeleteFile` audita en transacción
-- [ ] El nombre del archivo **no** va en el metadata
+- [x] `updateSettings` audita en transacción, con el diff como metadata
+- [x] `diffSettings` exportada y con tests propios
+- [x] Una PATCH sin cambios reales no genera fila
+- [x] `cached` se actualiza solo si la transacción tuvo éxito
+- [x] `adminDeleteFile` audita en transacción
+- [x] El nombre del archivo **no** va en el metadata
 
 ### Tests obligatorios
 
 `settings.service.test.ts`:
-- [ ] `diffSettings` devuelve solo los campos que cambiaron, con `from` y `to` correctos
-- [ ] `diffSettings` ignora los campos ausentes en `input` (una PATCH parcial no reporta el resto)
-- [ ] `updateSettings` con un cambio real → `$transaction` recibió 2 operaciones
-- [ ] `updateSettings` sin cambios reales → **no** se llamó a `$transaction` y devolvió el valor previo
-- [ ] Si la transacción rechaza → `updateSettings` tira **y** `getSettings()` sigue devolviendo el
+- [x] `diffSettings` devuelve solo los campos que cambiaron, con `from` y `to` correctos
+- [x] `diffSettings` ignora los campos ausentes en `input` (una PATCH parcial no reporta el resto)
+- [x] `updateSettings` con un cambio real → `$transaction` recibió 2 operaciones
+- [x] `updateSettings` sin cambios reales → **no** se llamó a `$transaction` y devolvió el valor previo
+- [x] Si la transacción rechaza → `updateSettings` tira **y** `getSettings()` sigue devolviendo el
       valor anterior (el cache no se corrompió)
 
 `file.service.test.ts`:
-- [ ] `adminDeleteFile` exitoso → `$transaction` con 2 operaciones y el metadata sin el nombre del archivo
-- [ ] Si la transacción rechaza → `adminDeleteFile` tira (a diferencia de la auditoría fail-soft,
+- [x] `adminDeleteFile` exitoso → `$transaction` con 2 operaciones y el metadata sin el nombre del archivo
+- [x] Si la transacción rechaza → `adminDeleteFile` tira (a diferencia de la auditoría fail-soft,
       acá el fallo **sí** se propaga: es el punto de usar una transacción)
-- [ ] El fallo del borrado físico sigue siendo no bloqueante (comportamiento actual, con su log en `error`)
+- [x] El fallo del borrado físico sigue siendo no bloqueante (comportamiento actual, con su log en `error`)
 
 ---
 
@@ -555,12 +555,12 @@ SELECT action, user_id, actor_email, target_type, ip, request_id, created_at
 FROM chat_audit_logs ORDER BY created_at DESC LIMIT 20;
 ```
 
-- [ ] Tests en verde, cobertura sobre los thresholds
-- [ ] Las filas nuevas traen `ip` y `request_id` poblados
-- [ ] Ese `request_id` aparece también en el log de aplicación de la misma acción
-- [ ] Las filas viejas (previas a esta fase) siguen ahí, con los campos nuevos en `NULL`
-- [ ] `grep -rn "ChatAuditAction\|ChatAuditLog" backend/src` no devuelve nada
-- [ ] Ninguna fila de `metadata` contiene texto de un mensaje
+- [x] Tests en verde, cobertura sobre los thresholds
+- [x] Las filas nuevas traen `ip` y `request_id` poblados
+- [x] Ese `request_id` aparece también en el log de aplicación de la misma acción
+- [x] Las filas viejas (previas a esta fase) siguen ahí, con los campos nuevos en `NULL`
+- [x] `grep -rn "ChatAuditAction\|ChatAuditLog" backend/src` no devuelve nada
+- [x] Ninguna fila de `metadata` contiene texto de un mensaje
 
 Commits sugeridos:
 `feat(backend): modulo audit unificado con contexto de peticion`

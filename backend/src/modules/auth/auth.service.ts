@@ -37,7 +37,10 @@ export async function login(user: string, password: string): Promise<string> {
     });
     getLogger().debug({ status: response.status }, "external-auth login responded");
   } catch {
-    throw new ServiceUnavailableError("No pudimos conectar con el servicio de autenticación. Intentá de nuevo en unos minutos.");
+    throw new ServiceUnavailableError(
+      "No pudimos conectar con el servicio de autenticación. Intentá de nuevo en unos minutos.",
+      "provider_unreachable",
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -69,6 +72,7 @@ export async function login(user: string, password: string): Promise<string> {
   if (!response.ok) {
     throw new ServiceUnavailableError(
       "No pudimos conectar con el servicio de autenticación. Intentá de nuevo en unos minutos.",
+      "provider_error",
     );
   }
 

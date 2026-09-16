@@ -1,4 +1,4 @@
-import { ChatAuditAction, ConversationGroupSettings, ConversationType, Prisma } from "@prisma/client";
+import { ConversationGroupSettings, ConversationType, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 
 const withMembers = {
@@ -250,22 +250,6 @@ export function countUnread(conversationId: string, userId: string, since: Date 
       deletedAt: null,
       senderId: { not: userId },
       ...(since ? { createdAt: { gt: since } } : {}),
-    },
-  });
-}
-
-export function logAudit(params: {
-  userId: string;
-  action: ChatAuditAction;
-  conversationId?: string;
-  metadata?: Prisma.InputJsonValue;
-}) {
-  return prisma.chatAuditLog.create({
-    data: {
-      userId: params.userId,
-      action: params.action,
-      conversationId: params.conversationId,
-      metadata: params.metadata,
     },
   });
 }

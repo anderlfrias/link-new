@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BadRequestError } from "../../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../../test/http-mocks";
 
 vi.mock("./auth.service", () => ({
@@ -18,6 +17,16 @@ vi.mock("./jwt", () => ({
   verifyToken: vi.fn(),
 }));
 
+vi.mock("../audit/audit.service");
+
+import * as AuditService from "../audit/audit.service";
+import { AuditAction } from "@prisma/client";
+import {
+  BadRequestError,
+  ForbiddenError,
+  ServiceUnavailableError,
+  UnauthorizedError,
+} from "../../utils/errors";
 import * as AuthService from "./auth.service";
 import { mapTokenToUser, verifyToken } from "./jwt";
 import {
@@ -35,7 +44,7 @@ describe("auth.controller", () => {
   });
 
   describe("login", () => {
-    it("responde con token y usuario mapeado cuando las credenciales son correctas", async () => {
+    it("responde con token y usuario mapeado cuando las credenciales son correctas y audita LOGIN", async () => {
       const req = createMockRequest({
         body: { user: "testuser", password: "password123" },
       });
@@ -74,6 +83,12 @@ describe("auth.controller", () => {
       expect(mapTokenToUser).toHaveBeenCalledWith(mockPayload);
       expect(AuthService.upsertUsuario).toHaveBeenCalledWith(mockMapped);
 
+      expect(AuditService.record).toHaveBeenCalledWith({
+        action: AuditAction.LOGIN,
+        userId: "internal-id-1",
+        actorEmail: "test@example.com",
+      });
+
       expect(res.json).toHaveBeenCalledWith({
         token: mockToken,
         user: {
@@ -93,7 +108,7 @@ describe("auth.controller", () => {
       expect(next).not.toHaveBeenCalled();
     });
 
-    it("pasa BadRequestError a next si falta user o password", async () => {
+    it("pasa BadRequestError a next si falta user o password y NO audita", async () => {
       const req = createMockRequest({ body: { user: "onlyuser" } });
       const res = createMockResponse();
       const next = createMockNext();
@@ -104,22 +119,104 @@ describe("auth.controller", () => {
       const error = next.mock.calls[0][0];
       expect(error).toBeInstanceOf(BadRequestError);
       expect(error.message).toBe("Ingresá tu usuario y tu contraseña.");
+      expect(AuditService.record).not.toHaveBeenCalled();
     });
 
-    it("pasa el error de AuthService.login a next si falla la autenticación", async () => {
+    it("audita LOGIN_FAILED con forbidden_by_provider y propaga ForbiddenError (403)", async () => {
       const req = createMockRequest({
-        body: { user: "testuser", password: "wrong" },
+        body: { user: "testuser", password: "wrongpassword" },
       });
       const res = createMockResponse();
       const next = createMockNext();
 
-      const authError = new Error("Auth failed");
-      vi.mocked(AuthService.login).mockRejectedValue(authError);
+      const forbiddenError = new ForbiddenError("No pudimos verificar tus credenciales.");
+      vi.mocked(AuthService.login).mockRejectedValue(forbiddenError);
 
       await login(req, res, next);
 
-      expect(next).toHaveBeenCalledWith(authError);
+      expect(next).toHaveBeenCalledWith(forbiddenError);
+      expect(AuditService.record).toHaveBeenCalledWith({
+        action: AuditAction.LOGIN_FAILED,
+        userId: null,
+        actorEmail: "testuser",
+        metadata: { reason: "forbidden_by_provider" },
+      });
+      // La contraseña nunca debe viajar a la auditoría
+      const auditCall = vi.mocked(AuditService.record).mock.calls[0][0];
+      expect(JSON.stringify(auditCall)).not.toContain("wrongpassword");
       expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it("audita LOGIN_FAILED con invalid_credentials y propaga UnauthorizedError (401)", async () => {
+      const req = createMockRequest({
+        body: { user: "testuser", password: "wrongpassword" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const unauthorizedError = new UnauthorizedError("Usuario o contraseña incorrectos.");
+      vi.mocked(AuthService.login).mockRejectedValue(unauthorizedError);
+
+      await login(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(unauthorizedError);
+      expect(AuditService.record).toHaveBeenCalledWith({
+        action: AuditAction.LOGIN_FAILED,
+        userId: null,
+        actorEmail: "testuser",
+        metadata: { reason: "invalid_credentials" },
+      });
+    });
+
+    it("audita LOGIN_FAILED con provider_unreachable si fetch tira timeout/red", async () => {
+      const req = createMockRequest({
+        body: { user: "testuser", password: "secretpassword" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const networkError = new ServiceUnavailableError(
+        "No pudimos conectar con el servicio de autenticación.",
+        "provider_unreachable",
+      );
+      vi.mocked(AuthService.login).mockRejectedValue(networkError);
+
+      await login(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(networkError);
+      expect(AuditService.record).toHaveBeenCalledWith({
+        action: AuditAction.LOGIN_FAILED,
+        userId: null,
+        actorEmail: "testuser",
+        metadata: { reason: "provider_unreachable" },
+      });
+      // Verificación de que la contraseña no aparece en ningún campo de la auditoría
+      const auditCall = vi.mocked(AuditService.record).mock.calls[0][0];
+      expect(JSON.stringify(auditCall)).not.toContain("secretpassword");
+    });
+
+    it("audita LOGIN_FAILED con provider_error si el proveedor responde status no ok", async () => {
+      const req = createMockRequest({
+        body: { user: "testuser", password: "password" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const providerError = new ServiceUnavailableError(
+        "No pudimos conectar con el servicio de autenticación.",
+        "provider_error",
+      );
+      vi.mocked(AuthService.login).mockRejectedValue(providerError);
+
+      await login(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(providerError);
+      expect(AuditService.record).toHaveBeenCalledWith({
+        action: AuditAction.LOGIN_FAILED,
+        userId: null,
+        actorEmail: "testuser",
+        metadata: { reason: "provider_error" },
+      });
     });
   });
 

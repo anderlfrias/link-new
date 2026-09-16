@@ -19,6 +19,6 @@ export function getOrCreate(): Promise<AppSettings> {
   });
 }
 
-export function update(data: UpdateSettingsInput): Promise<AppSettings> {
+export function update(data: UpdateSettingsInput) {
   return prisma.appSettings.update({ where: { id: SETTINGS_ID }, data });
 }

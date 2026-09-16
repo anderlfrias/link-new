@@ -1,25 +1,45 @@
 import {
   AppSettings,
+  AuditAction,
   ConversationGroupSettings,
   FileTypeRestrictionMode,
   GroupPermissionLevel,
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as SettingsRepository from "./settings.repository";
-import {
-  _resetCacheForTesting,
-  getGroupOverrideAllowedFlags,
-  getPublicSettings,
-  getSettings,
-  resolveEffectiveGroupSettings,
-  updateSettings,
-} from "./settings.service";
 
 vi.mock("./settings.repository", () => ({
   getOrCreate: vi.fn(),
   update: vi.fn(),
   SETTINGS_ID: "singleton",
 }));
+
+vi.mock("../../config/prisma", () => ({
+  prisma: {
+    $transaction: vi.fn(),
+  },
+}));
+
+vi.mock("../audit/audit.repository", () => ({
+  createOperation: vi.fn((data) => ({ __operation: "audit.create", data })),
+}));
+
+vi.mock("../audit/audit.service", () => ({
+  buildAuditData: vi.fn((params) => ({ ...params, built: true })),
+}));
+
+import { prisma } from "../../config/prisma";
+import * as AuditRepository from "../audit/audit.repository";
+import * as AuditService from "../audit/audit.service";
+import {
+  _resetCacheForTesting,
+  diffSettings,
+  getGroupOverrideAllowedFlags,
+  getPublicSettings,
+  getSettings,
+  resolveEffectiveGroupSettings,
+  updateSettings,
+} from "./settings.service";
 
 describe("settings.service", () => {
   const defaultMockSettings: AppSettings = {
@@ -127,15 +147,42 @@ describe("settings.service", () => {
     });
   });
 
+  describe("diffSettings", () => {
+    it("devuelve solo los campos que cambiaron, con from y to correctos", () => {
+      const before = { ...defaultMockSettings, maxUploadSizeMb: 50, allowGroupDelete: true };
+      const diff = diffSettings(before, { maxUploadSizeMb: 100, allowGroupDelete: false });
+      expect(diff).toEqual({
+        maxUploadSizeMb: { from: 50, to: 100 },
+        allowGroupDelete: { from: true, to: false },
+      });
+    });
+
+    it("ignora los campos ausentes en input (una PATCH parcial no reporta el resto)", () => {
+      const before = { ...defaultMockSettings, maxUploadSizeMb: 50, maxGroupMembers: 100 };
+      const diff = diffSettings(before, { maxUploadSizeMb: 80 });
+      expect(diff).toEqual({
+        maxUploadSizeMb: { from: 50, to: 80 },
+      });
+    });
+
+    it("devuelve objeto vacío si los valores son idénticos", () => {
+      const before = { ...defaultMockSettings, maxUploadSizeMb: 50 };
+      const diff = diffSettings(before, { maxUploadSizeMb: 50 });
+      expect(diff).toEqual({});
+    });
+  });
+
   describe("updateSettings", () => {
-    it("calls repository update and replaces the cached settings immediately", async () => {
+    it("con un cambio real -> $transaction recibió 2 operaciones y refresca cache", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(defaultMockSettings);
       const updatedMock: AppSettings = {
         ...defaultMockSettings,
         maxUploadSizeMb: 200,
         allowGroupDelete: false,
       };
-
-      vi.mocked(SettingsRepository.update).mockResolvedValue(updatedMock);
+      const mockOpUpdate = { __operation: "settings.update" };
+      vi.mocked(SettingsRepository.update).mockReturnValue(mockOpUpdate as any);
+      vi.mocked(prisma.$transaction).mockResolvedValue([updatedMock, {}]);
 
       const result = await updateSettings({ maxUploadSizeMb: 200, allowGroupDelete: false });
 
@@ -143,12 +190,51 @@ describe("settings.service", () => {
         maxUploadSizeMb: 200,
         allowGroupDelete: false,
       });
+      expect(prisma.$transaction).toHaveBeenCalledWith([
+        mockOpUpdate,
+        expect.objectContaining({ __operation: "audit.create" }),
+      ]);
+      expect(AuditService.buildAuditData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.UPDATE_SETTINGS,
+          targetType: "AppSettings",
+          targetId: "singleton",
+          metadata: {
+            changed: {
+              maxUploadSizeMb: { from: 50, to: 200 },
+              allowGroupDelete: { from: true, to: false },
+            },
+          },
+        }),
+      );
       expect(result).toBe(updatedMock);
 
-      // Verify that getSettings uses the newly cached settings without calling getOrCreate
+      // Cache reflejado
       const cachedResult = await getSettings();
-      expect(SettingsRepository.getOrCreate).not.toHaveBeenCalled();
       expect(cachedResult).toBe(updatedMock);
+    });
+
+    it("sin cambios reales -> no se llama a $transaction y devuelve el valor previo", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(defaultMockSettings);
+
+      const result = await updateSettings({ maxUploadSizeMb: 50 });
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(result).toBe(defaultMockSettings);
+    });
+
+    it("si la transacción rechaza -> updateSettings tira y getSettings sigue devolviendo el anterior", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(defaultMockSettings);
+      await getSettings();
+
+      vi.mocked(SettingsRepository.update).mockReturnValue({} as any);
+      vi.mocked(prisma.$transaction).mockRejectedValue(new Error("Transaction failed"));
+
+      await expect(updateSettings({ maxUploadSizeMb: 999 })).rejects.toThrow("Transaction failed");
+
+      // El cache no se corrompió
+      const cachedResult = await getSettings();
+      expect(cachedResult).toBe(defaultMockSettings);
     });
   });
 

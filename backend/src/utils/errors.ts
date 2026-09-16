@@ -39,7 +39,7 @@ export class ConflictError extends AppError {
 }
 
 export class ServiceUnavailableError extends AppError {
-  constructor(message = "Service unavailable") {
+  constructor(message = "Service unavailable", public readonly code?: string) {
     super(message, 503);
   }
 }

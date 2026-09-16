@@ -67,8 +67,10 @@ enum MessageType {
   @@map("message_type")
 }
 
-/// Acciones auditables dentro del chat.
-enum ChatAuditAction {
+/// Acciones registradas en el audit trail (ver src/modules/audit/README.md).
+/// El @@map conserva el nombre físico original del tipo en Postgres: renombrar
+/// el modelo en Prisma no toca la base.
+enum AuditAction {
   CREATE_CONVERSATION @map("create_conversation")
   ADD_MEMBER          @map("add_member")
   REMOVE_MEMBER       @map("remove_member")
@@ -79,6 +81,17 @@ enum ChatAuditAction {
   CHANGE_NAME         @map("change_name")
   CHANGE_IMAGE        @map("change_image")
   SET_GROUP_ADMIN     @map("set_group_admin")
+
+  /// Autenticación. No existe LOGOUT a propósito: el JWT de EXTERNAL_AUTH es stateless
+  /// y el logout ocurre enteramente en el cliente (descarta el token) — el
+  /// backend no lo observa. Auditar un evento que no se puede detectar daría un
+  /// trail con huecos que parecen datos.
+  LOGIN               @map("login")
+  LOGIN_FAILED        @map("login_failed")
+
+  /// Acciones de administración de la instalación.
+  UPDATE_SETTINGS     @map("update_settings")
+  ADMIN_DELETE_FILE   @map("admin_delete_file")
 
   @@map("chat_audit_action")
 }
@@ -191,7 +204,7 @@ model User {
   conversationMemberships ConversationMember[]
   sentMessages            Message[]            @relation("MessageSender")
   deletedMessages         Message[]            @relation("MessageDeletedBy")
-  auditLogs               ChatAuditLog[]
+  auditLogs               AuditLog[]
   /// Archivos que este usuario subió (`StoredFile.createdBy`).
   uploadedFiles           StoredFile[]         @relation("StoredFileCreatedBy")
   fileUploads             FileUpload[]         @relation("FileUploadCreatedBy")
@@ -232,7 +245,7 @@ model Conversation {
 
   members       ConversationMember[]
   messages      Message[]
-  auditLogs     ChatAuditLog[]
+  auditLogs     AuditLog[]
   /// Overrides por-grupo de las dimensiones marcadas como overrideables en
   /// `AppSettings`. Ver `ConversationGroupSettings` — no existe fila hasta el
   /// primer PATCH de settings de este grupo.
@@ -347,7 +360,7 @@ model Message {
 
   /// Archivos adjuntos, a través de la tabla intermedia `MessageFile`.
   files     MessageFile[]
-  auditLogs ChatAuditLog[]
+  auditLogs AuditLog[]
 
   @@index([conversationId])
   @@index([senderId])
@@ -428,12 +441,20 @@ model MessageFile {
   @@map("message_files")
 }
 
-/// Historial de acciones importantes del chat, únicamente para auditoría.
-model ChatAuditLog {
+model AuditLog {
   id String @id @default(uuid())
 
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id])
+  /// Nullable desde que se auditan los intentos de login fallidos: en un
+  /// LOGIN_FAILED puede no haber ningún `User` local al que apuntar (usuario
+  /// inexistente, o que nunca entró a esta app). `actorEmail` guarda entonces
+  /// la identidad que se intentó usar.
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id])
+
+  /// Identidad tal como la presentó el actor. Se guarda SIEMPRE, incluso con
+  /// `userId` presente: un audit trail tiene que seguir siendo legible aunque
+  /// ese `User` cambie de email más adelante.
+  actorEmail String? @map("actor_email")
 
   conversationId String?       @map("conversation_id")
   conversation   Conversation? @relation(fields: [conversationId], references: [id])
@@ -441,15 +462,35 @@ model ChatAuditLog {
   messageId String?  @map("message_id")
   message   Message? @relation(fields: [messageId], references: [id])
 
-  action   ChatAuditAction
-  /// Datos adicionales de la acción (ej. nombre anterior/nuevo en CHANGE_NAME).
+  /// Recurso afectado cuando no es una conversación ni un mensaje: un
+  /// `StoredFile`, la fila singleton de `AppSettings`, etc. Par genérico a
+  /// propósito — una FK por cada tipo auditable obligaría a tocar este modelo
+  /// con cada feature nueva.
+  targetType String? @map("target_type")
+  targetId   String? @map("target_id")
+
+  action   AuditAction
+  /// Datos adicionales de la acción. **Esquema cerrado**, documentado y tipado
+  /// en `src/modules/audit/audit.types.ts` — NUNCA contenido de mensajes
+  /// (LOGGING_PLAN.md §4.1 y §4.6).
   metadata Json?
+
+  /// Contexto de la petición. `ip` es el visitante real y no Cloudflare gracias
+  /// a `app.set("trust proxy", 1)` (ver app.ts). `requestId` ata esta fila al
+  /// log de aplicación de la misma request.
+  ip        String? @map("ip")
+  userAgent String? @map("user_agent")
+  requestId String? @map("request_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId])
   @@index([conversationId])
   @@index([messageId])
+  /// Filtro del panel de admin (Fase 4): "todas las acciones X, más recientes primero".
+  @@index([action, createdAt])
+  /// Orden por defecto del listado y barrido del worker de retención (Fase 5).
+  @@index([createdAt])
   @@map("chat_audit_logs")
 }
 
