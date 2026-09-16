@@ -49,7 +49,7 @@ Reglas:
 Criterio para dudas entre `info` y `debug`: **si en producción se emite una línea por cada acción
 de un usuario, es `debug`.** `info` es para cosas que pasan de a decenas por día, no por minuto.
 
-- [ ] Convenciones leídas (no hay checkbox que valga: el revisor las va a mirar en el diff)
+- [x] Convenciones leídas (no hay checkbox que valga: el revisor las va a mirar en el diff)
 
 ---
 
@@ -84,8 +84,8 @@ Borrar las dos líneas y dejar únicamente el status, en `debug`:
 cualquier offset), ni detrás de un `if (env.LOG_LEVEL === "debug")`. El body de una respuesta de
 autenticación no se loguea.
 
-- [ ] Líneas 37-38 reemplazadas por la de `debug` con solo el status
-- [ ] `grep -n "response.clone\|\.text()" backend/src/modules/auth/auth.service.ts` revisado: no
+- [x] Líneas 37-38 reemplazadas por la de `debug` con solo el status
+- [x] `grep -n "response.clone\|\.text()" backend/src/modules/auth/auth.service.ts` revisado: no
       quedó ninguna otra vía por la que el body llegue a un log
 
 ### Test de regresión obligatorio (no opcional)
@@ -93,11 +93,11 @@ autenticación no se loguea.
 En `auth.service.test.ts`, con `fetch` mockeado (ver `src/test/http-mocks.ts`) devolviendo un body
 que contenga un valor centinela reconocible:
 
-- [ ] Login exitoso con body `{ token: "SENTINEL_TOKEN_VALUE", ... }` → **ninguna** llamada al
+- [x] Login exitoso con body `{ token: "SENTINEL_TOKEN_VALUE", ... }` → **ninguna** llamada al
       logger contiene `SENTINEL_TOKEN_VALUE`, ni en el mensaje ni en el objeto de datos
       (serializá todos los argumentos de todas las llamadas espiadas a JSON y buscá el centinela)
-- [ ] Login fallido (403) → tampoco aparece el body en ningún log
-- [ ] El comportamiento visible de `login()` no cambió: sigue devolviendo el token y sigue
+- [x] Login fallido (403) → tampoco aparece el body en ningún log
+- [x] El comportamiento visible de `login()` no cambió: sigue devolviendo el token y sigue
       tirando `ForbiddenError` / `ServiceUnavailableError` en los mismos casos
 
 ### Las otras 12 llamadas del archivo
@@ -111,10 +111,10 @@ que contenga un valor centinela reconocible:
 | 361 | Entrada de usuario malformada, se saltea | `warn` — degradación parcial esperable |
 | 389, 404 | Fallas al persistir usuarios sincronizados | `error` |
 
-- [ ] Las 12 migradas con su nivel, mensaje constante y datos en el objeto
-- [ ] Ningún log de este archivo incluye `password`, el body de una respuesta de auth, ni el email
+- [x] Las 12 migradas con su nivel, mensaje constante y datos en el objeto
+- [x] Ningún log de este archivo incluye `password`, el body de una respuesta de auth, ni el email
       del usuario (usar `userId`, LOGGING_PLAN.md §4.4)
-- [ ] Test por cada rama de error ya existente en `auth.service.test.ts` extendido para assertear
+- [x] Test por cada rama de error ya existente en `auth.service.test.ts` extendido para assertear
       el nivel logueado (al menos en las 4 de sincronización de usuarios)
 
 ---
@@ -127,9 +127,9 @@ que contenga un valor centinela reconocible:
 | `modules/giphy/giphy.service.ts` | 49, 185 | `warn` | Giphy caído es degradación de una feature opcional, no un error del sistema |
 | `modules/giphy/giphy.service.ts` | 69 | `warn` | incluir `{ path, status }` como campos, no interpolados |
 
-- [ ] `file.service.ts:353` migrada
-- [ ] Las 3 de `giphy.service.ts` migradas
-- [ ] Tests de `file.service.test.ts` y `giphy.service.test.ts` extendidos: la rama de error
+- [x] `file.service.ts:353` migrada
+- [x] Las 3 de `giphy.service.ts` migradas
+- [x] Tests de `file.service.test.ts` y `giphy.service.test.ts` extendidos: la rama de error
       loguea en el nivel esperado con el `err` presente
 
 ---
@@ -155,8 +155,8 @@ Dos detalles específicos:
 - `file-migration.worker.ts:121` es el catch del tick entero. Va `error` con `{ err }` y mensaje
   `"migration tick failed"` — es la línea que dice que el worker se rompió, no un archivo puntual.
 
-- [ ] Las 17 migradas, con los prefijos `[...]` eliminados
-- [ ] Tests de los 3 workers extendidos: al menos el camino de éxito y una rama de error de cada
+- [x] Las 17 migradas, con los prefijos `[...]` eliminados
+- [x] Tests de los 3 workers extendidos: al menos el camino de éxito y una rama de error de cada
       uno assertean el nivel y los campos
 
 ---
@@ -173,7 +173,7 @@ httpServer.listen(PORT, () => {
 });
 ```
 
-- [ ] Migrada, importando `logger` de `./config/logger` (no `getLogger`)
+- [x] Migrada, importando `logger` de `./config/logger` (no `getLogger`)
 
 ### `config/env.ts:52` — la única excepción permitida
 
@@ -197,8 +197,8 @@ agente no la "arregle":
   console.error("Invalid environment configuration:\n" + ...);
 ```
 
-- [ ] Comentario de excepción agregado en `env.ts`
-- [ ] `console.error` **no** migrado (a propósito)
+- [x] Comentario de excepción agregado en `env.ts`
+- [x] `console.error` **no** migrado (a propósito)
 
 ---
 
@@ -254,9 +254,9 @@ describe("prohibición de console.* en el backend", () => {
 });
 ```
 
-- [ ] Test creado y **pasando** (si falla, quedan `console.*` sin migrar — terminá §2.2 a §2.5 antes)
-- [ ] El mensaje de fallo nombra el archivo y la línea
-- [ ] `ALLOWED` contiene únicamente `config/env.ts`
+- [x] Test creado y **pasando** (si falla, quedan `console.*` sin migrar — terminá §2.2 a §2.5 antes)
+- [x] El mensaje de fallo nombra el archivo y la línea
+- [x] `ALLOWED` contiene únicamente `config/env.ts`
 
 ---
 
@@ -272,11 +272,11 @@ grep -rn "console\." backend/src --include="*.ts" | grep -v "\.test\.ts"
 
 Ese `grep` tiene que devolver **exactamente una** línea: la de `config/env.ts`.
 
-- [ ] 37 de 38 `console.*` migradas; la de `env.ts` documentada como excepción
-- [ ] `no-console.test.ts` en verde
-- [ ] El test de regresión del token de login en verde
-- [ ] `npm run build --workspace=backend` compila
-- [ ] Levantando el server y haciendo un login real, **el log no contiene el token** (verificalo de
+- [x] 37 de 38 `console.*` migradas; la de `env.ts` documentada como excepción
+- [x] `no-console.test.ts` en verde
+- [x] El test de regresión del token de login en verde
+- [x] `npm run build --workspace=backend` compila
+- [x] Levantando el server y haciendo un login real, **el log no contiene el token** (verificalo de
       verdad, es el punto de toda la fase):
 
 ```bash

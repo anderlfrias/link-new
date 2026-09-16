@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { User } from "@prisma/client";
 import env from "../../config/env";
+import { getLogger } from "../../config/request-context";
 import {
   ForbiddenError,
   NotFoundError,
@@ -34,8 +35,7 @@ export async function login(user: string, password: string): Promise<string> {
       body: JSON.stringify({ user, password, app: env.APP_CODE_EXTERNAL_AUTH }),
       signal: controller.signal,
     });
-    console.log(`EXTERNAL_AUTH login request returned status ${response.status}`);
-    console.log(`EXTERNAL_AUTH login request body: ${await response.clone().text()}`);
+    getLogger().debug({ status: response.status }, "external-auth login responded");
   } catch {
     throw new ServiceUnavailableError("No pudimos conectar con el servicio de autenticación. Intentá de nuevo en unos minutos.");
   } finally {
@@ -105,7 +105,7 @@ async function fetchExternalUserProfilePicture(url: string, token: string): Prom
     });
   } catch (error) {
     // Nunca loguear `token` acá — solo el motivo de la falla (timeout, DNS, TLS, etc.)
-    console.error("EXTERNAL_AUTH profile picture request failed:", error instanceof Error ? error.message : error);
+    getLogger().warn({ err: error }, "external-auth profile picture request failed");
     throw new ServiceUnavailableError("User service unavailable");
   } finally {
     clearTimeout(timeout);
@@ -118,8 +118,9 @@ async function fetchExternalUserProfilePicture(url: string, token: string): Prom
     if (code === "USER_NOT_FOUND" || code === "PROFILE_PICTURE_NOT_FOUND") {
       throw new NotFoundError("Profile picture not found");
     }
-    console.error(
-      `EXTERNAL_AUTH profile picture returned unexpected status ${response.status}${code ? ` (${code})` : ""}`,
+    getLogger().warn(
+      { status: response.status, code },
+      "external-auth profile picture returned unexpected status",
     );
     throw new ServiceUnavailableError("User service unavailable");
   }
@@ -129,7 +130,7 @@ async function fetchExternalUserProfilePicture(url: string, token: string): Prom
   const dataUri = rawBody.startsWith('"') ? (JSON.parse(rawBody) as string) : rawBody;
   const match = /^data:([^;]+);base64,(.+)$/.exec(dataUri.trim());
   if (!match) {
-    console.error("EXTERNAL_AUTH profile picture response is not a data URI");
+    getLogger().warn("external-auth profile picture response is not a data uri");
     throw new ServiceUnavailableError("User service unavailable");
   }
 
@@ -198,12 +199,9 @@ async function syncAvatar(
     if (currentChecksum === checksum) return;
 
     const stored = await cacheAvatarLocally(userId, picture.buffer, picture.contentType);
-    console.log(`Profile picture cached for user ${userId} (file ${stored.id})`);
+    getLogger().debug({ userId, fileId: stored.id }, "profile picture cached");
   } catch (error) {
-    console.error(
-      `Failed to sync profile picture (${logLabel}) for user ${userId}:`,
-      error instanceof Error ? error.message : error,
-    );
+    getLogger().error({ err: error, userId, logLabel }, "failed to sync profile picture");
   }
 }
 
@@ -309,7 +307,7 @@ export async function getAppUsers(token: string): Promise<ExternalUserAppUser[]>
       { headers: { Authorization: token }, signal: controller.signal },
     );
   } catch (error) {
-    console.error("EXTERNAL_AUTH app users request failed:", error instanceof Error ? error.message : error);
+    getLogger().error({ err: error }, "external-auth app users request failed");
     throw new ServiceUnavailableError("User service unavailable");
   } finally {
     clearTimeout(timeout);
@@ -317,7 +315,7 @@ export async function getAppUsers(token: string): Promise<ExternalUserAppUser[]>
 
   const rawBody = await response.text();
   if (!response.ok) {
-    console.error(`EXTERNAL_AUTH app users returned unexpected status ${response.status}`);
+    getLogger().error({ status: response.status }, "external-auth app users returned unexpected status");
     throw new ServiceUnavailableError("User service unavailable");
   }
 
@@ -325,13 +323,13 @@ export async function getAppUsers(token: string): Promise<ExternalUserAppUser[]>
   try {
     parsed = rawBody ? JSON.parse(rawBody) : [];
   } catch {
-    console.error("EXTERNAL_AUTH app users response is not valid JSON");
+    getLogger().error("external-auth app users response is not valid json");
     throw new ServiceUnavailableError("User service unavailable");
   }
 
   const rawUsers = extractExternalUserArray(parsed);
   if (!rawUsers) {
-    console.error("EXTERNAL_AUTH app users response has an unexpected shape");
+    getLogger().error("external-auth app users response has an unexpected shape");
     throw new ServiceUnavailableError("User service unavailable");
   }
 
@@ -358,7 +356,7 @@ function mapExternalUserAppUser(raw: unknown): ExternalUserAppUser | null {
   const obj = raw as Record<string, unknown>;
   const { id, email, username } = obj;
   if (typeof id !== "string" || typeof email !== "string" || typeof username !== "string") {
-    console.error("Skipping malformed EXTERNAL_AUTH app user entry (missing id/email/username)");
+    getLogger().warn("skipping malformed external-auth app user entry");
     return null;
   }
 
@@ -386,10 +384,7 @@ export async function syncAppUsers(token: string): Promise<void> {
   try {
     appUsers = await getAppUsers(token);
   } catch (error) {
-    console.error(
-      "Failed to sync app users from EXTERNAL_AUTH, falling back to local directory:",
-      error instanceof Error ? error.message : error,
-    );
+    getLogger().error({ err: error }, "failed to sync app users from external-auth");
     return;
   }
 
@@ -401,9 +396,9 @@ export async function syncAppUsers(token: string): Promise<void> {
           await syncContactAvatar(user.id, user.avatarFileId, appUser.username, token);
         }
       } catch (error) {
-        console.error(
-          `Failed to sync contact ${appUser.username} from EXTERNAL_AUTH:`,
-          error instanceof Error ? error.message : error,
+        getLogger().error(
+          { err: error, username: appUser.username },
+          "failed to sync contact from external-auth",
         );
       }
     }),

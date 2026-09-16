@@ -1,3 +1,4 @@
+import { getLogger } from "../config/request-context";
 import * as MessageRepository from "../modules/messages/message.repository";
 import * as SettingsService from "../modules/settings/settings.service";
 import { runWorkerTick } from "./worker-context";
@@ -16,7 +17,7 @@ async function runRetentionSweep(): Promise<void> {
   const cutoffDate = new Date(Date.now() - settings.messageRetentionDays * 24 * 60 * 60 * 1000);
   const deletedCount = await MessageRepository.softDeleteOlderThan(cutoffDate);
   if (deletedCount > 0) {
-    console.log(`[message-retention] Soft-deleted ${deletedCount} message(s) older than ${cutoffDate.toISOString()}`);
+    getLogger().info({ deletedCount, cutoffDate }, "messages retention sweep completed");
   }
 }
 

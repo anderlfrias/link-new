@@ -1,5 +1,6 @@
 import { FileTypeRestrictionMode } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { logger } from "../../config/logger";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 
 const { mockStorage } = vi.hoisted(() => {
@@ -500,9 +501,8 @@ describe("file.service", () => {
       expect(result).toEqual({ id: "file-1" });
     });
 
-    it("si storage.delete falla no interrumpe el soft delete", async () => {
-      const originalConsoleError = console.error;
-      console.error = vi.fn();
+    it("si storage.delete falla no interrumpe el soft delete y loguea error", async () => {
+      const errorSpy = vi.spyOn(logger, "error");
 
       const file = buildMockStoredFile({ path: "chat/file.pdf" });
       vi.mocked(FileRepository.findActiveById).mockResolvedValue(file as any);
@@ -512,8 +512,10 @@ describe("file.service", () => {
 
       expect(FileRepository.softDelete).toHaveBeenCalledWith("file-1");
       expect(result).toEqual({ id: "file-1" });
-
-      console.error = originalConsoleError;
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ fileId: "file-1", err: expect.any(Error) }),
+        "failed to delete physical file",
+      );
     });
 
     it("lanza NotFoundError si el archivo no existe", async () => {

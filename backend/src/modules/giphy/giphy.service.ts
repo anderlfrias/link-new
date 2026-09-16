@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import env from "../../config/env";
+import { getLogger } from "../../config/request-context";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { getWriteProvider, storage } from "../../storage";
 import { BadRequestError, ForbiddenError, ServiceUnavailableError } from "../../utils/errors";
@@ -46,7 +47,7 @@ async function fetchGiphy(path: string, params: Record<string, string | number>)
   try {
     response = await fetch(`${GIPHY_API_BASE}${path}?${query}`, { signal: controller.signal });
   } catch (error) {
-    console.error("Giphy request failed:", error instanceof Error ? error.message : error);
+    getLogger().warn({ err: error }, "giphy request failed");
     throw new ServiceUnavailableError("Could not reach Giphy");
   } finally {
     clearTimeout(timeout);
@@ -66,7 +67,7 @@ async function fetchGiphy(path: string, params: Record<string, string | number>)
     } catch {
       // el body no era JSON parseable; seguimos solo con el status
     }
-    console.error(`Giphy request to ${path} returned status ${response.status}${detail}`);
+    getLogger().warn({ path, status: response.status, detail: detail || undefined }, "giphy request returned non-ok status");
     throw new ServiceUnavailableError(`Giphy returned HTTP ${response.status}${detail}`);
   }
 
@@ -182,7 +183,7 @@ export async function importGiphyAsset(
   try {
     downloadResponse = await fetch(originalUrl, { signal: controller.signal });
   } catch (error) {
-    console.error("Giphy asset download failed:", error instanceof Error ? error.message : error);
+    getLogger().warn({ err: error }, "giphy asset download failed");
     throw new ServiceUnavailableError("Could not download the selected Giphy asset");
   } finally {
     clearTimeout(timeout);

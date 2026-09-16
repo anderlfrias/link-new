@@ -1,6 +1,7 @@
 import http from "http";
 import app from "./app";
 import env from "./config/env";
+import { logger } from "./config/logger";
 import { initSocket } from "./socket";
 import { startMessageRetentionWorker } from "./workers/message-retention.worker";
 import { startUploadCleanupWorker } from "./workers/upload-cleanup.worker";
@@ -29,5 +30,5 @@ startUploadCleanupWorker();
 startFileMigrationWorker();
 
 httpServer.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  logger.info({ port: PORT }, "server listening");
 });

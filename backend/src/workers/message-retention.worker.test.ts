@@ -9,6 +9,7 @@ vi.mock("../modules/settings/settings.service", () => ({
 
 import * as MessageRepository from "../modules/messages/message.repository";
 import * as SettingsService from "../modules/settings/settings.service";
+import { logger } from "../config/logger";
 import { startMessageRetentionWorker } from "./message-retention.worker";
 
 describe("startMessageRetentionWorker", () => {
@@ -69,24 +70,27 @@ describe("startMessageRetentionWorker", () => {
   it("loguea cuántos mensajes se borraron cuando el sweep efectivamente borra algo", async () => {
     vi.mocked(SettingsService.getSettings).mockResolvedValue({ messageRetentionDays: 7 } as any);
     vi.mocked(MessageRepository.softDeleteOlderThan).mockResolvedValue(5);
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const childLogger = { info: vi.fn() };
+    vi.spyOn(logger, "child").mockReturnValue(childLogger as any);
 
     startMessageRetentionWorker();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Soft-deleted 5 message(s)"));
-    logSpy.mockRestore();
+    expect(childLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ deletedCount: 5 }),
+      "messages retention sweep completed",
+    );
   });
 
   it("no loguea nada si el sweep no borró ningún mensaje", async () => {
     vi.mocked(SettingsService.getSettings).mockResolvedValue({ messageRetentionDays: 7 } as any);
     vi.mocked(MessageRepository.softDeleteOlderThan).mockResolvedValue(0);
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const childLogger = { info: vi.fn() };
+    vi.spyOn(logger, "child").mockReturnValue(childLogger as any);
 
     startMessageRetentionWorker();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(logSpy).not.toHaveBeenCalled();
-    logSpy.mockRestore();
+    expect(childLogger.info).not.toHaveBeenCalled();
   });
 });

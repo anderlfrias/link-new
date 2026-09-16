@@ -1,4 +1,5 @@
 import { FileProvider } from "@prisma/client";
+import { getLogger } from "../config/request-context";
 import * as FileRepository from "../modules/files/file.repository";
 import * as SettingsService from "../modules/settings/settings.service";
 import { getProvider, LocalDiskStorage, S3Storage } from "../storage";
@@ -40,7 +41,10 @@ export async function runFileMigrationSweep(): Promise<MigrationSweepResult> {
       try {
         localStat = await localDisk.stat(file.path);
       } catch (statError) {
-        console.error(`[file-migration] Local file missing on disk for StoredFile ${file.id} (path: ${file.path})`, statError);
+        getLogger().error(
+          { fileId: file.id, path: file.path, err: statError },
+          "local file missing on disk",
+        );
         failedCount++;
         continue;
       }
@@ -64,8 +68,9 @@ export async function runFileMigrationSweep(): Promise<MigrationSweepResult> {
       // 3. Verificar en S3 (HeadObject) que el tamaño coincida exactamente
       const s3Stat = await s3Storage.stat(file.path);
       if (s3Stat.size !== localStat.size) {
-        console.error(
-          `[file-migration] Size mismatch for StoredFile ${file.id}: local=${localStat.size} bytes, s3=${s3Stat.size} bytes. Aborting migration for this file.`,
+        getLogger().error(
+          { fileId: file.id, localSize: localStat.size, s3Size: s3Stat.size },
+          "migration size mismatch between local and s3",
         );
         // Deshacer objeto inconsistente en S3
         try {
@@ -80,19 +85,19 @@ export async function runFileMigrationSweep(): Promise<MigrationSweepResult> {
       // 4. Invariante de seguridad: COMMIT a Postgres solo tras verificación exitosa
       await FileRepository.updateFileProvider(file.id, FileProvider.S3);
       migratedCount++;
-      console.log(`[file-migration] Migrated StoredFile ${file.id} to S3 (size: ${localStat.size} bytes)`);
+      getLogger().info({ fileId: file.id, size: localStat.size }, "file migrated to s3");
 
       // 5. Borrado del archivo local (estrictamente DESPUÉS del commit, solo si está configurado)
       if (settings.fileMigrationDeleteLocalAfterCommit) {
         try {
           await localDisk.delete(file.path);
-          console.log(`[file-migration] Deleted local copy for StoredFile ${file.id}`);
+          getLogger().info({ fileId: file.id }, "deleted local file copy");
         } catch (delError) {
-          console.error(`[file-migration] Failed to delete local file copy for ${file.id}`, delError);
+          getLogger().error({ fileId: file.id, err: delError }, "failed to delete local file copy");
         }
       }
     } catch (error) {
-      console.error(`[file-migration] Unexpected error migrating StoredFile ${file.id}`, error);
+      getLogger().error({ fileId: file.id, err: error }, "unexpected error migrating file");
       failedCount++;
     }
   }
@@ -119,7 +124,7 @@ export async function tickFileMigration(): Promise<void> {
     lastSweepTime = now;
     await runFileMigrationSweep();
   } catch (error) {
-    console.error("[file-migration] Error in migration tick", error);
+    getLogger().error({ err: error }, "migration tick failed");
   }
 }
 

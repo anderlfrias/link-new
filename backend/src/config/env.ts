@@ -65,6 +65,10 @@ try {
   env = schema.validateSync(process.env, { abortEarly: false, stripUnknown: true });
 } catch (error) {
   const messages = error instanceof yup.ValidationError ? error.errors : [String(error)];
+  // Única excepción a la prohibición de console.* en este backend (ver
+  // LOGGING_PLAN.md y src/no-console.test.ts): logger.ts importa este archivo
+  // para leer LOG_LEVEL, así que acá todavía no existe un logger que usar — y
+  // si la configuración es inválida, tampoco hay garantía de poder construirlo.
   console.error("Invalid environment configuration:\n" + messages.map((m) => `- ${m}`).join("\n"));
   process.exit(1);
 }

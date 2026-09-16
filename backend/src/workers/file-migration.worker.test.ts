@@ -33,7 +33,8 @@ vi.mock("../storage", () => ({
   S3Storage: vi.fn(),
 }));
 
-import { runFileMigrationSweep } from "./file-migration.worker";
+import { logger } from "../config/logger";
+import { runFileMigrationSweep, tickFileMigration } from "./file-migration.worker";
 
 describe("file-migration.worker", () => {
   const sampleFile1 = {
@@ -103,6 +104,7 @@ describe("file-migration.worker", () => {
   });
 
   it("migra archivos exitosamente respetando el orden por tamaño ascendente", async () => {
+    const infoSpy = vi.spyOn(logger, "info");
     mockFileRepository.findBatchForMigration.mockResolvedValue([sampleFile1, sampleFile2]);
     mockLocalStorage.stat
       .mockResolvedValueOnce({ size: 1024 })
@@ -127,9 +129,14 @@ describe("file-migration.worker", () => {
     );
     // Por defecto fileMigrationDeleteLocalAfterCommit es false -> no borra
     expect(mockLocalStorage.delete).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith(
+      { fileId: "f-local-1", size: 1024 },
+      "file migrated to s3",
+    );
   });
 
   it("si el archivo físico local no existe en disco, lo saltea sin actualizar la base", async () => {
+    const errorSpy = vi.spyOn(logger, "error");
     mockFileRepository.findBatchForMigration.mockResolvedValue([sampleFile1]);
     mockLocalStorage.stat.mockRejectedValueOnce(new Error("ENOENT: no such file or directory"));
 
@@ -138,6 +145,10 @@ describe("file-migration.worker", () => {
     expect(result).toEqual({ migratedCount: 0, failedCount: 1, skippedCount: 0 });
     expect(mockS3Storage.saveStream).not.toHaveBeenCalled();
     expect(mockFileRepository.updateFileProvider).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ fileId: "f-local-1", path: sampleFile1.path, err: expect.any(Error) }),
+      "local file missing on disk",
+    );
   });
 
   it("si la subida a S3 falla, la fila permanece en LOCAL (idempotencia §7.4)", async () => {
@@ -152,6 +163,7 @@ describe("file-migration.worker", () => {
   });
 
   it("si el tamaño verificado con HeadObject no coincide, aborta sin commitear y borra de S3", async () => {
+    const errorSpy = vi.spyOn(logger, "error");
     mockFileRepository.findBatchForMigration.mockResolvedValue([sampleFile1]);
     mockLocalStorage.stat.mockResolvedValueOnce({ size: 1024 });
     // S3 reporta un tamaño corrupto o incompleto
@@ -163,6 +175,22 @@ describe("file-migration.worker", () => {
     expect(mockS3Storage.delete).toHaveBeenCalledWith(sampleFile1.path);
     expect(mockFileRepository.updateFileProvider).not.toHaveBeenCalled();
     expect(mockLocalStorage.delete).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ fileId: "f-local-1", localSize: 1024, s3Size: 512 }),
+      "migration size mismatch between local and s3",
+    );
+  });
+
+  it("si ocurre un error no esperado en tickFileMigration, loguea error", async () => {
+    const errorSpy = vi.spyOn(logger, "error");
+    mockSettingsService.getSettings.mockRejectedValueOnce(new Error("DB failure in tick"));
+
+    await tickFileMigration();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      "migration tick failed",
+    );
   });
 
   it("invariante de orden: el borrado local NUNCA ocurre antes del commit (§7.4)", async () => {

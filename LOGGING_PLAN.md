@@ -165,7 +165,7 @@ viole se considera no terminada:
 |---|---|---|---|
 | 0 | [logging-plan/00-logger-infrastructure.md](logging-plan/00-logger-infrastructure.md) | `pino` instalado, `src/config/logger.ts`, redacción central, env vars, `pino-http` en lugar de `morgan` | ✅ 2026-09-16 |
 | 1 | [logging-plan/01-correlation-and-errors.md](logging-plan/01-correlation-and-errors.md) | Contexto de request (`requestId`, `ip`, actor) con `AsyncLocalStorage`, en HTTP + sockets + workers; `errorHandler` con nivel según status | ✅ 2026-09-16 |
-| 2 | [logging-plan/02-console-migration.md](logging-plan/02-console-migration.md) | Los 38 `console.*` migrados + test-guardián que prohíbe reintroducirlos. **Incluye el fix de la fuga del token de login.** | ⬜ Pendiente |
+| 2 | [logging-plan/02-console-migration.md](logging-plan/02-console-migration.md) | Los 38 `console.*` migrados + test-guardián que prohíbe reintroducirlos. **Incluye el fix de la fuga del token de login.** | ✅ 2026-09-16 |
 | 3 | [logging-plan/03-audit-unification.md](logging-plan/03-audit-unification.md) | Módulo `audit/` único, IP + user-agent, auditoría de login y de acciones de admin | ⬜ Pendiente |
 | 4 | [logging-plan/04-audit-read-api.md](logging-plan/04-audit-read-api.md) | `GET /v1/admin/audit-logs` con filtros y paginación + panel en el frontend | ⬜ Pendiente |
 | 5 | [logging-plan/05-retention-and-rotation.md](logging-plan/05-retention-and-rotation.md) | Worker de retención del audit, `pm2-logrotate`, `time: false` en PM2 | ⬜ Pendiente |

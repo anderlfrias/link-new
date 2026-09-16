@@ -5,6 +5,7 @@ import { FileTypeRestrictionMode, StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import env from "../../config/env";
+import { getLogger } from "../../config/request-context";
 import { getProvider, getWriteProvider, storage } from "../../storage";
 import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
 import { isConversationMember } from "../conversations/conversation.repository";
@@ -350,7 +351,7 @@ export async function adminDeleteFile(fileId: string): Promise<{ id: string }> {
     const fileProvider = getProvider(file.provider);
     await fileProvider.delete(file.path);
   } catch (error) {
-    console.error(`[files] adminDeleteFile: failed to delete physical file for ${fileId}`, error);
+    getLogger().error({ fileId, err: error }, "failed to delete physical file");
   }
 
   await FileRepository.softDelete(fileId);

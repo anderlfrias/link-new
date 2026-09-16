@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import env from "../../config/env";
+import { logger } from "../../config/logger";
 import { storage } from "../../storage";
 import { BadRequestError, ForbiddenError, ServiceUnavailableError } from "../../utils/errors";
 import * as FileRepository from "../files/file.repository";
@@ -123,7 +124,8 @@ describe("giphy.service", () => {
       ]);
     });
 
-    it("throws ServiceUnavailableError when Giphy responds with HTTP error", async () => {
+    it("throws ServiceUnavailableError when Giphy responds with HTTP error and logs warn", async () => {
+      const warnSpy = vi.spyOn(logger, "warn");
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 403,
@@ -136,14 +138,23 @@ describe("giphy.service", () => {
       await expect(searchGiphy("gifs", "cats")).rejects.toThrow(
         /Giphy returned HTTP 403/i,
       );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ path: "/gifs/search", status: 403, detail: " — Invalid authentication credentials" }),
+        "giphy request returned non-ok status",
+      );
     });
 
-    it("throws ServiceUnavailableError when network fetch fails", async () => {
+    it("throws ServiceUnavailableError when network fetch fails and logs warn", async () => {
+      const warnSpy = vi.spyOn(logger, "warn");
       const mockFetch = vi.fn().mockRejectedValue(new Error("Connection refused"));
       vi.stubGlobal("fetch", mockFetch);
 
       await expect(searchGiphy("stickers", "dance")).rejects.toThrow(
         new ServiceUnavailableError("Could not reach Giphy"),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        "giphy request failed",
       );
     });
   });
@@ -273,6 +284,22 @@ describe("giphy.service", () => {
         importGiphyAsset("u-1", "gifs", "123", "https://media0.giphy.com/media/123/giphy.gif"),
       ).rejects.toThrow(
         new ServiceUnavailableError("Could not download the selected Giphy asset"),
+      );
+    });
+
+    it("throws ServiceUnavailableError when asset download fails by network error and logs warn", async () => {
+      const warnSpy = vi.spyOn(logger, "warn");
+      const mockFetch = vi.fn().mockRejectedValue(new Error("Network drop"));
+      vi.stubGlobal("fetch", mockFetch);
+
+      await expect(
+        importGiphyAsset("u-1", "gifs", "123", "https://media0.giphy.com/media/123/giphy.gif"),
+      ).rejects.toThrow(
+        new ServiceUnavailableError("Could not download the selected Giphy asset"),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        "giphy asset download failed",
       );
     });
 

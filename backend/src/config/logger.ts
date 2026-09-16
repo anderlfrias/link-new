@@ -2,7 +2,7 @@ import pino from "pino";
 import env from "./env";
 
 /// Único logger de la aplicación. Todo el backend loguea a través de `logger`
-/// o de un child suyo — nunca con `console.*` (ver `src/no-console.test.ts`,
+/// o de un child suyo — nunca directamente con console (ver test guardián no-console,
 /// que falla si aparece uno nuevo).
 ///
 /// Sale por **stdout** a propósito: en producción PM2 es el que escribe y rota

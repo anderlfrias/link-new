@@ -1,4 +1,5 @@
 import { FileUploadStatus } from "@prisma/client";
+import { getLogger } from "../config/request-context";
 import { prisma } from "../config/prisma";
 import * as SettingsService from "../modules/settings/settings.service";
 import { getProvider } from "../storage";
@@ -37,8 +38,9 @@ export async function runUploadCleanupSweep(): Promise<{
   for (const upload of expiredUploads) {
     expiredSessionsCount++;
     if (isDryRun) {
-      console.log(
-        `[upload-cleanup] [dry-run] Would abort expired upload session ${upload.id} (objectKey: ${upload.objectKey})`,
+      getLogger().info(
+        { uploadId: upload.id, objectKey: upload.objectKey, dryRun: true },
+        "expired upload session would be aborted",
       );
       continue;
     }
@@ -50,9 +52,9 @@ export async function runUploadCleanupSweep(): Promise<{
           await storageProvider.abortMultipartUpload(upload.objectKey, upload.externalUploadId);
         }
       } catch (error) {
-        console.error(
-          `[upload-cleanup] Failed to abort multipart upload in storage for session ${upload.id}`,
-          error,
+        getLogger().error(
+          { uploadId: upload.id, err: error },
+          "failed to abort multipart upload in storage",
         );
       }
     }
@@ -64,7 +66,7 @@ export async function runUploadCleanupSweep(): Promise<{
         closedAt: now,
       },
     });
-    console.log(`[upload-cleanup] Aborted expired upload session ${upload.id}`);
+    getLogger().info({ uploadId: upload.id }, "aborted expired upload session");
   }
 
   // =========================================================================
@@ -86,7 +88,7 @@ export async function runUploadCleanupSweep(): Promise<{
     for (const file of orphanFiles) {
       orphanFilesCount++;
       if (isDryRun) {
-        console.log(`[upload-cleanup] [dry-run] Would delete orphan StoredFile ${file.id} (path: ${file.path})`);
+        getLogger().info({ fileId: file.id, path: file.path, dryRun: true }, "orphan file would be deleted");
         continue;
       }
 
@@ -94,7 +96,7 @@ export async function runUploadCleanupSweep(): Promise<{
         const storageProvider = getProvider(file.provider);
         await storageProvider.delete(file.path);
       } catch (error) {
-        console.error(`[upload-cleanup] Failed to delete physical file for orphan ${file.id}`, error);
+        getLogger().error({ fileId: file.id, err: error }, "failed to delete physical file for orphan");
       }
 
       await prisma.storedFile.update({
@@ -104,7 +106,7 @@ export async function runUploadCleanupSweep(): Promise<{
           purgedAt: now,
         },
       });
-      console.log(`[upload-cleanup] Soft-deleted and purged orphan StoredFile ${file.id}`);
+      getLogger().info({ fileId: file.id }, "soft-deleted and purged orphan file");
     }
   }
 
@@ -128,8 +130,9 @@ export async function runUploadCleanupSweep(): Promise<{
     for (const file of filesToPurge) {
       purgedFilesCount++;
       if (isDryRun) {
-        console.log(
-          `[upload-cleanup] [dry-run] Would purge physical bytes for soft-deleted StoredFile ${file.id} (path: ${file.path})`,
+        getLogger().info(
+          { fileId: file.id, path: file.path, dryRun: true },
+          "physical bytes for soft-deleted file would be purged",
         );
         continue;
       }
@@ -138,7 +141,7 @@ export async function runUploadCleanupSweep(): Promise<{
         const storageProvider = getProvider(file.provider);
         await storageProvider.delete(file.path);
       } catch (error) {
-        console.error(`[upload-cleanup] Failed to purge physical bytes for file ${file.id}`, error);
+        getLogger().error({ fileId: file.id, err: error }, "failed to purge physical bytes for file");
       }
 
       await prisma.storedFile.update({
@@ -147,7 +150,7 @@ export async function runUploadCleanupSweep(): Promise<{
           purgedAt: now,
         },
       });
-      console.log(`[upload-cleanup] Purged physical bytes for soft-deleted StoredFile ${file.id}`);
+      getLogger().info({ fileId: file.id }, "purged physical bytes for soft-deleted file");
     }
   }
 

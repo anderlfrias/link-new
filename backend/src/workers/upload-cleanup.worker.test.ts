@@ -32,6 +32,7 @@ vi.mock("../storage", () => ({
   getProvider: vi.fn(() => mockStorage),
 }));
 
+import { logger } from "../config/logger";
 import { runUploadCleanupSweep } from "./upload-cleanup.worker";
 
 describe("upload-cleanup.worker", () => {
@@ -91,6 +92,7 @@ describe("upload-cleanup.worker", () => {
         { id: "file-purged-1", path: "chat/old-deleted.jpg", provider: FileProvider.LOCAL },
       ]);
 
+    const infoSpy = vi.spyOn(logger, "info");
     const result = await runUploadCleanupSweep();
 
     expect(result).toEqual({
@@ -98,6 +100,11 @@ describe("upload-cleanup.worker", () => {
       orphanFilesCount: 1,
       purgedFilesCount: 1,
     });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ fileId: "file-orphan-1", path: "chat/orphan.pdf", dryRun: true }),
+      "orphan file would be deleted",
+    );
 
     // En dryRun NO se llama a update ni a delete
     expect(mockStorage.abortMultipartUpload).not.toHaveBeenCalled();
@@ -125,6 +132,7 @@ describe("upload-cleanup.worker", () => {
         },
       ]);
 
+      const infoSpy = vi.spyOn(logger, "info");
       const result = await runUploadCleanupSweep();
 
       expect(result.expiredSessionsCount).toBe(1);
@@ -141,11 +149,44 @@ describe("upload-cleanup.worker", () => {
           }),
         }),
       );
+      expect(infoSpy).toHaveBeenCalledWith(
+        { uploadId: "session-exp-1" },
+        "aborted expired upload session",
+      );
+    });
+
+    it("si falla al abortar multipart en storage, loguea error y continúa con la expiración en DB", async () => {
+      const errorSpy = vi.spyOn(logger, "error");
+      mockSettingsService.getSettings.mockResolvedValue({
+        uploadCleanupEnabled: true,
+        orphanFileRetentionHours: null,
+        softDeletedFilePurgeDays: null,
+        uploadCleanupDryRun: false,
+      });
+
+      mockPrisma.fileUpload.findMany.mockResolvedValue([
+        {
+          id: "session-fail-1",
+          objectKey: "chat/fail.mp4",
+          externalUploadId: "s3-upload-id-fail",
+          provider: FileProvider.S3,
+        },
+      ]);
+      mockStorage.abortMultipartUpload.mockRejectedValueOnce(new Error("S3 error"));
+
+      await runUploadCleanupSweep();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ uploadId: "session-fail-1", err: expect.any(Error) }),
+        "failed to abort multipart upload in storage",
+      );
+      expect(mockPrisma.fileUpload.update).toHaveBeenCalled();
     });
   });
 
   describe("Barrido de archivos huérfanos", () => {
     it("elimina físicamente del storage y marca deletedAt/purgedAt a archivos huérfanos > N horas", async () => {
+      const infoSpy = vi.spyOn(logger, "info");
       mockSettingsService.getSettings.mockResolvedValue({
         uploadCleanupEnabled: true,
         orphanFileRetentionHours: 24,
@@ -174,6 +215,37 @@ describe("upload-cleanup.worker", () => {
       });
       // INVARIANTE: la fila en Postgres no se borra físicamente
       expect(mockPrisma.storedFile.delete).not.toHaveBeenCalled();
+      expect(infoSpy).toHaveBeenCalledWith(
+        { fileId: "orphan-file-1" },
+        "soft-deleted and purged orphan file",
+      );
+    });
+
+    it("si falla el borrado físico de un huérfano, loguea error y actualiza estado en DB", async () => {
+      const errorSpy = vi.spyOn(logger, "error");
+      mockSettingsService.getSettings.mockResolvedValue({
+        uploadCleanupEnabled: true,
+        orphanFileRetentionHours: 24,
+        softDeletedFilePurgeDays: null,
+        uploadCleanupDryRun: false,
+      });
+
+      mockPrisma.storedFile.findMany.mockResolvedValue([
+        {
+          id: "orphan-fail-1",
+          path: "chat/orphan-fail.pdf",
+          provider: FileProvider.S3,
+        },
+      ]);
+      mockStorage.delete.mockRejectedValueOnce(new Error("IO fail"));
+
+      await runUploadCleanupSweep();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ fileId: "orphan-fail-1", err: expect.any(Error) }),
+        "failed to delete physical file for orphan",
+      );
+      expect(mockPrisma.storedFile.update).toHaveBeenCalled();
     });
 
     it("INVARIANTE CRÍTICO: el query exige cero referencias en mensajes, avatares o conversaciones", async () => {

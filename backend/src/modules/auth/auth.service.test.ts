@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import env from "../../config/env";
+import { logger } from "../../config/logger";
 import {
   ForbiddenError,
   NotFoundError,
@@ -87,6 +88,69 @@ describe("auth.service", () => {
             app: env.APP_CODE_EXTERNAL_AUTH,
           }),
         }),
+      );
+    });
+
+    it("login exitoso con token centinela nunca loguea el token ni en mensaje ni en metadata", async () => {
+      const SENTINEL_TOKEN = "SENTINEL_TOKEN_VALUE_SECRET_XYZ";
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ success: true, token: SENTINEL_TOKEN })),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ success: true, token: SENTINEL_TOKEN })) }),
+      };
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse));
+
+      const debugSpy = vi.spyOn(logger, "debug");
+      const infoSpy = vi.spyOn(logger, "info");
+      const warnSpy = vi.spyOn(logger, "warn");
+      const errorSpy = vi.spyOn(logger, "error");
+
+      const token = await login("validuser", "correctpassword");
+      expect(token).toBe(SENTINEL_TOKEN);
+
+      const allCalls = [
+        ...debugSpy.mock.calls,
+        ...infoSpy.mock.calls,
+        ...warnSpy.mock.calls,
+        ...errorSpy.mock.calls,
+      ];
+      const serialized = JSON.stringify(allCalls);
+      expect(serialized).not.toContain(SENTINEL_TOKEN);
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 200 }),
+        "external-auth login responded",
+      );
+    });
+
+    it("login fallido (403) tampoco expone el body en ningún log", async () => {
+      const SENTINEL_BODY = "SENTINEL_FORBIDDEN_BODY_CONTENT";
+      const mockResponse = {
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve(JSON.stringify({ error: SENTINEL_BODY })),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ error: SENTINEL_BODY })) }),
+      };
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse));
+
+      const debugSpy = vi.spyOn(logger, "debug");
+      const infoSpy = vi.spyOn(logger, "info");
+      const warnSpy = vi.spyOn(logger, "warn");
+      const errorSpy = vi.spyOn(logger, "error");
+
+      await expect(login("user", "wrongpass")).rejects.toThrow(ForbiddenError);
+
+      const allCalls = [
+        ...debugSpy.mock.calls,
+        ...infoSpy.mock.calls,
+        ...warnSpy.mock.calls,
+        ...errorSpy.mock.calls,
+      ];
+      const serialized = JSON.stringify(allCalls);
+      expect(serialized).not.toContain(SENTINEL_BODY);
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 403 }),
+        "external-auth login responded",
       );
     });
 
@@ -305,7 +369,8 @@ describe("auth.service", () => {
       expect(result[0].id).toBe("ext-1");
     });
 
-    it("descarta entradas mal formadas sin romper el resultado general", async () => {
+    it("descarta entradas mal formadas sin romper el resultado general y loguea warn", async () => {
+      const warnSpy = vi.spyOn(logger, "warn");
       const mockMixed = [
         { id: "ext-1", email: "u1@test.com", username: "u1", fullName: "User One" },
         { id: "ext-broken" }, // Faltan email y username
@@ -320,14 +385,37 @@ describe("auth.service", () => {
       const result = await getAppUsers("test-token");
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("ext-1");
+      expect(warnSpy).toHaveBeenCalledWith("skipping malformed external-auth app user entry");
     });
 
-    it("lanza ServiceUnavailableError si la respuesta de EXTERNAL_AUTH no es OK o falla la red", async () => {
+    it("lanza ServiceUnavailableError y loguea error si la respuesta de EXTERNAL_AUTH no es OK o falla la red", async () => {
+      const errorSpy = vi.spyOn(logger, "error");
+
+      // 1) Status no-ok (500)
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve("") }));
       await expect(getAppUsers("token")).rejects.toThrow(ServiceUnavailableError);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 500 }),
+        "external-auth app users returned unexpected status",
+      );
 
+      // 2) Falla de red
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network failed")));
       await expect(getAppUsers("token")).rejects.toThrow(ServiceUnavailableError);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        "external-auth app users request failed",
+      );
+
+      // 3) JSON inválido
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve("invalid-json{") }));
+      await expect(getAppUsers("token")).rejects.toThrow(ServiceUnavailableError);
+      expect(errorSpy).toHaveBeenCalledWith("external-auth app users response is not valid json");
+
+      // 4) Shape inesperado
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify({ unexpected: 123 })) }));
+      await expect(getAppUsers("token")).rejects.toThrow(ServiceUnavailableError);
+      expect(errorSpy).toHaveBeenCalledWith("external-auth app users response has an unexpected shape");
     });
   });
 
@@ -550,11 +638,16 @@ describe("auth.service", () => {
   });
 
   describe("syncAppUsers — nunca rompe el directorio completo por un fallo puntual", () => {
-    it("hace fallback silencioso al directorio local si getAppUsers falla", async () => {
+    it("hace fallback silencioso al directorio local si getAppUsers falla y loguea error", async () => {
+      const errorSpy = vi.spyOn(logger, "error");
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("EXTERNAL_AUTH caído")));
 
       await expect(syncAppUsers("token")).resolves.toBeUndefined();
       expect(upsertUserFromExternalUser).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error) }),
+        "failed to sync app users from external-auth",
+      );
     });
 
     it("upsertea cada usuario devuelto por EXTERNAL_AUTH y sincroniza su avatar si no tiene uno cacheado", async () => {
@@ -599,7 +692,8 @@ describe("auth.service", () => {
       expect(fetch).toHaveBeenCalledTimes(1); // solo la llamada del directorio, sin segunda llamada de foto
     });
 
-    it("no rompe el sync completo si un usuario puntual falla al upsertear", async () => {
+    it("no rompe el sync completo si un usuario puntual falla al upsertear y loguea error", async () => {
+      const errorSpy = vi.spyOn(logger, "error");
       const mockUsers = [
         { id: "ext-1", email: "a@b.com", username: "juan", fullName: "Juan Perez" },
         { id: "ext-2", email: "c@d.com", username: "maria", fullName: "Maria Lopez" },
@@ -614,6 +708,10 @@ describe("auth.service", () => {
 
       await expect(syncAppUsers("token")).resolves.toBeUndefined();
       expect(upsertUserFromExternalUser).toHaveBeenCalledTimes(2);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ err: expect.any(Error), username: "juan" }),
+        "failed to sync contact from external-auth",
+      );
     });
   });
 });
