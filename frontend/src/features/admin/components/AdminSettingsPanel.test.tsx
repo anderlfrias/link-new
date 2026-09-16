@@ -53,6 +53,7 @@ describe("AdminSettingsPanel", () => {
     orphanFileRetentionHours: null,
     softDeletedFilePurgeDays: null,
     uploadCleanupDryRun: false,
+    auditLogRetentionDays: null,
     fileMigrationEnabled: false,
     fileMigrationBatchSize: 50,
     fileMigrationIntervalMinutes: 60,
@@ -234,6 +235,59 @@ describe("AdminSettingsPanel", () => {
     await user.type(batchInput, "999");
 
     expect(screen.getByText("Debe ser un número entero entre 1 y 500.")).toBeInTheDocument();
+    const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(saveButton).toBeDisabled();
+  });
+
+  it("permite configurar y guardar la retención del audit trail", async () => {
+    vi.mocked(useAdminSettings).mockReturnValue({
+      settings: defaultSettings,
+      status: "ready",
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    mockSave.mockResolvedValueOnce({
+      ...defaultSettings,
+      auditLogRetentionDays: 90,
+    });
+
+    const user = userEvent.setup();
+    render(<AdminSettingsPanel />);
+
+    const retentionInput = screen.getByLabelText(/Retención de registros de auditoría/i);
+    expect(retentionInput).toHaveValue(null);
+
+    await user.type(retentionInput, "90");
+
+    const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auditLogRetentionDays: 90,
+      }),
+    );
+  });
+
+  it("invalida el formulario si la retención del audit trail es menor a 1", async () => {
+    vi.mocked(useAdminSettings).mockReturnValue({
+      settings: defaultSettings,
+      status: "ready",
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    const user = userEvent.setup();
+    render(<AdminSettingsPanel />);
+
+    const retentionInput = screen.getByLabelText(/Retención de registros de auditoría/i);
+    await user.type(retentionInput, "0");
+
+    expect(
+      screen.getByText("Debe ser un número entero mayor a 0, o vacío para conservar para siempre."),
+    ).toBeInTheDocument();
     const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
     expect(saveButton).toBeDisabled();
   });

@@ -44,12 +44,14 @@ describe("settings.validator", () => {
         messageRetentionDays: null,
         messageEditTimeLimitMinutes: null,
         messageDeleteForEveryoneTimeLimitMinutes: null,
+        auditLogRetentionDays: null,
       });
 
       expect(result.maxFilesPerMessage).toBeNull();
       expect(result.messageRetentionDays).toBeNull();
       expect(result.messageEditTimeLimitMinutes).toBeNull();
       expect(result.messageDeleteForEveryoneTimeLimitMinutes).toBeNull();
+      expect(result.auditLogRetentionDays).toBeNull();
     });
 
     it("accepts valid whoCanCreateGroups values (ALL_MEMBERS and APP_ADMINS_ONLY)", async () => {
@@ -194,6 +196,26 @@ describe("settings.validator", () => {
 
       await expect(
         updateSettingsSchema.validate({ fileMigrationIntervalMinutes: 0 }),
+      ).rejects.toThrow();
+    });
+
+    it("accepts valid auditLogRetentionDays or null, and rejects non-positive or non-integers", async () => {
+      const res1 = await updateSettingsSchema.validate({ auditLogRetentionDays: 90 });
+      expect(res1.auditLogRetentionDays).toBe(90);
+
+      const res2 = await updateSettingsSchema.validate({ auditLogRetentionDays: null });
+      expect(res2.auditLogRetentionDays).toBeNull();
+
+      await expect(
+        updateSettingsSchema.validate({ auditLogRetentionDays: 0 }),
+      ).rejects.toThrow();
+
+      await expect(
+        updateSettingsSchema.validate({ auditLogRetentionDays: -5 }),
+      ).rejects.toThrow();
+
+      await expect(
+        updateSettingsSchema.validate({ auditLogRetentionDays: 15.5 }),
       ).rejects.toThrow();
     });
   });

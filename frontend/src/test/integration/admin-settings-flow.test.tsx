@@ -49,6 +49,7 @@ const initialSettings: AdminSettings = {
   orphanFileRetentionHours: null,
   softDeletedFilePurgeDays: null,
   uploadCleanupDryRun: false,
+  auditLogRetentionDays: null,
   fileMigrationEnabled: false,
   fileMigrationBatchSize: 50,
   fileMigrationIntervalMinutes: 60,

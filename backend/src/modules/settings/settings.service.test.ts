@@ -72,6 +72,7 @@ describe("settings.service", () => {
     orphanFileRetentionHours: 24,
     softDeletedFilePurgeDays: null,
     uploadCleanupDryRun: false,
+    auditLogRetentionDays: null,
     fileMigrationEnabled: false,
     fileMigrationBatchSize: 50,
     fileMigrationIntervalMinutes: 60,
@@ -138,6 +139,7 @@ describe("settings.service", () => {
       expect(raw.orphanFileRetentionHours).toBeUndefined();
       expect(raw.softDeletedFilePurgeDays).toBeUndefined();
       expect(raw.uploadCleanupDryRun).toBeUndefined();
+      expect(raw.auditLogRetentionDays).toBeUndefined();
       expect(raw.fileMigrationEnabled).toBeUndefined();
       expect(raw.fileMigrationBatchSize).toBeUndefined();
       expect(raw.fileMigrationIntervalMinutes).toBeUndefined();
@@ -235,6 +237,32 @@ describe("settings.service", () => {
       // El cache no se corrompió
       const cachedResult = await getSettings();
       expect(cachedResult).toBe(defaultMockSettings);
+    });
+
+    it("actualizar auditLogRetentionDays registra el cambio en el diff de auditoría", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(defaultMockSettings);
+      const updatedMock: AppSettings = {
+        ...defaultMockSettings,
+        auditLogRetentionDays: 90,
+      };
+      const mockOpUpdate = { __operation: "settings.update" };
+      vi.mocked(SettingsRepository.update).mockReturnValue(mockOpUpdate as any);
+      vi.mocked(prisma.$transaction).mockResolvedValue([updatedMock, {}]);
+
+      const result = await updateSettings({ auditLogRetentionDays: 90 });
+
+      expect(SettingsRepository.update).toHaveBeenCalledWith({ auditLogRetentionDays: 90 });
+      expect(AuditService.buildAuditData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.UPDATE_SETTINGS,
+          metadata: {
+            changed: {
+              auditLogRetentionDays: { from: null, to: 90 },
+            },
+          },
+        }),
+      );
+      expect(result).toBe(updatedMock);
     });
   });
 

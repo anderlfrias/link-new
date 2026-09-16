@@ -45,6 +45,7 @@ interface DraftState {
   allowGroupOverrideChangeGroupInfo: boolean;
   allowGroupOverrideDeleteGroup: boolean;
   messageRetentionDays: string;
+  auditLogRetentionDays: string;
   allowMessageEdit: boolean;
   messageEditTimeLimitMinutes: string;
   allowMessageDeleteForEveryone: boolean;
@@ -116,6 +117,7 @@ function toDraft(settings: AdminSettings): DraftState {
     allowGroupOverrideChangeGroupInfo: settings.allowGroupOverrideChangeGroupInfo,
     allowGroupOverrideDeleteGroup: settings.allowGroupOverrideDeleteGroup,
     messageRetentionDays: settings.messageRetentionDays == null ? "" : String(settings.messageRetentionDays),
+    auditLogRetentionDays: settings.auditLogRetentionDays == null ? "" : String(settings.auditLogRetentionDays),
     allowMessageEdit: settings.allowMessageEdit,
     messageEditTimeLimitMinutes:
       settings.messageEditTimeLimitMinutes == null ? "" : String(settings.messageEditTimeLimitMinutes),
@@ -169,6 +171,13 @@ function validate(draft: DraftState): FieldErrors {
     const retention = Number(draft.messageRetentionDays);
     if (!Number.isInteger(retention) || retention < 0) {
       errors.messageRetentionDays = "Debe ser un número entero mayor o igual a 0, o vacío para deshabilitar.";
+    }
+  }
+
+  if (draft.auditLogRetentionDays.trim() !== "") {
+    const retention = Number(draft.auditLogRetentionDays);
+    if (!Number.isInteger(retention) || retention < 1) {
+      errors.auditLogRetentionDays = "Debe ser un número entero mayor a 0, o vacío para conservar para siempre.";
     }
   }
 
@@ -234,6 +243,7 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     allowGroupOverrideChangeGroupInfo: draft.allowGroupOverrideChangeGroupInfo,
     allowGroupOverrideDeleteGroup: draft.allowGroupOverrideDeleteGroup,
     messageRetentionDays: draft.messageRetentionDays.trim() === "" ? null : Number(draft.messageRetentionDays),
+    auditLogRetentionDays: draft.auditLogRetentionDays.trim() === "" ? null : Number(draft.auditLogRetentionDays),
     allowMessageEdit: draft.allowMessageEdit,
     messageEditTimeLimitMinutes:
       draft.messageEditTimeLimitMinutes.trim() === "" ? null : Number(draft.messageEditTimeLimitMinutes),
@@ -613,17 +623,32 @@ export function AdminSettingsPanel() {
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Retención de mensajes</h3>
-            <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-              Días antes de eliminar automáticamente (vacío = deshabilitado)
-              <Input
-                type="number"
-                min={0}
-                value={draft.messageRetentionDays}
-                onChange={(event) => updateField("messageRetentionDays", event.target.value)}
-                error={errors.messageRetentionDays}
-              />
-            </label>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Retención de mensajes y auditoría</h3>
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                Retención de mensajes: días antes de eliminar automáticamente (vacío = deshabilitado)
+                <Input
+                  type="number"
+                  min={0}
+                  value={draft.messageRetentionDays}
+                  onChange={(event) => updateField("messageRetentionDays", event.target.value)}
+                  error={errors.messageRetentionDays}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                Retención de registros de auditoría: días antes de purgar (vacío = conservar para siempre)
+                <Input
+                  type="number"
+                  min={1}
+                  value={draft.auditLogRetentionDays}
+                  onChange={(event) => updateField("auditLogRetentionDays", event.target.value)}
+                  error={errors.auditLogRetentionDays}
+                />
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  Advertencia: vacío conserva los registros indefinidamente. Reducir este valor purga registros de auditoría más antiguos de forma irreversible.
+                </span>
+              </label>
+            </div>
           </section>
 
           <section>

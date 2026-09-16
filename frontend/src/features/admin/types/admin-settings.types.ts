@@ -31,6 +31,8 @@ export interface AdminSettings {
   allowGroupOverrideDeleteGroup: boolean;
   /** `null` = deshabilitado. */
   messageRetentionDays: number | null;
+  /** Retención del audit trail. `null` = deshabilitado (se conserva para siempre). */
+  auditLogRetentionDays: number | null;
   /** Si el propio autor puede editar el contenido de un mensaje TEXT ya enviado. */
   allowMessageEdit: boolean;
   /** Minutos desde el envío durante los que un mensaje puede editarse. `null` = sin límite. */

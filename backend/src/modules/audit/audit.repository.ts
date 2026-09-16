@@ -56,3 +56,8 @@ export function listForAdmin(filters: AuditLogFilters, options: { beforeId?: str
     ...(options.beforeId ? { cursor: { id: options.beforeId }, skip: 1 } : {}),
   });
 }
+
+export async function deleteOlderThan(cutoffDate: Date): Promise<number> {
+  const result = await prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoffDate } } });
+  return result.count;
+}

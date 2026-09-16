@@ -559,6 +559,14 @@ model AppSettings {
   /// instalación existente sin que un admin lo prenda explícitamente.
   messageRetentionDays Int? @map("message_retention_days")
 
+  // Retención del audit trail (ver src/modules/audit/README.md).
+  /// null = deshabilitado (default): el audit trail se guarda para siempre.
+  /// A diferencia del resto de los campos de retención, acá "para siempre" es
+  /// además el default correcto por cumplimiento — borrar registros de
+  /// auditoría es una decisión que un admin tiene que tomar explícitamente,
+  /// nunca algo que pase por omisión al actualizar la app.
+  auditLogRetentionDays Int? @map("audit_log_retention_days")
+
   // Edición y borrado de mensajes propios (ver messages/README.md, editMessage/deleteMessage).
   // Defaults true/null: reproducen el comportamiento histórico (editar/borrar
   // sin restricción) hasta que un admin los ajuste explícitamente.

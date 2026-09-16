@@ -45,9 +45,9 @@ Aprovechá para fijar el nivel de log de producción en el bloque `env` del back
       },
 ```
 
-- [ ] `time: false` en `link-backend`, con el comentario del por qué
-- [ ] `time: true` conservado en `link-frontend`, con el comentario de la asimetría
-- [ ] `LOG_LEVEL: "info"` en el `env` del backend
+- [x] `time: false` en `link-backend`, con el comentario del por qué
+- [x] `time: true` conservado en `link-frontend`, con el comentario de la asimetría
+- [x] `LOG_LEVEL: "info"` en el `env` del backend
 
 ### Test
 
@@ -86,10 +86,10 @@ lugar de en `~/.pm2/logs`:
 Si lo hacés, **agregá `logs/` al `.gitignore`** (el `.gitignore` actual solo cubre
 `npm-debug.log*` y similares, no un directorio de logs de la app).
 
-- [ ] `pm2-logrotate` instalado y configurado en el server
-- [ ] `pm2 conf pm2-logrotate` verificado (muestra los valores fijados)
-- [ ] Si se usaron rutas explícitas: `logs/` agregado al `.gitignore`
-- [ ] Documentado en el comentario de cabecera de `ecosystem.config.js`, que ya explica el flujo de
+- [x] `pm2-logrotate` instalado y configurado en el server
+- [x] `pm2 conf pm2-logrotate` verificado (muestra los valores fijados)
+- [x] Si se usaron rutas explícitas: `logs/` agregado al `.gitignore`
+- [x] Documentado en el comentario de cabecera de `ecosystem.config.js`, que ya explica el flujo de
       PM2 — el próximo operador tiene que enterarse ahí, no en este plan
 
 ---
@@ -184,22 +184,22 @@ Y en `server.ts`, registrarlo junto a los otros tres:
 startAuditRetentionWorker();
 ```
 
-- [ ] `auditLogRetentionDays` en `AppSettings`, default `null`, con su comentario
-- [ ] `db push` aplicado
-- [ ] `audit-retention.worker.ts` creado y arrancado en `server.ts`
-- [ ] `deleteOlderThan` en `audit.repository.ts`
+- [x] `auditLogRetentionDays` en `AppSettings`, default `null`, con su comentario
+- [x] `db push` aplicado
+- [x] `audit-retention.worker.ts` creado y arrancado en `server.ts`
+- [x] `deleteOlderThan` en `audit.repository.ts`
 
 ### Tests obligatorios — `audit-retention.worker.test.ts`
 
 Mockear `SettingsService.getSettings` y `AuditRepository`.
 
-- [ ] Con `auditLogRetentionDays: null` → **no** se llama a `deleteOlderThan` (el test que protege
+- [x] Con `auditLogRetentionDays: null` → **no** se llama a `deleteOlderThan` (el test que protege
       el default de "no borrar nada sin que un admin lo pida")
-- [ ] Con `auditLogRetentionDays: 90` → se llama con un cutoff de 90 días atrás (usá fake timers
+- [x] Con `auditLogRetentionDays: 90` → se llama con un cutoff de 90 días atrás (usá fake timers
       para que la fecha sea determinística)
-- [ ] Con `deletedCount: 0` → no loguea
-- [ ] Con `deletedCount > 0` → loguea en `info` con `deletedCount`
-- [ ] Si `getSettings` rechaza, el tick rechaza y no deja la promesa sin manejar
+- [x] Con `deletedCount: 0` → no loguea
+- [x] Con `deletedCount > 0` → loguea en `info` con `deletedCount`
+- [x] Si `getSettings` rechaza, el tick rechaza y no deja la promesa sin manejar
 
 ---
 
@@ -218,17 +218,17 @@ Frontend:
   que diga explícitamente qué implica: **vacío = se conserva para siempre**, y que bajar este valor
   **borra registros de auditoría de forma irreversible**. No es un límite más entre otros.
 
-- [ ] Validator y tipos del backend actualizados
-- [ ] Campo en el panel, agrupado con los otros de retención
-- [ ] El texto de ayuda advierte que el borrado es irreversible
+- [x] Validator y tipos del backend actualizados
+- [x] Campo en el panel, agrupado con los otros de retención
+- [x] El texto de ayuda advierte que el borrado es irreversible
 
 ### Tests obligatorios
 
-- [ ] `settings.validator.test.ts`: acepta un entero positivo y `null`; rechaza 0, negativos y no-enteros
-- [ ] `settings.service.test.ts`: el cambio de este campo aparece en el diff de `UPDATE_SETTINGS`
+- [x] `settings.validator.test.ts`: acepta un entero positivo y `null`; rechaza 0, negativos y no-enteros
+- [x] `settings.service.test.ts`: el cambio de este campo aparece en el diff de `UPDATE_SETTINGS`
       (o sea: **cambiar la política de retención de auditoría queda auditado**, que es lo mínimo
       que se le puede pedir)
-- [ ] `AdminSettingsPanel.test.tsx`: renderiza el campo y lo envía en el submit
+- [x] `AdminSettingsPanel.test.tsx`: renderiza el campo y lo envía en el submit
 
 ---
 
@@ -244,11 +244,11 @@ En producción (o en un entorno que corra bajo PM2), después de `pm2 restart li
 pm2 logs link-backend --lines 20 --raw | head -5
 ```
 
-- [ ] Cada línea del backend es JSON válido y **no** tiene un timestamp de PM2 adelante.
+- [x] Cada línea del backend es JSON válido y **no** tiene un timestamp de PM2 adelante.
       Comprobalo de verdad: `pm2 logs link-backend --lines 50 --raw | jq -c . > /dev/null && echo OK`
-- [ ] `pm2 conf pm2-logrotate` muestra `max_size`, `retain` y `compress` configurados
-- [ ] Con `auditLogRetentionDays` en `null` (default), el worker no borra nada
-- [ ] Los tests en verde
+- [x] `pm2 conf pm2-logrotate` muestra `max_size`, `retain` y `compress` configurados
+- [x] Con `auditLogRetentionDays` en `null` (default), el worker no borra nada
+- [x] Los tests en verde
 
 Commits sugeridos:
 `fix(pm2): no prefijar timestamp al log JSON del backend`

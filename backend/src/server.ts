@@ -6,6 +6,7 @@ import { initSocket } from "./socket";
 import { startMessageRetentionWorker } from "./workers/message-retention.worker";
 import { startUploadCleanupWorker } from "./workers/upload-cleanup.worker";
 import { startFileMigrationWorker } from "./workers/file-migration.worker";
+import { startAuditRetentionWorker } from "./workers/audit-retention.worker";
 
 const PORT = env.PORT;
 
@@ -28,6 +29,7 @@ initSocket(httpServer);
 startMessageRetentionWorker();
 startUploadCleanupWorker();
 startFileMigrationWorker();
+startAuditRetentionWorker();
 
 httpServer.listen(PORT, () => {
   logger.info({ port: PORT }, "server listening");

@@ -9,6 +9,10 @@
 //   pm2 restart all     # tras un nuevo build
 //   pm2 save && pm2 startup   # para que sobrevivan un reinicio del server
 //
+// Rotación de logs con pm2-logrotate (ver logging-plan/05-retention-and-rotation.md):
+//   pm2 install pm2-logrotate
+//   pm2 set pm2-logrotate:max_size 50M && pm2 set pm2-logrotate:retain 14 && pm2 set pm2-logrotate:compress true
+//
 // Los `cwd` son relativos a este archivo (no a donde se ejecute `pm2`), así que
 // siempre resuelven a backend/ y frontend/ sin importar desde dónde se invoque.
 module.exports = {
@@ -24,6 +28,7 @@ module.exports = {
       // apunta a backend/, no encuentra el .env y el server no arranca.
       env: {
         NODE_ENV: "production",
+        LOG_LEVEL: "info",
       },
       // Socket.IO no tiene un adapter de Redis configurado (ver
       // src/socket/README.md) — con más de 1 instancia, los eventos solo
@@ -34,7 +39,11 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "500M",
-      time: true,
+      // false a propósito: pino ya emite su propio campo `time` en ISO-8601
+      // (ver src/config/logger.ts). Con `time: true`, PM2 prefija un timestamp
+      // a cada línea y rompe el JSON — dejaría el log ilegible para jq y para
+      // cualquier agregador. Ver logging-plan/05-retention-and-rotation.md.
+      time: false,
     },
     {
       name: "link-frontend",
@@ -57,6 +66,9 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "500M",
+      // Conservado en true a propósito: Next.js no emite JSON estructurado,
+      // sus líneas son texto libre y ahí el timestamp de PM2 es lo único que
+      // las ubica en el tiempo. Ver logging-plan/05-retention-and-rotation.md.
       time: true,
     },
   ],

@@ -22,6 +22,7 @@ export type UpdateSettingsInput = Partial<
     | "allowGroupOverrideChangeGroupInfo"
     | "allowGroupOverrideDeleteGroup"
     | "messageRetentionDays"
+    | "auditLogRetentionDays"
     | "allowMessageEdit"
     | "messageEditTimeLimitMinutes"
     | "allowMessageDeleteForEveryone"

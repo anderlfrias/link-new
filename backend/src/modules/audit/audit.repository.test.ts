@@ -6,6 +6,7 @@ vi.mock("../../config/prisma", () => ({
     auditLog: {
       create: vi.fn(),
       findMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
   },
 }));
@@ -15,6 +16,7 @@ import {
   buildAdminAuditWhere,
   create,
   createOperation,
+  deleteOlderThan,
   listForAdmin,
 } from "./audit.repository";
 
@@ -171,6 +173,24 @@ describe("audit.repository", () => {
           take: 30,
         }),
       );
+    });
+  });
+
+  describe("deleteOlderThan", () => {
+    it("llama a prisma.auditLog.deleteMany con cutoffDate y retorna count", async () => {
+      vi.mocked(prisma.auditLog.deleteMany).mockResolvedValue({ count: 17 } as any);
+
+      const cutoffDate = new Date("2026-06-01T00:00:00.000Z");
+      const count = await deleteOlderThan(cutoffDate);
+
+      expect(prisma.auditLog.deleteMany).toHaveBeenCalledWith({
+        where: {
+          createdAt: {
+            lt: cutoffDate,
+          },
+        },
+      });
+      expect(count).toBe(17);
     });
   });
 });

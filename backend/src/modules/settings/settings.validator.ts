@@ -38,6 +38,7 @@ export const updateSettingsSchema = yup
     allowGroupOverrideChangeGroupInfo: yup.boolean(),
     allowGroupOverrideDeleteGroup: yup.boolean(),
     messageRetentionDays: yup.number().integer().min(0).nullable(),
+    auditLogRetentionDays: yup.number().integer().positive().nullable(),
     allowMessageEdit: yup.boolean(),
     messageEditTimeLimitMinutes: yup.number().integer().min(1).nullable(),
     allowMessageDeleteForEveryone: yup.boolean(),
@@ -75,6 +76,7 @@ export const updateSettingsSchema = yup
       value.allowGroupOverrideChangeGroupInfo !== undefined ||
       value.allowGroupOverrideDeleteGroup !== undefined ||
       value.messageRetentionDays !== undefined ||
+      value.auditLogRetentionDays !== undefined ||
       value.allowMessageEdit !== undefined ||
       value.messageEditTimeLimitMinutes !== undefined ||
       value.allowMessageDeleteForEveryone !== undefined ||
