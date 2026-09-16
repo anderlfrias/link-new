@@ -32,6 +32,17 @@ O ambos desde la raíz: `npm test`.
 > [TESTING_PLAN.md](TESTING_PLAN.md). Si `npm test` todavía no existe en este repo,
 > esa es la primera tarea: [testing-plan/00-infrastructure-setup.md](testing-plan/00-infrastructure-setup.md).
 
+## Plan activo: logging y auditoría
+
+Este repo no tiene logging estructurado todavía (hay 38 `console.*` sueltos en `backend/src`) y su
+audit trail existe a medias. El plan para resolverlo, por fases y ejecutable por cualquier agente,
+está en **[LOGGING_PLAN.md](LOGGING_PLAN.md)**.
+
+Si vas a agregar código que loguee o que registre una acción de usuario, leé por lo menos su §3
+(logs de aplicación y audit trail son dos sistemas distintos) y su §4 (reglas de privacidad: nunca
+contenido de mensajes, nunca tokens). Ese documento también deja anotada una fuga de credenciales
+conocida en `backend/src/modules/auth/auth.service.ts` y cómo se arregla.
+
 ## Otras convenciones del repo
 
 - `frontend/` corre sobre una versión de Next.js muy reciente con cambios que rompen
