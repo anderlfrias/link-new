@@ -13,7 +13,7 @@ vi.mock("../../config/prisma", () => ({
 
 import { prisma } from "../../config/prisma";
 import {
-  findAvatarPath,
+  findAvatarFileId,
   setLocalAvatar,
   setLocalName,
   setNotificationSoundEnabled,
@@ -164,27 +164,40 @@ describe("auth.repository", () => {
     });
   });
 
-  describe("findAvatarPath", () => {
-    it("devuelve el path del archivo cuando el usuario y su avatar existen", async () => {
+  describe("findAvatarFileId", () => {
+    it("devuelve el avatarFileId cuando el usuario y su avatar activo existen", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        avatarFile: { path: "avatars/u-1.png" },
+        avatarFileId: "file-123",
+        avatarFile: { deletedAt: null },
       } as any);
 
-      const result = await findAvatarPath("u-1");
+      const result = await findAvatarFileId("u-1");
 
-      expect(result).toBe("avatars/u-1.png");
+      expect(result).toBe("file-123");
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: "u-1" },
-        select: { avatarFile: { select: { path: true } } },
+        select: {
+          avatarFileId: true,
+          avatarFile: { select: { deletedAt: true } },
+        },
       });
+    });
+
+    it("devuelve null si el avatarFile está marcado como eliminado", async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        avatarFileId: "file-123",
+        avatarFile: { deletedAt: new Date() },
+      } as any);
+
+      expect(await findAvatarFileId("u-1")).toBeNull();
     });
 
     it("devuelve null si el usuario no tiene avatar o no existe", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
-      expect(await findAvatarPath("u-nonexistent")).toBeNull();
+      expect(await findAvatarFileId("u-nonexistent")).toBeNull();
 
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ avatarFile: null } as any);
-      expect(await findAvatarPath("u-no-avatar")).toBeNull();
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ avatarFileId: null, avatarFile: null } as any);
+      expect(await findAvatarFileId("u-no-avatar")).toBeNull();
     });
   });
 });

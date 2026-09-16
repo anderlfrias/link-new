@@ -131,12 +131,12 @@ describe("auth.controller", () => {
       const res = createMockResponse();
       const next = createMockNext();
 
-      vi.mocked(AuthService.getOwnProfilePictureUrl).mockResolvedValue("/uploads/avatars/u-123.jpg");
+      vi.mocked(AuthService.getOwnProfilePictureUrl).mockResolvedValue("/api/v1/files/avatar-123/content");
 
       await getProfilePicture(req, res, next);
 
       expect(AuthService.getOwnProfilePictureUrl).toHaveBeenCalledWith("u-123");
-      expect(res.redirect).toHaveBeenCalledWith("/uploads/avatars/u-123.jpg");
+      expect(res.redirect).toHaveBeenCalledWith("/api/v1/files/avatar-123/content");
       expect(next).not.toHaveBeenCalled();
     });
 

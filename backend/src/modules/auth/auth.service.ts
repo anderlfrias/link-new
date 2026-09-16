@@ -8,9 +8,8 @@ import {
   UnauthorizedError,
 } from "../../utils/errors";
 import * as FileService from "../files/file.service";
-import { storage } from "../../storage";
 import {
-  findAvatarPath,
+  findAvatarFileId,
   setLocalAvatar,
   setLocalName,
   setNotificationSoundEnabled,
@@ -273,17 +272,17 @@ export function updateNotificationSoundEnabled(userId: string, enabled: boolean)
   return setNotificationSoundEnabled(userId, enabled);
 }
 
-/// URL pública (relativa, `/uploads/...`) de mi propia foto ya cacheada
+/// URL pública segura (`/api/v1/files/:id/content`) de mi propia foto ya cacheada
 /// localmente — ya no proxea al proveedor externo (ver README del módulo):
 /// una vez que esta base tiene la foto (sincronizada en el login, o subida
 /// acá), servirla es un `StoredFile` más, igual que la de cualquier otro
 /// usuario. `404` si todavía no tengo ninguna.
 export async function getOwnProfilePictureUrl(userId: string): Promise<string> {
-  const path = await findAvatarPath(userId);
-  if (!path) {
+  const avatarFileId = await findAvatarFileId(userId);
+  if (!avatarFileId) {
     throw new NotFoundError("Profile picture not found");
   }
-  return storage.getPublicUrl(path);
+  return `/api/v1/files/${avatarFileId}/content`;
 }
 
 export interface ExternalUserAppUser {

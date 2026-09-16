@@ -9,7 +9,7 @@ import {
 } from "../../utils/errors";
 
 vi.mock("./auth.repository", () => ({
-  findAvatarPath: vi.fn(),
+  findAvatarFileId: vi.fn(),
   setLocalAvatar: vi.fn(),
   setLocalName: vi.fn(),
   setNotificationSoundEnabled: vi.fn(),
@@ -22,14 +22,8 @@ vi.mock("../files/file.service", () => ({
   getFileChecksum: vi.fn(),
 }));
 
-vi.mock("../../storage", () => ({
-  storage: {
-    getPublicUrl: vi.fn((p: string) => `/uploads/${p}`),
-  },
-}));
-
 import {
-  findAvatarPath,
+  findAvatarFileId,
   setLocalAvatar,
   setLocalName,
   setNotificationSoundEnabled,
@@ -196,17 +190,17 @@ describe("auth.service", () => {
   });
 
   describe("getOwnProfilePictureUrl", () => {
-    it("devuelve la URL pública si el path del avatar existe", async () => {
-      vi.mocked(findAvatarPath).mockResolvedValue("avatars/user-1.jpg");
+    it("devuelve la URL segura de contenido si el avatar existe", async () => {
+      vi.mocked(findAvatarFileId).mockResolvedValue("f-avatar-1");
 
       const url = await getOwnProfilePictureUrl("user-1");
 
-      expect(findAvatarPath).toHaveBeenCalledWith("user-1");
-      expect(url).toBe("/uploads/avatars/user-1.jpg");
+      expect(findAvatarFileId).toHaveBeenCalledWith("user-1");
+      expect(url).toBe("/api/v1/files/f-avatar-1/content");
     });
 
     it("lanza NotFoundError si el usuario no tiene avatar cacheado", async () => {
-      vi.mocked(findAvatarPath).mockResolvedValue(null);
+      vi.mocked(findAvatarFileId).mockResolvedValue(null);
 
       await expect(getOwnProfilePictureUrl("user-without-avatar")).rejects.toThrow(NotFoundError);
       await expect(getOwnProfilePictureUrl("user-without-avatar")).rejects.toThrow(

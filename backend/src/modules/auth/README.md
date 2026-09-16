@@ -104,7 +104,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 GET /api/v1/auth/profile/picture
 ```
 
-Requiere `Authorization: Bearer <token>` + `attachInternalUser`. Ya **no** proxea a ningún proveedor externo: lee `avatarFile.path` de la base local (`AuthService.getOwnProfilePictureUrl()`) y responde `302` a `/uploads/<path>` (mismo archivo estático que sirve el avatar de cualquier otro usuario). `404` si todavía no tiene ninguna foto cacheada.
+Requiere `Authorization: Bearer <token>` + `attachInternalUser`. Ya **no** proxea a ningún proveedor externo: lee `avatarFileId` de la base local (`AuthService.getOwnProfilePictureUrl()`) y responde `302` a `/api/v1/files/<avatarFileId>/content` (mismo endpoint seguro de contenido que sirve el avatar de cualquier otro usuario). `404` si todavía no tiene ninguna foto cacheada.
 
 ```bash
 curl -L http://localhost:4000/api/v1/auth/profile/picture \
@@ -112,7 +112,7 @@ curl -L http://localhost:4000/api/v1/auth/profile/picture \
   --output foto.jpg
 ```
 
-Al ser un redirect a una URL propia por usuario (`avatars/<userId>/<uuid>.<ext>`), ya no hace falta el `Vary: Authorization` que este endpoint necesitaba cuando servía bytes directamente desde una URL literal única para todos — un problema de este diseño más simple, no algo que haya que replicar.
+Al ser un redirect a una URL propia por archivo (`/api/v1/files/<avatarFileId>/content`), ya no hace falta el `Vary: Authorization` que este endpoint necesitaba cuando servía bytes directamente desde una URL literal única para todos — un problema de este diseño más simple, no algo que haya que replicar.
 
 Esta foto llega a la base de dos formas, y ambas conviven: (1) sincronizada desde el proveedor externo en cada login o al refrescar el directorio de contactos, mientras `syncProfileWithIntegration` siga en `true` (ver sección arriba); o (2) subida acá mismo vía `PUT` (abajo), que apaga ese sync. Para la foto de **otros** usuarios (no la propia), ver "Endpoint: foto de perfil de un tercero" más abajo — ese sigue siendo el único camino que todavía pega contra el proveedor externo en este módulo.
 

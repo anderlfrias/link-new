@@ -75,10 +75,16 @@ export function setNotificationSoundEnabled(userId: string, enabled: boolean): P
 
 /// Para servir la propia foto ya cacheada (`getOwnProfilePictureUrl` en
 /// auth.service.ts) sin pedir el `User` completo.
-export async function findAvatarPath(userId: string): Promise<string | null> {
+export async function findAvatarFileId(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { avatarFile: { select: { path: true } } },
+    select: {
+      avatarFileId: true,
+      avatarFile: { select: { deletedAt: true } },
+    },
   });
-  return user?.avatarFile?.path ?? null;
+  if (!user?.avatarFileId || user.avatarFile?.deletedAt) {
+    return null;
+  }
+  return user.avatarFileId;
 }

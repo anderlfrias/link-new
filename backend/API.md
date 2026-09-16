@@ -143,7 +143,7 @@ await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
 }); // 204
 ```
 
-`GET` responde `302` a `/uploads/<path del StoredFile>` (mismo archivo estático que sirve el avatar de cualquier otro usuario) — `fetch()` lo sigue solo, así que `.blob()` sigue funcionando igual que antes. `404` si todavía no hay ninguna foto cacheada (nunca inició sesión con una, o ya la sacó).
+`GET` responde `302` a `/api/v1/files/<avatarFileId>/content` (mismo endpoint seguro de contenido que sirve el avatar de cualquier otro usuario) — `fetch()` lo sigue solo, así que `.blob()` sigue funcionando igual que antes. `404` si todavía no hay ninguna foto cacheada (nunca inició sesión con una, o ya la sacó).
 
 `name`: 1-120 caracteres, requerido. No importa si la imagen del `PUT` viene de un archivo real o de un avatar generado (ej. Boring Avatars, ver `frontend/src/features/profile`) rasterizado a PNG del lado del cliente — para este endpoint son lo mismo. Errores: `400` (falta el archivo en `PUT`, tipo de imagen no permitido, o `name` vacío/demasiado largo en `PATCH`).
 
