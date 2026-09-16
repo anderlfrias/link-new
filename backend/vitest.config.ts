@@ -18,6 +18,10 @@ export default defineConfig({
       VAPID_PUBLIC_KEY: "test-vapid-public-key",
       VAPID_PRIVATE_KEY: "test-vapid-private-key",
       VAPID_SUBJECT: "mailto:test@example.com",
+      // silent: sin esto, cada test que importe código del backend escupe
+      // logs y ensucia la salida de vitest hasta hacerla ilegible (ver
+      // src/config/logger.ts y LOGGING_PLAN.md).
+      LOG_LEVEL: "silent",
     },
     coverage: {
       provider: "v8",

@@ -163,7 +163,7 @@ viole se considera no terminada:
 
 | Fase | Archivo | Qué deja andando | Estado |
 |---|---|---|---|
-| 0 | [logging-plan/00-logger-infrastructure.md](logging-plan/00-logger-infrastructure.md) | `pino` instalado, `src/config/logger.ts`, redacción central, env vars, `pino-http` en lugar de `morgan` | ⬜ Pendiente |
+| 0 | [logging-plan/00-logger-infrastructure.md](logging-plan/00-logger-infrastructure.md) | `pino` instalado, `src/config/logger.ts`, redacción central, env vars, `pino-http` en lugar de `morgan` | ✅ 2026-09-16 |
 | 1 | [logging-plan/01-correlation-and-errors.md](logging-plan/01-correlation-and-errors.md) | Contexto de request (`requestId`, `ip`, actor) con `AsyncLocalStorage`, en HTTP + sockets + workers; `errorHandler` con nivel según status | ⬜ Pendiente |
 | 2 | [logging-plan/02-console-migration.md](logging-plan/02-console-migration.md) | Los 38 `console.*` migrados + test-guardián que prohíbe reintroducirlos. **Incluye el fix de la fuga del token de login.** | ⬜ Pendiente |
 | 3 | [logging-plan/03-audit-unification.md](logging-plan/03-audit-unification.md) | Módulo `audit/` único, IP + user-agent, auditoría de login y de acciones de admin | ⬜ Pendiente |

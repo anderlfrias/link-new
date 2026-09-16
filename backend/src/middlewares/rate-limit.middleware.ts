@@ -10,7 +10,7 @@ const TOO_MANY_ATTEMPTS_MESSAGE = {
 // sobreescribe en su borde) — usarlo acá evita depender de adivinar cuántos
 // saltos de proxy hay entre Cloudflare y este proceso (ver `trust proxy` en
 // app.ts, que igual hace falta para que `req.ip` — el fallback de acá, y lo
-// que usa morgan para loguear — también sea el real).
+// que usa httpLogger para loguear — también sea el real).
 //
 // Dos limiters en paralelo, no uno solo: si el único límite fuera por IP,
 // todo el tráfico detrás del mismo proxy/NAT (oficina, CGNAT) comparte una

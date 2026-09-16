@@ -32,9 +32,9 @@ npm install -D pino-pretty --workspace=backend
 
 `pino-pretty` va en `devDependencies` a propósito: en producción el log es JSON y nunca se carga.
 
-- [ ] `pino` y `pino-http` en `dependencies` de `backend/package.json`
-- [ ] `pino-pretty` en `devDependencies`
-- [ ] `npm run build --workspace=backend` sigue compilando
+- [x] `pino` y `pino-http` en `dependencies` de `backend/package.json`
+- [x] `pino-pretty` en `devDependencies`
+- [x] `npm run build --workspace=backend` sigue compilando
 
 ---
 
@@ -71,9 +71,9 @@ En `backend/vitest.config.ts`, agregar al bloque `env`:
 > **Por qué importa:** sin esto, cada test que importe código del backend escupe logs y ensucia
 > la salida de vitest hasta hacerla ilegible.
 
-- [ ] `LOG_LEVEL` y `LOG_PRETTY` agregadas al schema con su comentario
-- [ ] `LOG_LEVEL: "silent"` en `vitest.config.ts`
-- [ ] Documentadas en el `.env.example` si existe; si no, en `backend/README.md`
+- [x] `LOG_LEVEL` y `LOG_PRETTY` agregadas al schema con su comentario
+- [x] `LOG_LEVEL: "silent"` en `vitest.config.ts`
+- [x] Documentadas en el `.env.example` si existe; si no, en `backend/README.md`
 
 ---
 
@@ -147,8 +147,8 @@ export function buildLogger(opts?: { level?: string; destination?: pino.Destinat
 export const logger = buildLogger();
 ```
 
-- [ ] Archivo creado con los comentarios de *por qué* (convención del repo)
-- [ ] `logger` exportado como singleton y `buildLogger` como factory testeable
+- [x] Archivo creado con los comentarios de *por qué* (convención del repo)
+- [x] `logger` exportado como singleton y `buildLogger` como factory testeable
 
 ### Tests obligatorios — `backend/src/config/logger.test.ts`
 
@@ -168,13 +168,13 @@ function captureLogger() {
 }
 ```
 
-- [ ] Loguea JSON parseable, con `level` y `time`
-- [ ] `time` es ISO-8601, no un epoch numérico
-- [ ] **Redacta `req.headers.authorization`** → el valor sale `[Redacted]` y el token no aparece
+- [x] Loguea JSON parseable, con `level` y `time`
+- [x] `time` es ISO-8601, no un epoch numérico
+- [x] **Redacta `req.headers.authorization`** → el valor sale `[Redacted]` y el token no aparece
       en ninguna parte de la línea serializada
-- [ ] **Redacta `password` en cualquier nivel** (`{ password }` y `{ body: { password } }`)
-- [ ] Respeta el nivel: con `level: "warn"`, un `logger.info()` no emite nada
-- [ ] Un child logger (`logger.child({ requestId: "x" })`) propaga el campo a cada línea
+- [x] **Redacta `password` en cualquier nivel** (`{ password }` y `{ body: { password } }`)
+- [x] Respeta el nivel: con `level: "warn"`, un `logger.info()` no emite nada
+- [x] Un child logger (`logger.child({ requestId: "x" })`) propaga el campo a cada línea
 
 ---
 
@@ -254,21 +254,21 @@ En `backend/src/app.ts`:
   `express.json()`): así una request con body inválido igual queda logueada.
 - Desinstalar morgan: `npm uninstall morgan @types/morgan --workspace=backend`.
 
-- [ ] `http-logger.middleware.ts` creado
-- [ ] `morgan` reemplazado en `app.ts` y desinstalado del `package.json`
-- [ ] El orden de middlewares quedó: `helmet` → `cors` → `httpLogger` → `express.json`
+- [x] `http-logger.middleware.ts` creado
+- [x] `morgan` reemplazado en `app.ts` y desinstalado del `package.json`
+- [x] El orden de middlewares quedó: `helmet` → `cors` → `httpLogger` → `express.json`
 
 ### Tests obligatorios — `backend/src/middlewares/http-logger.middleware.test.ts`
 
 Con `supertest` contra el `app` exportado (mismo patrón que `app.test.ts`):
 
-- [ ] Una respuesta 200 trae un header `x-request-id` con formato UUID
-- [ ] Dos requests distintas traen `x-request-id` **distintos**
-- [ ] `customLogLevel` devuelve `"error"` para 500, `"warn"` para 404 y `"info"` para 200
+- [x] Una respuesta 200 trae un header `x-request-id` con formato UUID
+- [x] Dos requests distintas traen `x-request-id` **distintos**
+- [x] `customLogLevel` devuelve `"error"` para 500, `"warn"` para 404 y `"info"` para 200
       (testeá la función directamente, exportándola si hace falta — no dependas de capturar logs)
-- [ ] El serializer de `req` **no** incluye el query string: con
+- [x] El serializer de `req` **no** incluye el query string: con
       `url: "/v1/files/abc/content?t=secreto"`, la salida serializada no contiene `secreto`
-- [ ] `autoLogging.ignore` devuelve `true` para `/` y `false` para `/api/v1/conversations`
+- [x] `autoLogging.ignore` devuelve `true` para `/` y `false` para `/api/v1/conversations`
 
 ---
 
@@ -288,11 +288,11 @@ Y a ojo, que la salida sea JSON (una línea por request, parseable):
 npm run dev --workspace=backend
 ```
 
-- [ ] Los tests pasan y la cobertura no bajó de los thresholds de `vitest.config.ts`
-- [ ] Con `LOG_PRETTY=false`, cada request emite **una** línea JSON válida
-- [ ] Con `LOG_PRETTY=true`, la salida es legible y coloreada
-- [ ] Un `GET /` no emite ninguna línea
-- [ ] `grep -r "morgan" backend/src backend/package.json` no devuelve nada
+- [x] Los tests pasan y la cobertura no bajó de los thresholds de `vitest.config.ts`
+- [x] Con `LOG_PRETTY=false`, cada request emite **una** línea JSON válida
+- [x] Con `LOG_PRETTY=true`, la salida es legible y coloreada
+- [x] Un `GET /` no emite ninguna línea
+- [x] `grep -r "morgan" backend/src backend/package.json` no devuelve nada
 
 Commit sugerido: `feat(backend): logger estructurado con pino y access log JSON`
 

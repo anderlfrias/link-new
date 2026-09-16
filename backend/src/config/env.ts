@@ -41,6 +41,22 @@ const schema = yup.object({
       typeof originalValue === "string" ? originalValue.toLowerCase() === "true" : Boolean(value),
     )
     .default(true),
+  // Logging (ver LOGGING_PLAN.md). Opcionales con default a propósito: una
+  // instalación existente arranca sin tocar su .env.
+  LOG_LEVEL: yup
+    .string()
+    .oneOf(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+    .default("info"),
+  // `true` activa pino-pretty (salida coloreada para una terminal humana).
+  // Default false: en producción el log tiene que ser JSON por línea, que es
+  // lo que consume jq/Loki/cualquier agregador. Mismo patrón de parseo de
+  // booleano que S3_FORCE_PATH_STYLE.
+  LOG_PRETTY: yup
+    .boolean()
+    .transform((value, originalValue) =>
+      typeof originalValue === "string" ? originalValue.toLowerCase() === "true" : Boolean(value),
+    )
+    .default(false),
 });
 
 let env: yup.InferType<typeof schema>;
