@@ -289,4 +289,4 @@ Commits sugeridos (uno por bloque, el de auth primero):
 `test(backend): guardian que prohibe console.* en el backend`
 
 Al cerrar: marcar la Fase 2 ✅ en [LOGGING_PLAN.md](../LOGGING_PLAN.md) §5 y correr
-`/graphify backend/src --update`.
+`/graphify . --update`.

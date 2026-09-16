@@ -7,8 +7,13 @@ vi.mock("../config/prisma", () => ({
   prisma: { user: { findUnique: vi.fn() } },
 }));
 
+vi.mock("../config/request-context", () => ({
+  bindContext: vi.fn(),
+}));
+
 // Import posterior al mock, como pide vitest para que el mock ya esté armado.
 import { prisma } from "../config/prisma";
+import { bindContext } from "../config/request-context";
 import { attachInternalUser } from "./current-user.middleware";
 
 function buildMappedUser(overrides: Partial<MappedUser> = {}): MappedUser {
@@ -28,6 +33,7 @@ function buildMappedUser(overrides: Partial<MappedUser> = {}): MappedUser {
 describe("attachInternalUser", () => {
   beforeEach(() => {
     vi.mocked(prisma.user.findUnique).mockReset();
+    vi.mocked(bindContext).mockReset();
   });
 
   it("sin req.user (authenticate no corrió antes) -> UnauthorizedError, no consulta la DB", async () => {
@@ -38,6 +44,7 @@ describe("attachInternalUser", () => {
 
     expect(next.mock.calls[0][0]).toBeInstanceOf(UnauthorizedError);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(bindContext).not.toHaveBeenCalled();
   });
 
   it("email del JWT no tiene perfil local todavía -> UnauthorizedError 'User not found'", async () => {
@@ -51,10 +58,14 @@ describe("attachInternalUser", () => {
     const error = next.mock.calls[0][0];
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("User not found");
+    expect(bindContext).not.toHaveBeenCalled();
   });
 
   it("usuario encontrado -> agrega internalUserId a req.user y llama next() sin argumentos", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "internal-uuid-1" } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "internal-uuid-1",
+      email: "user@example.com",
+    } as never);
     const req = createMockRequest({ user: buildMappedUser() });
     const next = createMockNext();
 
@@ -62,6 +73,22 @@ describe("attachInternalUser", () => {
 
     expect(req.user?.internalUserId).toBe("internal-uuid-1");
     expect(next).toHaveBeenCalledWith();
+  });
+
+  it("usuario encontrado -> llama a bindContext con el userId interno y la identidad del actor", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "internal-uuid-1",
+      email: "user@example.com",
+    } as never);
+    const req = createMockRequest({ user: buildMappedUser() });
+    const next = createMockNext();
+
+    await attachInternalUser(req, createMockResponse(), next);
+
+    expect(bindContext).toHaveBeenCalledWith({
+      logFields: { userId: "internal-uuid-1" },
+      meta: { actorUserId: "internal-uuid-1", actorEmail: "user@example.com" },
+    });
   });
 
   it("la DB tira un error -> se propaga tal cual a next(), no se swallowea", async () => {
@@ -73,5 +100,6 @@ describe("attachInternalUser", () => {
     await attachInternalUser(req, createMockResponse(), next);
 
     expect(next).toHaveBeenCalledWith(dbError);
+    expect(bindContext).not.toHaveBeenCalled();
   });
 });

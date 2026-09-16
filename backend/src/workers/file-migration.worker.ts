@@ -2,6 +2,7 @@ import { FileProvider } from "@prisma/client";
 import * as FileRepository from "../modules/files/file.repository";
 import * as SettingsService from "../modules/settings/settings.service";
 import { getProvider, LocalDiskStorage, S3Storage } from "../storage";
+import { runWorkerTick } from "./worker-context";
 
 export interface MigrationSweepResult {
   migratedCount: number;
@@ -125,9 +126,9 @@ export async function tickFileMigration(): Promise<void> {
 /// Inicia el worker de migración progresiva en segundo plano.
 export function startFileMigrationWorker(): void {
   // Ejecutar primer tick al iniciar
-  void tickFileMigration();
+  void runWorkerTick("file-migration", tickFileMigration);
   // Revisar cada minuto si corresponde ejecutar según el intervalo de configuración
   setInterval(() => {
-    void tickFileMigration();
+    void runWorkerTick("file-migration", tickFileMigration);
   }, 60 * 1000);
 }

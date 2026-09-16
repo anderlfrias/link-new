@@ -1,5 +1,6 @@
 import * as MessageRepository from "../modules/messages/message.repository";
 import * as SettingsService from "../modules/settings/settings.service";
+import { runWorkerTick } from "./worker-context";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -25,8 +26,8 @@ async function runRetentionSweep(): Promise<void> {
 /// retención sobreviva reinicios con precisión, o corra en múltiples
 /// instancias, esto debería migrar a `node-cron` o una cola real.
 export function startMessageRetentionWorker(): void {
-  void runRetentionSweep();
+  void runWorkerTick("message-retention", runRetentionSweep);
   setInterval(() => {
-    void runRetentionSweep();
+    void runWorkerTick("message-retention", runRetentionSweep);
   }, SWEEP_INTERVAL_MS);
 }

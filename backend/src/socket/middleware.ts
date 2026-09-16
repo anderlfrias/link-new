@@ -1,3 +1,4 @@
+import { attachSocketContext } from "./request-context";
 import { authenticateSocket } from "./socket-auth.middleware";
 import { AppServer, SocketMiddleware } from "./types";
 
@@ -7,9 +8,11 @@ import { AppServer, SocketMiddleware } from "./types";
 ///      ver socket-auth.middleware.ts
 ///   2. autorización
 ///   3. validación
-///   4. logging
+///   4. logging — listo, ver request-context.ts (adjunta el logger/meta del
+///      socket; el contexto en sí se abre por evento con withRequestContext,
+///      no acá — ver el comentario de ese archivo)
 ///   5. rate limiting
-export const socketMiddlewares: SocketMiddleware[] = [authenticateSocket];
+export const socketMiddlewares: SocketMiddleware[] = [authenticateSocket, attachSocketContext];
 
 export function applyMiddlewares(io: AppServer, middlewares: SocketMiddleware[]): void {
   middlewares.forEach((middleware) => io.use(middleware));

@@ -1,4 +1,5 @@
 import { isConversationMember } from "./conversation.repository";
+import { withRequestContext } from "../../socket/request-context";
 import { joinConversation, leaveConversation } from "../../socket/rooms";
 import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/types";
 
@@ -37,14 +38,20 @@ type JoinAck = (response: { ok: true } | { ok: false; error: string }) => void;
 /// Conecta los listeners de este módulo a un socket recién conectado.
 /// Registrada explícitamente en socket/registry.ts (ver ese archivo).
 export function registerConversationSocket(socket: AppSocket, _io: AppServer): void {
-  socket.on(CONVERSATION_EVENTS.JOIN, (conversationId: string, ack?: JoinAck) => {
-    void handleJoin(socket, conversationId, ack);
-  });
+  socket.on(
+    CONVERSATION_EVENTS.JOIN,
+    withRequestContext(socket, (conversationId: string, ack?: JoinAck) => {
+      void handleJoin(socket, conversationId, ack);
+    }),
+  );
 
-  socket.on(CONVERSATION_EVENTS.LEAVE, (conversationId: string, ack?: JoinAck) => {
-    leaveConversation(socket, conversationId);
-    ack?.({ ok: true });
-  });
+  socket.on(
+    CONVERSATION_EVENTS.LEAVE,
+    withRequestContext(socket, (conversationId: string, ack?: JoinAck) => {
+      leaveConversation(socket, conversationId);
+      ack?.({ ok: true });
+    }),
+  );
 }
 
 async function handleJoin(socket: AppSocket, conversationId: string, ack?: JoinAck): Promise<void> {

@@ -297,4 +297,4 @@ npm run dev --workspace=backend
 Commit sugerido: `feat(backend): logger estructurado con pino y access log JSON`
 
 Al cerrar: marcar la Fase 0 como ✅ en la tabla de [LOGGING_PLAN.md](../LOGGING_PLAN.md) §5 con la
-fecha, y correr `/graphify backend/src --update`.
+fecha, y correr `/graphify . --update`.

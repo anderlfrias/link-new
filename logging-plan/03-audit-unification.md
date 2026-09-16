@@ -568,4 +568,4 @@ Commits sugeridos:
 `feat(backend): auditar cambios de configuracion y borrado admin de archivos`
 
 Al cerrar: marcar la Fase 3 ✅ en [LOGGING_PLAN.md](../LOGGING_PLAN.md) §5 y correr
-`/graphify backend/src --update`.
+`/graphify . --update`.

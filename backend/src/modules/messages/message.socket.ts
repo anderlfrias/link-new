@@ -1,5 +1,6 @@
 import { isConversationMember } from "../conversations/conversation.repository";
 import { SOCKET_LIFECYCLE_EVENTS } from "../../socket/events";
+import { withRequestContext } from "../../socket/request-context";
 import { conversationRoomName } from "../../socket/rooms";
 import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/types";
 
@@ -23,26 +24,35 @@ export function registerMessageSocket(socket: AppSocket, _io: AppServer): void {
   // estado de negocio, por eso vive acá y no en ninguna tabla.
   const typingIn = new Set<string>();
 
-  socket.on(MESSAGE_EVENTS.TYPING_START, (conversationId: string) => {
-    typingIn.add(conversationId);
-    void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_START);
-  });
+  socket.on(
+    MESSAGE_EVENTS.TYPING_START,
+    withRequestContext(socket, (conversationId: string) => {
+      typingIn.add(conversationId);
+      void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_START);
+    }),
+  );
 
-  socket.on(MESSAGE_EVENTS.TYPING_STOP, (conversationId: string) => {
-    typingIn.delete(conversationId);
-    void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_STOP);
-  });
+  socket.on(
+    MESSAGE_EVENTS.TYPING_STOP,
+    withRequestContext(socket, (conversationId: string) => {
+      typingIn.delete(conversationId);
+      void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_STOP);
+    }),
+  );
 
   // Si el socket se cae mientras "escribía" (crash, cerrar la pestaña, perder
   // la red) nadie manda typing_stop — sin esto, el indicador queda pegado en
   // "escribiendo..." para siempre en el resto de los clientes. `disconnecting`
   // (no `disconnect`) porque todavía hay que estar en la room para poder
   // emitirle al resto.
-  socket.on(SOCKET_LIFECYCLE_EVENTS.DISCONNECTING, () => {
-    typingIn.forEach((conversationId) => {
-      void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_STOP);
-    });
-  });
+  socket.on(
+    SOCKET_LIFECYCLE_EVENTS.DISCONNECTING,
+    withRequestContext(socket, () => {
+      typingIn.forEach((conversationId) => {
+        void relayTyping(socket, conversationId, MESSAGE_EVENTS.TYPING_STOP);
+      });
+    }),
+  );
 }
 
 async function relayTyping(socket: AppSocket, conversationId: string, event: string): Promise<void> {

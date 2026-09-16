@@ -107,21 +107,21 @@ export function getRequestMeta(): RequestMeta {
 }
 ```
 
-- [ ] Archivo creado
+- [x] Archivo creado
 
 ### Tests obligatorios — `backend/src/config/request-context.test.ts`
 
-- [ ] `getLogger()` sin contexto devuelve el logger raíz (no tira, no es `undefined`)
-- [ ] `getRequestMeta()` sin contexto devuelve `{}`
-- [ ] Dentro de `runWithContext(child, meta, ...)`, `getLogger()` devuelve ese child y
+- [x] `getLogger()` sin contexto devuelve el logger raíz (no tira, no es `undefined`)
+- [x] `getRequestMeta()` sin contexto devuelve `{}`
+- [x] Dentro de `runWithContext(child, meta, ...)`, `getLogger()` devuelve ese child y
       `getRequestMeta()` devuelve ese meta
-- [ ] El contexto **sobrevive un `await`**: `await runWithContext(l, {}, async () => { await tick(); return getLogger(); })` sigue devolviendo `l`
-- [ ] Dos `runWithContext` concurrentes (`Promise.all`) **no se contaminan** entre sí — cada uno ve
+- [x] El contexto **sobrevive un `await`**: `await runWithContext(l, {}, async () => { await tick(); return getLogger(); })` sigue devolviendo `l`
+- [x] Dos `runWithContext` concurrentes (`Promise.all`) **no se contaminan** entre sí — cada uno ve
       su propio logger y su propio meta. Este es el test que importa: es la propiedad que
       justifica usar ALS en lugar de una variable de módulo.
-- [ ] `bindContext({ logFields })` afecta a los `getLogger()` posteriores del mismo contexto
-- [ ] `bindContext({ meta })` **mergea** sobre el meta existente, no lo reemplaza
-- [ ] `bindContext` fuera de todo contexto no tira
+- [x] `bindContext({ logFields })` afecta a los `getLogger()` posteriores del mismo contexto
+- [x] `bindContext({ meta })` **mergea** sobre el meta existente, no lo reemplaza
+- [x] `bindContext` fuera de todo contexto no tira
 
 ---
 
@@ -172,19 +172,19 @@ de asignar `req.user.internalUserId`:
     });
 ```
 
-- [ ] `request-context.middleware.ts` creado y montado justo después de `httpLogger`
-- [ ] `bindContext` agregado en `attachInternalUser`
+- [x] `request-context.middleware.ts` creado y montado justo después de `httpLogger`
+- [x] `bindContext` agregado en `attachInternalUser`
 
 ### Tests obligatorios
 
 - `request-context.middleware.test.ts`:
-  - [ ] Llama a `next()` exactamente una vez
-  - [ ] Dentro de `next()`, `getLogger()` devuelve un logger distinto del raíz
-  - [ ] Dentro de `next()`, `getRequestMeta()` trae `ip`, `userAgent` y `requestId` de la request
+  - [x] Llama a `next()` exactamente una vez
+  - [x] Dentro de `next()`, `getLogger()` devuelve un logger distinto del raíz
+  - [x] Dentro de `next()`, `getRequestMeta()` trae `ip`, `userAgent` y `requestId` de la request
 - Extender `current-user.middleware.test.ts` (ya existe):
-  - [ ] Con usuario encontrado, se llamó a `bindContext` con `logFields.userId` = UUID interno y
+  - [x] Con usuario encontrado, se llamó a `bindContext` con `logFields.userId` = UUID interno y
         `meta` con `actorUserId` = UUID interno y `actorEmail` = email del usuario
-  - [ ] Con usuario **no** encontrado (`UnauthorizedError`), **no** se llamó a `bindContext`
+  - [x] Con usuario **no** encontrado (`UnauthorizedError`), **no** se llamó a `bindContext`
 
 ---
 
@@ -253,25 +253,25 @@ export const socketMiddlewares: SocketMiddleware[] = [authenticateSocket, attach
 > con `userId` y `actorEmail`. Actualizá el comentario numerado de `middleware.ts` para reflejar
 > que el punto 4 ya está hecho.
 
-- [ ] `socket/request-context.ts` creado
-- [ ] `attachSocketContext` agregado a `socketMiddlewares` después de `authenticateSocket`
-- [ ] Comentario de la cadena de middlewares actualizado (el punto 4 ya no es "a futuro")
-- [ ] `socket.data.logger` y `socket.data.meta` declarados en `types.ts`
-- [ ] Los handlers existentes de `conversation.socket.ts` y `message.socket.ts` envueltos en
+- [x] `socket/request-context.ts` creado
+- [x] `attachSocketContext` agregado a `socketMiddlewares` después de `authenticateSocket`
+- [x] Comentario de la cadena de middlewares actualizado (el punto 4 ya no es "a futuro")
+- [x] `socket.data.logger` y `socket.data.meta` declarados en `types.ts`
+- [x] Los handlers existentes de `conversation.socket.ts` y `message.socket.ts` envueltos en
       `withRequestContext` (`presence.socket.ts` hoy no registra listeners, solo hace el join — no
       necesita cambio)
 
 ### Tests obligatorios — `backend/src/socket/request-context.test.ts`
 
-- [ ] `attachSocketContext` deja `socket.data.logger` y `socket.data.meta` definidos y llama a `next()`
-- [ ] Con `socket.data.user` presente, el child se creó con `userId` y `socketId`, y el meta trae
+- [x] `attachSocketContext` deja `socket.data.logger` y `socket.data.meta` definidos y llama a `next()`
+- [x] Con `socket.data.user` presente, el child se creó con `userId` y `socketId`, y el meta trae
       `actorUserId` y `actorEmail`
-- [ ] Sin `socket.data.user` (socket sin autenticar), no tira y `userId`/`actorUserId`/`actorEmail`
+- [x] Sin `socket.data.user` (socket sin autenticar), no tira y `userId`/`actorUserId`/`actorEmail`
       quedan `undefined`
-- [ ] El meta trae `ip` y `userAgent` tomados del `handshake`
-- [ ] `withRequestContext` invoca el handler con los mismos argumentos que recibió
-- [ ] Dentro del handler, `getLogger()` devuelve `socket.data.logger` y `getRequestMeta()` el meta
-- [ ] Si `socket.data.logger` no está seteado, `withRequestContext` cae al logger raíz sin tirar
+- [x] El meta trae `ip` y `userAgent` tomados del `handshake`
+- [x] `withRequestContext` invoca el handler con los mismos argumentos que recibió
+- [x] Dentro del handler, `getLogger()` devuelve `socket.data.logger` y `getRequestMeta()` el meta
+- [x] Si `socket.data.logger` no está seteado, `withRequestContext` cae al logger raíz sin tirar
 
 ---
 
@@ -312,15 +312,15 @@ export function startMessageRetentionWorker(): void {
 }
 ```
 
-- [ ] `worker-context.ts` creado
-- [ ] Los 3 workers envueltos (llamada inicial **y** el `setInterval` de cada uno)
+- [x] `worker-context.ts` creado
+- [x] Los 3 workers envueltos (llamada inicial **y** el `setInterval` de cada uno)
 
 ### Tests obligatorios — `backend/src/workers/worker-context.test.ts`
 
-- [ ] Dentro de `fn`, `getLogger()` no es el logger raíz
-- [ ] Dentro de `fn`, `getRequestMeta()` devuelve `{}` (sin IP ni actor)
-- [ ] Dos llamadas seguidas generan `tickId` distintos
-- [ ] Si `fn` rechaza, la promesa de `runWorkerTick` rechaza (no se traga el error en silencio)
+- [x] Dentro de `fn`, `getLogger()` no es el logger raíz
+- [x] Dentro de `fn`, `getRequestMeta()` devuelve `{}` (sin IP ni actor)
+- [x] Dos llamadas seguidas generan `tickId` distintos
+- [x] Si `fn` rechaza, la promesa de `runWorkerTick` rechaza (no se traga el error en silencio)
 
 ---
 
@@ -368,21 +368,21 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
 > líneas por error a propósito, atadas por el mismo `requestId`: una dice *qué* devolvió la API,
 > la otra *por qué*. Colapsarlas obliga a elegir entre perder el timing o perder el stack.
 
-- [ ] `errorHandler` reescrito
-- [ ] Ya no queda ningún `console.` en `error.middleware.ts`
-- [ ] El **mensaje que sale al cliente no cambió** en ninguno de los tres caminos (es API pública,
+- [x] `errorHandler` reescrito
+- [x] Ya no queda ningún `console.` en `error.middleware.ts`
+- [x] El **mensaje que sale al cliente no cambió** en ninguno de los tres caminos (es API pública,
       ver `backend/API.md`)
 
 ### Tests obligatorios — extender `error.middleware.test.ts` (ya existe)
 
 Mockear `getLogger` con `vi.mock("../config/request-context")` devolviendo un logger espía.
 
-- [ ] `AppError` 4xx → status y body iguales a los de antes, y se logueó en **`warn`**
-- [ ] `AppError` 5xx (`ServiceUnavailableError`) → se logueó en **`error`** con el `err` incluido
-- [ ] `MulterError` → 400, body con el mensaje de multer, log en `warn`
-- [ ] Error desconocido (`new Error("boom")`) → 500, body **genérico**
+- [x] `AppError` 4xx → status y body iguales a los de antes, y se logueó en **`warn`**
+- [x] `AppError` 5xx (`ServiceUnavailableError`) → se logueó en **`error`** con el `err` incluido
+- [x] `MulterError` → 400, body con el mensaje de multer, log en `warn`
+- [x] Error desconocido (`new Error("boom")`) → 500, body **genérico**
       (`{ error: "Internal server error" }`, nunca el mensaje interno), log en `error`
-- [ ] El log de un 4xx **no** incluye stack
+- [x] El log de un 4xx **no** incluye stack
 
 ---
 
@@ -400,12 +400,12 @@ A ojo, con el server levantado: provocar un 404 (`curl localhost:4000/api/v1/nop
 las dos líneas emitidas comparten el mismo `requestId`, y que ese `requestId` coincide con el
 header `x-request-id` de la respuesta.
 
-- [ ] Tests en verde, cobertura sobre los thresholds
-- [ ] Mismo `requestId` en las dos líneas de un error y en el header de respuesta
-- [ ] Una línea de worker lleva `worker` y `tickId`, y **no** lleva `requestId`
-- [ ] Una request autenticada emite líneas con `userId` después de `attachInternalUser`
+- [x] Tests en verde, cobertura sobre los thresholds
+- [x] Mismo `requestId` en las dos líneas de un error y en el header de respuesta
+- [x] Una línea de worker lleva `worker` y `tickId`, y **no** lleva `requestId`
+- [x] Una request autenticada emite líneas con `userId` después de `attachInternalUser`
 
 Commit sugerido: `feat(backend): contexto de request con correlacion de logs`
 
 Al cerrar: marcar la Fase 1 ✅ en [LOGGING_PLAN.md](../LOGGING_PLAN.md) §5 y correr
-`/graphify backend/src --update`.
+`/graphify . --update`.

@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { corsOrigin } from "./config/cors-origins";
 import { errorHandler } from "./middlewares/error.middleware";
 import { httpLogger } from "./middlewares/http-logger.middleware";
+import { requestContext } from "./middlewares/request-context.middleware";
 import routes from "./route";
 
 const app = express();
@@ -22,6 +23,7 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({ origin: corsOrigin }));
 app.use(httpLogger);
+app.use(requestContext);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

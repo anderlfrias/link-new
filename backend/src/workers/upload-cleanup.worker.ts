@@ -2,6 +2,7 @@ import { FileUploadStatus } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import * as SettingsService from "../modules/settings/settings.service";
 import { getProvider } from "../storage";
+import { runWorkerTick } from "./worker-context";
 
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000; // Cada 1 hora
 
@@ -153,10 +154,18 @@ export async function runUploadCleanupSweep(): Promise<{
   return { expiredSessionsCount, orphanFilesCount, purgedFilesCount };
 }
 
+// `runUploadCleanupSweep` devuelve un resumen de conteos (lo que sus propios
+// tests assertean) — `runWorkerTick` exige `() => Promise<void>`, así que acá
+// se descarta ese resultado. El resumen sigue disponible para quien llame a
+// `runUploadCleanupSweep` directamente.
+async function tick(): Promise<void> {
+  await runUploadCleanupSweep();
+}
+
 /// Inicia el worker de limpieza automática en segundo plano.
 export function startUploadCleanupWorker(): void {
-  void runUploadCleanupSweep();
+  void runWorkerTick("upload-cleanup", tick);
   setInterval(() => {
-    void runUploadCleanupSweep();
+    void runWorkerTick("upload-cleanup", tick);
   }, SWEEP_INTERVAL_MS);
 }
