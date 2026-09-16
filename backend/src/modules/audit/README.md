@@ -48,3 +48,16 @@ Si se necesita registrar una nueva acción en el sistema:
 3. Documentar la fila correspondiente en la tabla de este `README.md`.
 
 Los tres pasos son obligatorios.
+
+## Consulta y API Administrativa
+
+El endpoint `GET /api/v1/admin/audit-logs` (ver [API.md](../../../API.md#15-auditoría-del-sistema-admin)) permite a los administradores del sistema auditar accesos y cambios:
+- **Filtro de privacidad por omisión**: Si no se indica `action`, solo se retornan `LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS` y `ADMIN_DELETE_FILE`.
+- **Paginación por cursor**: Utiliza `before` para paginar cronológicamente de forma estable.
+- **Privacidad de conversaciones**: El nombre de la conversación solo se expone para conversaciones grupales (`GROUP`), devolviendo `null` para chats individuales o privados.
+
+## Política de Retención y Purga Física
+
+- Configurable mediante el campo `auditLogRetentionDays` en `AppSettings` (`null` = deshabilitado por defecto, conservando los registros indefinidamente por cumplimiento).
+- Ejecutado diariamente por el worker `src/workers/audit-retention.worker.ts`.
+- **Borrado Físico**: A diferencia de los mensajes (que usan borrado lógico con `deletedAt`), el audit trail se elimina físicamente con `prisma.auditLog.deleteMany` para garantizar que la base no crezca indefinidamente y que no existan "audit logs blandos".

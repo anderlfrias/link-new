@@ -165,17 +165,17 @@ El modelo de datos del chat está definido en [`prisma/schema.prisma`](./prisma/
 * **Message** — un mensaje dentro de una conversación, enviado por un usuario (`sender` → `User`). Puede tener archivos adjuntos (a través de `MessageFile`) y puede aparecer referenciado en el historial de auditoría.
 * **StoredFile** — un archivo físico almacenado por el sistema, sin importar quién lo use ni para qué (ver [Gestión de Archivos](#gestión-de-archivos)).
 * **MessageFile** — la relación entre un mensaje y un archivo (`StoredFile`) que usa. No duplica información del archivo.
-* **ChatAuditLog** — el historial de acciones relevantes del chat (crear conversación, agregar/quitar miembro, enviar/editar/borrar mensaje, cambiar nombre o imagen), con quién la ejecutó (`user` → `User`) y, opcionalmente, sobre qué conversación o mensaje.
+* **AuditLog** — el historial y audit trail normativo del sistema (mapeado físicamente a `chat_audit_logs`), registrando eventos de acceso (`LOGIN`, `LOGIN_FAILED`), cambios administrativos (`UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`) y operaciones sobre conversaciones/mensajes, con actor (`user`), IP, user agent y request ID.
 
 ### Relaciones principales
 
-* `User` 1—N `Conversation` (como creador), 1—N `ConversationMember`, 1—N `Message` (como remitente y, opcionalmente, como quien borró un mensaje ajeno), 1—N `ChatAuditLog` y 1—N `StoredFile` (como quien lo subió); y N—1 `StoredFile` a través de `avatarFile`.
+* `User` 1—N `Conversation` (como creador), 1—N `ConversationMember`, 1—N `Message` (como remitente y, opcionalmente, como quien borró un mensaje ajeno), 1—N `AuditLog` y 1—N `StoredFile` (como quien lo subió); y N—1 `StoredFile` a través de `avatarFile`.
 * `Conversation` 1—N `ConversationMember` y 1—N `Message`; y N—1 `StoredFile` a través de `imageFile`.
 * `ConversationMember` N—1 `Conversation` y N—1 `User`.
-* `Message` N—1 `Conversation`, N—1 `User` (remitente), 1—N `MessageFile`, y puede tener 0—N `ChatAuditLog` asociados.
+* `Message` N—1 `Conversation`, N—1 `User` (remitente), 1—N `MessageFile`, y puede tener 0—N `AuditLog` asociados.
 * `StoredFile` 1—N `MessageFile`, y puede ser referenciado por 0—N `User.avatarFile` y 0—N `Conversation.imageFile`.
 * `MessageFile` N—1 `Message` y N—1 `StoredFile`.
-* `ChatAuditLog` referencia opcionalmente a `Conversation` y a `Message`, y siempre a un `User`.
+* `AuditLog` referencia opcionalmente a `Conversation` y a `Message`, y opcionalmente a `User` (o `actorEmail` directo).
 
 ### ¿Por qué existen `lastReadMessageId`/`lastMessageAt` y sus contrapartes `lastDeliveredMessageId`/`lastMessageSenderId`?
 
@@ -191,9 +191,10 @@ Detalle completo (cómo se combinan en un estado por mensaje, quién actualiza q
 
 El estado de "está escribiendo" es efímero y de muy alta frecuencia (cambia varias veces por segundo mientras alguien teclea) y solo importa mientras la conexión de socket está activa. Persistirlo en PostgreSQL agregaría escrituras constantes sin ningún valor histórico. Este tipo de estado en tiempo real se maneja directamente en memoria a través de Socket.IO (ver `src/socket` y el `*.socket.ts` de cada módulo), no en el modelo de datos.
 
-### Diferencia entre `Message` y `ChatAuditLog`
+### Diferencia entre `Message` y `AuditLog`
 
-`Message` es contenido del chat: lo que los usuarios ven en la conversación. `ChatAuditLog` es metadata de auditoría sobre eventos del sistema: quién hizo qué y cuándo (crear la conversación, agregar/quitar un miembro, editar o borrar un mensaje, cambiar el nombre o la imagen del grupo). Un mismo evento puede generar ambas cosas a la vez — por ejemplo, "Juan agregó a Pedro" puede insertarse como un `Message` de tipo `SYSTEM` (para que se vea en el chat) *y* como un `ChatAuditLog` con acción `ADD_MEMBER` (para el historial de auditoría) — pero conceptualmente son cosas distintas: uno es visible para los usuarios, el otro es un registro interno.
+`Message` es contenido del chat: lo que los usuarios ven en la conversación. `AuditLog` es metadata de auditoría sobre eventos del sistema: quién hizo qué y cuándo (crear la conversación, agregar/quitar un miembro, editar o borrar un mensaje, cambiar el nombre o la imagen del grupo, login, configuraciones). Un mismo evento puede generar ambas cosas a la vez — por ejemplo, "Juan agregó a Pedro" puede insertarse como un `Message` de tipo `SYSTEM` (para que se vea en el chat) *y* como un `AuditLog` con acción `ADD_MEMBER` (para el historial de auditoría) — pero conceptualmente son cosas distintas: uno es visible para los usuarios, el otro es un registro interno.
+Por regla de privacidad no negociable (§4 de `LOGGING_PLAN.md`), `AuditLog` **nunca** almacena el contenido de los mensajes.
 
 ### Propósito de los mensajes de tipo `SYSTEM`
 
@@ -386,6 +387,30 @@ rclone sync /var/seaweedfs/data remote_backup:seaweedfs-data/ --fast-list
   GROUP BY status;
   ```
 * **Migración de almacenamiento**: Si se está migrando de `LOCAL` a `S3`, verificar en `AppSettings` que `fileMigrationDeleteLocalAfterCommit` esté habilitado si se requiere liberar el espacio en disco local inmediatamente tras verificar la copia en S3.
+
+### 4. "Inspección de logs y diagnóstico en producción"
+
+El backend emite logs estructurados en formato JSON por línea a `stdout` (Pino). PM2 supervisa el proceso y `pm2-logrotate` rota los archivos:
+
+* **¿Dónde están los logs?**
+  Para ver la salida en vivo o reciente:
+  ```bash
+  pm2 logs link-backend --lines 100 --raw
+  ```
+  Los archivos residen físicamente en `~/.pm2/logs/link-backend-out.log` y `-error.log`.
+
+* **¿Cómo filtrar por nivel o buscar errores?**
+  Usando `jq` sobre la salida JSON (nivel 30 = info, 40 = warn, 50 = error, 60 = fatal):
+  ```bash
+  pm2 logs link-backend --lines 200 --raw | jq 'select(.level >= 50)'
+  ```
+
+* **¿Cómo rastrear una petición puntual?**
+  Cada petición HTTP genera y propaga un `requestId` (devuelto al cliente en el header `x-request-id` de la respuesta). Si un usuario reporta un fallo con su ID de petición:
+  ```bash
+  pm2 logs link-backend --lines 500 --raw | jq 'select(.requestId == "d8a2bc41-...")'
+  ```
+  Esto devolverá exactamente la traza completa (inicio de request HTTP, logs internos de servicios, consultas lentas y respuesta final con tiempo de procesamiento).
 
 ---
 

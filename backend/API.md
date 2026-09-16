@@ -61,7 +61,13 @@ Todas las fechas (`createdAt`, `lastReadAt`, `at` en eventos, etc.) son strings 
 
 ### Paginación
 
-`GET .../messages` (sección 4.2), `GET .../messages/files` (sección 6.4) y `GET /admin/files` (sección 13.1) paginan por cursor — el resto de los listados (conversaciones, miembros) no pagina porque en la práctica son chicos.
+`GET .../messages` (sección 4.2), `GET .../messages/files` (sección 6.4), `GET /admin/files` (sección 13.1) y `GET /admin/audit-logs` (sección 15.1) paginan por cursor — el resto de los listados (conversaciones, miembros) no pagina porque en la práctica son chicos.
+
+### Header de correlación (`x-request-id`)
+
+**Todas** las respuestas HTTP del backend devuelven la cabecera `x-request-id` con un UUID generado automáticamente por request (o propagado si el cliente envía uno en la petición). Este identificador es el mismo que figura en cada línea de log estructurado del backend y en los registros de auditoría (`AuditLog.requestId`).
+
+Si un usuario reporta un problema o error en la interfaz, citar este valor permite encontrar en un solo paso todas las líneas de log, advertencias y excepciones vinculadas a esa petición exacta en el servidor.
 
 ---
 
@@ -1011,3 +1017,62 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, m
 `storage` = archivos activos subidos por ese usuario (bytes + cantidad). `activity.groupsAdministeredCount` = en cuántos `GROUP` es admin de grupo (`ConversationMember.isAdmin`, sección 4.9), no cuántos creó. `syncProfileWithIntegration` = si el perfil sigue sincronizado desde EXTERNAL_AUTH o ya fue editado localmente.
 
 **Esta vista nunca muestra el rol de un usuario** (no hay forma de saberlo salvo para quien está logueado en ese momento — ver `users/README.md` para el porqué). Todo esto es de **solo lectura**: para cambiar nombre, foto o cualquier otro dato de un usuario hay que hacerlo desde EXTERNAL_AUTH, no desde este API.
+
+---
+
+## 15. Auditoría del sistema (admin)
+
+Base HTTP: `/api/v1/admin/audit-logs`. Requiere rol `"admin"` (ver sección 2) — `403` si no lo tenés. Ver [`audit/README.md`](./src/modules/audit/README.md) para el detalle completo de la arquitectura del audit trail y su esquema cerrado de metadata.
+
+A diferencia de los logs técnicos de la aplicación, este endpoint expone el **audit trail de cumplimiento normativo** del sistema: eventos administrativos, accesos de usuarios y operaciones sobre conversaciones y mensajes.
+
+### 15.1 `GET /` — Listar eventos de auditoría
+
+Query params (todos opcionales):
+- `action`: filtro por acción de auditoría (`LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`, `CREATE_CONVERSATION`, etc.). Puede enviarse repetido o separado por comas para filtrar por múltiples acciones. **Por defecto (si se omite)**, la API aplica un filtro de privacidad que devuelve únicamente las acciones administrativas y de acceso (`LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`).
+- `actor`: busca texto en el nombre, email o username del usuario que ejecutó la acción, o en el `actorEmail` registrado.
+- `userId`: filtra por el ID interno del usuario actor.
+- `targetType`: filtra por el tipo de entidad afectada (ej. `"AppSettings"`, `"StoredFile"`).
+- `from` / `to`: rango de fechas sobre `createdAt` (en formato string ISO 8601 UTC o `YYYY-MM-DD`).
+- `before`: ID del registro para paginación por cursor.
+- `limit`: cantidad de registros por página (número entero entre 1 y 200, default `50`).
+
+#### Regla de Privacidad en `conversationName`
+> [!IMPORTANT]
+> Para proteger la privacidad de los usuarios, el campo `conversationName` solo devuelve el nombre real cuando la conversación es de tipo `GROUP`. Para conversaciones privadas (`PRIVATE`) o mensajes guardados (`SELF`), `conversationName` **siempre se devuelve como `null`**. Un cliente nunca debe asumir que este campo viene poblado para chats individuales.
+
+Respuesta `200 OK`:
+```json
+{
+  "logs": [
+    {
+      "id": "audit-log-uuid",
+      "action": "UPDATE_SETTINGS",
+      "targetType": "AppSettings",
+      "targetId": "singleton",
+      "createdAt": "2026-09-16T15:30:00.000Z",
+      "ip": "192.168.1.100",
+      "userAgent": "Mozilla/5.0 ...",
+      "requestId": "req-uuid",
+      "actorEmail": "admin@empresa.com",
+      "user": {
+        "id": "user-uuid",
+        "name": "Administrador",
+        "email": "admin@empresa.com"
+      },
+      "conversationId": null,
+      "conversationName": null,
+      "conversationType": null,
+      "metadata": {
+        "changed": {
+          "auditLogRetentionDays": { "from": null, "to": 90 }
+        }
+      }
+    }
+  ],
+  "nextCursor": "audit-log-uuid-ultimo"
+}
+```
+
+`nextCursor` será `null` si no hay más páginas de resultados posteriores.
+

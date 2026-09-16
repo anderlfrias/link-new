@@ -92,6 +92,14 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 | `429` | Se agotó el cupo de intentos de login — por usuario (5 cada 15 min, `loginUserRateLimiter`) o por IP (20 cada 15 min, `loginIpRateLimiter`), ver `rate-limit.middleware.ts` |
 | `503` | EXTERNAL_AUTH no respondió (caído, timeout de 5s) o devolvió un status inesperado (5xx u otro distinto de `200`/`401`/`403`) |
 
+### Auditoría de autenticación
+
+Cada intento de autenticación se registra en el audit trail normativo (`AuditLog`):
+- **Login exitoso (`LOGIN`)**: Se registra con `userId` (el ID interno del usuario en la base local), `actorEmail` (el email resuelto), `ip`, `userAgent` y `requestId`. No contiene metadata sensible.
+- **Login fallido (`LOGIN_FAILED`)**: Se registra con `userId: null`, `actorEmail` (el usuario o email enviado en el intento), `ip`, `userAgent`, `requestId` y la razón técnica en metadata (`{ reason: "forbidden_by_provider" | "invalid_credentials" | "provider_error" | "provider_unreachable" }`).
+- **Ambigüedad de EXTERNAL_AUTH**: `forbidden_by_provider` refleja que el proveedor retornó 403 / "forbidden". Como EXTERNAL_AUTH no distingue entre "contraseña incorrecta" y "usuario sin permisos para esta app", este valor **no** debe interpretarse de forma taxativa como contraseña errónea.
+- **Privacidad estricta**: Las contraseñas, tokens y respuestas completas de EXTERNAL_AUTH **nunca** se almacenan en la tabla de auditoría ni en los logs de aplicación.
+
 ## Desacoplar el perfil del proveedor externo (`syncProfileWithIntegration`)
 
 `User.syncProfileWithIntegration` (`schema.prisma`, default `true`) decide si el login (y la sincronización de contactos vía `syncAppUsers`, ver más abajo) sigue actualizando `name`/avatar desde el proveedor de identidad externo configurado — hoy EXTERNAL_AUTH, pero el mecanismo no asume cuál; podría ser cualquier otro mañana sin tocar este flag. Pasa a `false` automáticamente la primera vez que el usuario cambia su nombre o su foto **acá** (`auth.service.ts`: `updateOwnName`/`setProfilePicture`/`removeProfilePicture`, todas vía `setLocalName`/`setLocalAvatar` en `auth.repository.ts`) — desde ese momento esos dos campos viven únicamente en esta base: ni el login ni `syncAppUsers` vuelven a pisarlos con lo que diga el proveedor externo, sin importar cuántas veces ese usuario inicie sesión.

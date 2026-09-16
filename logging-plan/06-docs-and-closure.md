@@ -18,9 +18,9 @@ está asumiendo mal.
 Documentar también el header de respuesta `x-request-id` que ahora devuelve **toda** la API
 (Fase 0), y para qué sirve: es el dato que un usuario puede citar al reportar un error.
 
-- [ ] `GET /v1/admin/audit-logs` documentado
-- [ ] Nota de privacidad de `conversationName` incluida
-- [ ] `x-request-id` documentado como header de respuesta general
+- [x] `GET /v1/admin/audit-logs` documentado
+- [x] Nota de privacidad de `conversationName` incluida
+- [x] `x-request-id` documentado como header de respuesta general
 
 > ⚠️ **Cuidado al correr graphify después de editar `API.md`.** Es un documento compartido por
 > muchos temas: al re-extraer, hay que pasarle la lista **completa** de nodos existentes del
@@ -34,15 +34,15 @@ Documentar también el header de respuesta `x-request-id` que ahora devuelve **t
 El repo documenta cada módulo en su propio `README.md` y esa es la convención que hay que respetar
 (ver `backend/src/modules/*/README.md` y `backend/src/socket/README.md`).
 
-- [ ] **`backend/src/modules/audit/README.md`** (creado en la Fase 3) completo y al día: la tabla
+- [x] **`backend/src/modules/audit/README.md`** (creado en la Fase 3) completo y al día: la tabla
       de acciones con el `metadata` de cada una, la distinción log-de-aplicación vs audit-trail, el
       por qué del `@@map("chat_audit_logs")` histórico, y las **tres** cosas que hay que tocar para
       agregar una acción nueva (enum, `AuditMetadataMap`, tabla del README)
-- [ ] **`backend/src/socket/README.md`**: su comentario de la cadena de middlewares numerada ahora
+- [x] **`backend/src/socket/README.md`**: su comentario de la cadena de middlewares numerada ahora
       incluye el de contexto/logging como hecho, no como pendiente
-- [ ] **`backend/src/modules/settings/README.md`**: `auditLogRetentionDays` documentado junto a los
+- [x] **`backend/src/modules/settings/README.md`**: `auditLogRetentionDays` documentado junto a los
       otros campos de retención, con la advertencia de que el borrado es irreversible
-- [ ] **`backend/src/modules/auth/README.md`**: que el login se audita (`LOGIN` / `LOGIN_FAILED`),
+- [x] **`backend/src/modules/auth/README.md`**: que el login se audita (`LOGIN` / `LOGIN_FAILED`),
       y la nota de que `forbidden_by_provider` **no** equivale a "contraseña incorrecta" — es la
       misma ambigüedad de EXTERNAL_AUTH que ese README ya explica para el mensaje de error al usuario
 
@@ -50,12 +50,12 @@ El repo documenta cada módulo en su propio `README.md` y esa es la convención 
 
 ## 6.3 Documentación para operar
 
-- [ ] **`backend/.env.example`** (o `backend/README.md` si no existe): `LOG_LEVEL` y `LOG_PRETTY`
+- [x] **`backend/.env.example`** (o `backend/README.md` si no existe): `LOG_LEVEL` y `LOG_PRETTY`
       documentadas, con el valor recomendado para desarrollo (`debug` / `true`) y para producción
       (`info` / `false`)
-- [ ] **`ecosystem.config.js`**: el comentario de cabecera menciona `pm2-logrotate` como paso
+- [x] **`ecosystem.config.js`**: el comentario de cabecera menciona `pm2-logrotate` como paso
       necesario del deploy, y por qué `time` difiere entre backend y frontend
-- [ ] Un párrafo en `backend/README.md` (o donde viva la doc de operación) que responda las tres
+- [x] Un párrafo en `backend/README.md` (o donde viva la doc de operación) que responda las tres
       preguntas que se hace alguien a las 3 de la mañana:
       **¿dónde están los logs?** (`pm2 logs link-backend`),
       **¿cómo filtro?** (`pm2 logs link-backend --raw | jq 'select(.level >= 50)'`),
@@ -86,21 +86,21 @@ entre sí. Antes de loguear o auditar algo nuevo, leé [LOGGING_PLAN.md](LOGGING
 Para agregar una acción al audit trail, ver `backend/src/modules/audit/README.md`.
 ```
 
-- [ ] La sección "Plan activo: logging y auditoría" de `AGENTS.md` reemplazada por la regla
+- [x] La sección "Plan activo: logging y auditoría" de `AGENTS.md` reemplazada por la regla
       permanente (ya no debe describir la fuga de credenciales como algo pendiente)
-- [ ] El link a `LOGGING_PLAN.md` desde `AGENTS.md` funciona
+- [x] El link a `LOGGING_PLAN.md` desde `AGENTS.md` funciona
 
 ---
 
 ## 6.5 Cierre del plan
 
-- [ ] Las 7 fases marcadas ✅ con fecha en la tabla de [LOGGING_PLAN.md](../LOGGING_PLAN.md) §5
-- [ ] Una nota al final de `LOGGING_PLAN.md` diciendo que el plan está completo y que el documento
+- [x] Las 7 fases marcadas ✅ con fecha en la tabla de [LOGGING_PLAN.md](../LOGGING_PLAN.md) §5
+- [x] Una nota al final de `LOGGING_PLAN.md` diciendo que el plan está completo y que el documento
       queda como registro de **por qué** se hizo así (las tablas de decisiones de §3.1 son lo único
       que no se puede reconstruir leyendo el código)
-- [ ] `npm test` en verde en ambos workspaces
-- [ ] `npm run build` en verde
-- [ ] `/graphify . --update` corrido con el grafo reflejando el módulo `audit/` y los archivos de
+- [x] `npm test` en verde en ambos workspaces
+- [x] `npm run build` en verde
+- [x] `/graphify . --update` corrido con el grafo reflejando el módulo `audit/` y los archivos de
       configuración nuevos
 
 ### Verificación final de punta a punta
@@ -118,6 +118,6 @@ resueltas:
 3. **Login auditado:** entrar con una contraseña incorrecta y confirmar que aparece una fila
    `LOGIN_FAILED` con la identidad intentada y la IP, y **sin** la contraseña en ningún campo.
 
-- [ ] Los tres puntos verificados en un entorno real, no solo en tests
+- [x] Los tres puntos verificados en un entorno real, no solo en tests
 
 Commit sugerido: `docs: documentar logging y audit trail`

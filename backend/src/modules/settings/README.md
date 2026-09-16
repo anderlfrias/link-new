@@ -35,12 +35,17 @@ publicSettingsRouter.use(authenticate, attachInternalUser)
 | `maxGroupMembers`, `whoCanCreateGroups`, `whoCanAddMembers`, `whoCanRemoveMembers`, `whoCanChangeGroupInfo`, `whoCanDeleteGroup` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`createConversation`, `addMembers`, `removeMember`, `updateConversation`, `deleteConversation`, vía `resolveEffectiveGroupSettings`) |
 | `allowGroupOverrideAddMembers`, `allowGroupOverrideRemoveMembers`, `allowGroupOverrideMaxGroupMembers`, `allowGroupOverrideChangeGroupInfo`, `allowGroupOverrideDeleteGroup` | `settings.service.ts` (`resolveEffectiveGroupSettings`, `getGroupOverrideAllowedFlags`), consumidos por `conversations` vía `getGroupSettings`/`updateGroupSettings` |
 | `messageRetentionDays` | `src/workers/message-retention.worker.ts` |
+| `auditLogRetentionDays` | `src/workers/audit-retention.worker.ts` — retención en días del audit trail (`null` = conservar para siempre). A diferencia de los mensajes, el borrado de auditoría es físico e irreversible. |
 | `allowMessageEdit`, `messageEditTimeLimitMinutes` | [`messages`](../messages/README.md), `message.service.ts` (`editMessage`) |
 | `allowMessageDeleteForEveryone`, `messageDeleteForEveryoneTimeLimitMinutes` | [`messages`](../messages/README.md), `message.service.ts` (`deleteMessage`) — solo cuando el propio autor borra su mensaje, nunca cuando el creador de la conversación borra uno ajeno (moderación) |
 | `allowConversationDelete` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`deleteConversation`, rama `PRIVATE` — "Eliminar chat", borrado por-usuario vía `ConversationMember.hiddenAt`) |
 | `allowGroupDelete` | `conversations`, `conversation.service.ts` (`deleteConversation`, rama `GROUP`) — interruptor maestro que se chequea antes de `whoCanDeleteGroup`; en `false` nadie puede borrar un grupo, sin excepción |
 
 Las 6 quedan también en `PublicAppSettingsDTO` (`GET /api/v1/settings/public`), a diferencia del resto de la configuración administrativa: el cliente las necesita para decidir si mostrar las acciones de editar/borrar sobre los propios mensajes, y eliminar chat/grupo, de quien esté logueado, aunque no sea admin — la autoridad real sigue siendo `message.service.ts`/`conversation.service.ts`, que las vuelven a chequear en cada `PATCH`/`DELETE`.
+
+## Auditoría de cambios
+
+Toda modificación de configuración (`updateSettings`) se ejecuta de manera atómica dentro de una transacción de Prisma (`prisma.$transaction`) junto con un registro en `AuditLog` bajo la acción `UPDATE_SETTINGS`. Se almacena un diff estricto con los valores previos y nuevos (`{ changed: { [campo]: { from, to } } }`), garantizando que cualquier cambio en límites o retención quede auditado.
 
 ## Overrides por grupo
 

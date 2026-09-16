@@ -27,7 +27,8 @@ Servicios          (lógica de negocio de cada módulo — se implementa en paso
 | `types.ts` | Tipos compartidos: `AppServer` (alias de `Server` de socket.io), `AppSocket` (alias de `Socket`), `SocketModuleRegistrar` (firma de la función que registra un módulo), `SocketMiddleware` (firma de un middleware de socket) y `AuthenticatedSocketUser` (forma de `socket.data.user` una vez pasó `authenticateSocket`). Ningún otro archivo del proyecto importa tipos de `"socket.io"` directamente — siempre a través de este archivo. |
 | `events.ts` | Centraliza únicamente los nombres de los eventos nativos del ciclo de vida de Socket.IO (`connection`, `disconnect`, `disconnecting`, `connect_error`, `error`). Los eventos propios de cada funcionalidad (ej. `message:send`) **no** viven aquí: cada módulo centraliza los suyos en su propio `*.socket.ts`. |
 | `rooms.ts` | Único lugar del proyecto autorizado a llamar `socket.join()`/`socket.leave()`. Expone `joinConversation()`, `leaveConversation()`, `joinUser()`, `leaveUser()` y los constructores de nombre de room (`conversationRoomName()`, `userRoomName()`). Ningún módulo debe llamar `socket.join()` directamente. |
-| `middleware.ts` | Expone `socketMiddlewares` (hoy solo `authenticateSocket`) y `applyMiddlewares(io, middlewares)`. Único punto donde se agregan, en este mismo orden, los middlewares de autenticación, autorización, validación, logging y rate limiting — sin modificar `gateway.ts` ni `index.ts`. |
+| `middleware.ts` | Expone `socketMiddlewares` (`authenticateSocket`, `attachSocketContext`) y `applyMiddlewares(io, middlewares)`. Único punto donde se agregan, en este mismo orden, los middlewares de autenticación, autorización, validación, logging y rate limiting — sin modificar `gateway.ts` ni `index.ts`. |
+| `request-context.ts` | Vincula el contexto de correlación de logging al socket (`attachSocketContext` adjunta `baseLogger` con `socketId` y metadatos de usuario/IP). Provee el helper `withRequestContext(socket, eventName, fn)` para envolver el manejo de eventos en un `AsyncLocalStorage` con `requestId` único por evento. |
 | `socket-auth.middleware.ts` | Autentica el socket contra `socket.handshake.auth.token`: verifica el mismo JWT de EXTERNAL_AUTH que usa `authenticate` en Express (`modules/auth/jwt.ts`) y resuelve el `id` interno del usuario, dejando el resultado en `socket.data.user` (tipo `AuthenticatedSocketUser`, ver `types.ts`). Ningún módulo debe autenticar un socket por su cuenta. |
 | `registry.ts` | El sistema de registro centralizado. Expone `registerSocketModule(registrar)` (conecta un registrar al arreglo interno) y `attachSocketModules(io)` (el gateway la invoca una sola vez; por cada conexión nueva ejecuta el registrar de todos los módulos ya registrados). También es el único archivo que importa el `*.socket.ts` de cada módulo. |
 | `gateway.ts` | Crea la instancia de Socket.IO (`createSocketGateway(httpServer)`) a partir de un `http.Server` ya existente. No conoce Express en absoluto: recibe cualquier servidor HTTP. Aquí viven las opciones generales (CORS); el logger real de conexiones/desconexiones/errores y un futuro Redis Adapter (para correr varias instancias del servidor) se agregan aquí mismo cuando existan. |
@@ -72,13 +73,11 @@ Las funcionalidades de conversaciones/presencia no manejan nombres de room ni ll
 
 ## Middleware
 
-`middleware.ts` expone `applyMiddlewares` y hoy aplica un único middleware, `authenticateSocket`. El cliente debe conectarse pasando el JWT de EXTERNAL_AUTH en el handshake:
+`middleware.ts` expone `applyMiddlewares` y aplica los middlewares globales en orden:
+1. `authenticateSocket`: el cliente debe conectarse pasando el JWT de EXTERNAL_AUTH en el handshake (`io(url, { auth: { token: "<jwt>" } })`). Si falta el token, expiró o es inválido, la conexión se rechaza (`connect_error` en el cliente) antes de llegar al registry.
+2. `attachSocketContext`: una vez autenticado el socket, vincula al socket un logger hijo con metadatos contextuales (`socketId`, `userId`, `ip`, `userAgent`). Para cada evento procesado en un módulo, `withRequestContext(socket, eventName, fn)` inicializa un contexto `AsyncLocalStorage` con `requestId` único, permitiendo correlacionar logs y auditorías disparados en tiempo real.
 
-```ts
-io(url, { auth: { token: "<jwt de EXTERNAL_AUTH>" } });
-```
-
-Si falta el token, expiró o es inválido, la conexión se rechaza (`connect_error` en el cliente) antes de llegar al registry. Los siguientes middlewares (autorización, validación, logging, rate limiting) se agregan en `socketMiddlewares`, en ese orden, sin tocar `gateway.ts` ni `index.ts`.
+Cualquier middleware futuro (autorización, validación, rate limiting) se agrega en `socketMiddlewares` sin tocar `gateway.ts` ni `index.ts`.
 
 ## Principios usados para desacoplar la infraestructura
 

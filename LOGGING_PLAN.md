@@ -169,7 +169,7 @@ viole se considera no terminada:
 | 3 | [logging-plan/03-audit-unification.md](logging-plan/03-audit-unification.md) | Módulo `audit/` único, IP + user-agent, auditoría de login y de acciones de admin | ✅ 2026-09-16 |
 | 4 | [logging-plan/04-audit-read-api.md](logging-plan/04-audit-read-api.md) | `GET /v1/admin/audit-logs` con filtros y paginación + panel en el frontend | ✅ 2026-09-16 |
 | 5 | [logging-plan/05-retention-and-rotation.md](logging-plan/05-retention-and-rotation.md) | Worker de retención del audit, `pm2-logrotate`, `time: false` en PM2 | ✅ 2026-09-16 |
-| 6 | [logging-plan/06-docs-and-closure.md](logging-plan/06-docs-and-closure.md) | `API.md`, READMEs de módulo, AGENTS.md, grafo actualizado | ⬜ Pendiente |
+| 6 | [logging-plan/06-docs-and-closure.md](logging-plan/06-docs-and-closure.md) | `API.md`, READMEs de módulo, AGENTS.md, grafo actualizado | ✅ 2026-09-16 |
 
 **Valor entregado si el plan se corta a mitad:** las Fases 0 a 3 ya resuelven los tres problemas
 🔴. Las Fases 4 y 5 son las que convierten eso en algo que un auditor no técnico puede usar. La
@@ -216,3 +216,11 @@ Que el build siga compilando (TypeScript `strict`):
 ```bash
 npm run build --workspace=backend
 ```
+
+---
+
+## 8. Cierre del plan
+
+El plan de logging y auditoría se completó en su totalidad el **2026-09-16** (Fases 0 a 6).
+Este documento permanece como registro histórico y arquitectónico de **por qué** se tomó cada decisión técnica y de diseño (§3 y §3.1), así como de las reglas de privacidad no negociables (§4) que rigen para cualquier nuevo desarrollo en el repositorio.
+

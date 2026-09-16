@@ -32,16 +32,17 @@ O ambos desde la raíz: `npm test`.
 > [TESTING_PLAN.md](TESTING_PLAN.md). Si `npm test` todavía no existe en este repo,
 > esa es la primera tarea: [testing-plan/00-infrastructure-setup.md](testing-plan/00-infrastructure-setup.md).
 
-## Plan activo: logging y auditoría
+## Regla: nada de `console.*` en el backend
 
-Este repo no tiene logging estructurado todavía (hay 38 `console.*` sueltos en `backend/src`) y su
-audit trail existe a medias. El plan para resolverlo, por fases y ejecutable por cualquier agente,
-está en **[LOGGING_PLAN.md](LOGGING_PLAN.md)**.
+`backend/src/**` loguea a través de `src/config/logger.ts` (pino) y del contexto de
+`src/config/request-context.ts` — nunca con `console.*`. Hay un test que lo hace cumplir
+(`backend/src/no-console.test.ts`); la única excepción permitida está documentada en
+`src/config/env.ts`.
 
-Si vas a agregar código que loguee o que registre una acción de usuario, leé por lo menos su §3
-(logs de aplicación y audit trail son dos sistemas distintos) y su §4 (reglas de privacidad: nunca
-contenido de mensajes, nunca tokens). Ese documento también deja anotada una fuga de credenciales
-conocida en `backend/src/modules/auth/auth.service.ts` y cómo se arregla.
+Además: **los logs de aplicación y el audit trail son dos cosas distintas** y no se sustituyen
+entre sí. Antes de loguear o auditar algo nuevo, leé [LOGGING_PLAN.md](LOGGING_PLAN.md) §3 y §4
+— §4 son las reglas de privacidad (nunca contenido de mensajes, nunca tokens) y no son negociables.
+Para agregar una acción al audit trail, ver `backend/src/modules/audit/README.md`.
 
 ## Otras convenciones del repo
 
