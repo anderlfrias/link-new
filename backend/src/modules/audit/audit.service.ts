@@ -1,7 +1,14 @@
-import { AuditAction, Prisma } from "@prisma/client";
+import { AuditAction, ConversationType, Prisma } from "@prisma/client";
 import { getLogger, getRequestMeta } from "../../config/request-context";
 import * as AuditRepository from "./audit.repository";
-import { AuditMetadataMap } from "./audit.types";
+import {
+  AuditLogFilters,
+  AuditLogListItem,
+  AuditLogListOptions,
+  AuditLogListResponse,
+  AuditMetadataMap,
+  DEFAULT_ADMIN_AUDIT_ACTIONS,
+} from "./audit.types";
 
 export type RecordParams<A extends AuditAction> = {
   action: A;
@@ -56,4 +63,50 @@ export async function record<A extends AuditAction>(params: RecordParams<A>): Pr
   } catch (err) {
     getLogger().error({ err, action: params.action }, "failed to write audit log");
   }
+}
+
+const DEFAULT_AUDIT_PAGE_SIZE = 50;
+const MAX_AUDIT_PAGE_SIZE = 200;
+
+export async function listAuditLogs(
+  filters: AuditLogFilters,
+  options: AuditLogListOptions = {},
+): Promise<AuditLogListResponse> {
+  const limit = Math.min(Math.max(options.limit ?? DEFAULT_AUDIT_PAGE_SIZE, 1), MAX_AUDIT_PAGE_SIZE);
+
+  const effectiveFilters: AuditLogFilters = {
+    ...filters,
+    action: filters.action ?? DEFAULT_ADMIN_AUDIT_ACTIONS,
+  };
+
+  const rows = await AuditRepository.listForAdmin(effectiveFilters, {
+    beforeId: options.beforeId,
+    limit: limit + 1,
+  });
+
+  const hasMore = rows.length > limit;
+  const itemRows = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore && itemRows.length > 0 ? itemRows[itemRows.length - 1].id : null;
+
+  const items: AuditLogListItem[] = itemRows.map((log: any) => ({
+    id: log.id,
+    action: log.action,
+    createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : String(log.createdAt),
+    actor: {
+      id: log.userId ?? null,
+      email: log.actorEmail ?? log.user?.email ?? null,
+      name: log.user?.name ?? null,
+    },
+    conversationId: log.conversationId ?? null,
+    conversationName: log.conversation?.type === ConversationType.GROUP ? (log.conversation.name ?? null) : null,
+    messageId: log.messageId ?? null,
+    targetType: log.targetType ?? null,
+    targetId: log.targetId ?? null,
+    metadata: log.metadata,
+    ip: log.ip ?? null,
+    userAgent: log.userAgent ?? null,
+    requestId: log.requestId ?? null,
+  }));
+
+  return { items, nextCursor };
 }

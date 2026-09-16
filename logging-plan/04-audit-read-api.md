@@ -28,9 +28,7 @@ seleccionarlas explícitamente en el filtro — no aparecen por omisión.
 Si el negocio quiere otra cosa (mostrar todo por defecto, o directamente no exponer las acciones de
 chat en la API), **es una decisión de quien es dueño del producto, no del agente que implementa.**
 Preguntá antes de cambiar este default, y si lo cambiás, dejá anotado quién lo decidió en
-`backend/src/modules/audit/README.md`.
-
-- [ ] Default implementado como está descrito, **o** cambiado con una decisión registrada en el README
+- [x] Default implementado como está descrito, **o** cambiado con una decisión registrada en el README
 
 ---
 
@@ -100,32 +98,32 @@ Respuesta:
 - `audit.route.ts` — `adminAuditRouter`, con el `router.use(authenticate, attachInternalUser, requireRoles(ADMIN_ROLE))` al tope, igual que `adminFileRouter`
 - `route.ts` — montar `router.use("/v1/admin/audit-logs", adminAuditRouter)`
 
-- [ ] Los 6 archivos del módulo creados/extendidos
-- [ ] Ruta montada en `route.ts` junto a las otras de `/v1/admin/*`
-- [ ] `limit` topeado a 200 en el servidor (no confiar en el cliente)
-- [ ] `requireRoles(ADMIN_ROLE)` aplicado a nivel router
-- [ ] `conversationName` solo para GROUP
+- [x] Los 6 archivos del módulo creados/extendidos
+- [x] Ruta montada en `route.ts` junto a las otras de `/v1/admin/*`
+- [x] `limit` topeado a 200 en el servidor (no confiar en el cliente)
+- [x] `requireRoles(ADMIN_ROLE)` aplicado a nivel router
+- [x] `conversationName` solo para GROUP
 
 ### Tests obligatorios
 
 `audit.repository.test.ts`:
-- [ ] Sin filtros → `where` vacío, orden `createdAt desc`, `take` = limit
-- [ ] Con `action` simple y con array → `in` bien armado
-- [ ] Con `from`/`to` → rango sobre `createdAt`
-- [ ] Con `before` → paginación por cursor aplicada
+- [x] Sin filtros → `where` vacío, orden `createdAt desc`, `take` = limit
+- [x] Con `action` simple y con array → `in` bien armado
+- [x] Con `from`/`to` → rango sobre `createdAt`
+- [x] Con `before` → paginación por cursor aplicada
 
 `audit.service.test.ts`:
-- [ ] **Sin filtro `action`, aplica el default de §4.0** (solo admin+auth) — el test que protege la
+- [x] **Sin filtro `action`, aplica el default de §4.0** (solo admin+auth) — el test que protege la
       decisión de privacidad
-- [ ] Con `action` explícito incluyendo acciones de chat, las devuelve
-- [ ] `limit` mayor a 200 se topea a 200
-- [ ] `nextCursor` es el id de la última fila cuando hay más, y `null` cuando no
-- [ ] `conversationName` es `null` para una conversación PRIVATE y trae el nombre para una GROUP
+- [x] Con `action` explícito incluyendo acciones de chat, las devuelve
+- [x] `limit` mayor a 200 se topea a 200
+- [x] `nextCursor` es el id de la última fila cuando hay más, y `null` cuando no
+- [x] `conversationName` es `null` para una conversación PRIVATE y trae el nombre para una GROUP
 
 `audit.route.test.ts` (con supertest, patrón de `file.route.test.ts`):
-- [ ] Sin token → 401
-- [ ] Con token sin rol admin → 403
-- [ ] Con admin → 200 y el shape de respuesta esperado
+- [x] Sin token → 401
+- [x] Con token sin rol admin → 403
+- [x] Con admin → 200 y el shape de respuesta esperado
 
 ---
 
@@ -167,20 +165,20 @@ Requisitos de la UI:
   (sigue el patrón de `group-permission-options.constant.ts`). Nunca mostrar `ADMIN_DELETE_FILE`
   crudo a un auditor.
 
-- [ ] Los 6 archivos creados
-- [ ] Entrada de nav agregada
-- [ ] El filtro por omisión es visible en la UI
-- [ ] Etiquetas de acción en castellano
-- [ ] `metadata` en un detalle expandible
+- [x] Los 6 archivos creados
+- [x] Entrada de nav agregada
+- [x] El filtro por omisión es visible en la UI
+- [x] Etiquetas de acción en castellano
+- [x] `metadata` en un detalle expandible
 
 ### Tests obligatorios (uno por archivo, convención del repo — cada archivo de `features/admin` tiene su `.test`)
 
-- [ ] `admin-audit.api.test.ts`: arma la URL con todos los query params y omite los `undefined`
-- [ ] `use-admin-audit-logs.test.ts`: estado inicial, carga, error, y paginación (pide la página
+- [x] `admin-audit.api.test.ts`: arma la URL con todos los query params y omite los `undefined`
+- [x] `use-admin-audit-logs.test.ts`: estado inicial, carga, error, y paginación (pide la página
       siguiente con el `nextCursor` recibido)
-- [ ] `AdminAuditPanel.test.tsx`: renderiza filas, muestra el filtro por omisión, dispara la
+- [x] `AdminAuditPanel.test.tsx`: renderiza filas, muestra el filtro por omisión, dispara la
       recarga al cambiar un filtro, y muestra el estado vacío
-- [ ] `AdminAuditRow.test.tsx`: muestra la etiqueta en castellano de la acción y expande el `metadata`
+- [x] `AdminAuditRow.test.tsx`: muestra la etiqueta en castellano de la acción y expande el `metadata`
 
 ---
 
@@ -203,11 +201,11 @@ npm test
 npm run build
 ```
 
-- [ ] Tests de ambos workspaces en verde
-- [ ] Con un usuario **sin** rol admin, `/admin/audit` no es accesible (el gate del shell ya
+- [x] Tests de ambos workspaces en verde
+- [x] Con un usuario **sin** rol admin, `/admin/audit` no es accesible (el gate del shell ya
       existente lo cubre — verificalo, no lo asumas)
-- [ ] El listado pagina de verdad con más de 50 filas
-- [ ] Una conversación PRIVATE no muestra nombre en ninguna fila
+- [x] El listado pagina de verdad con más de 50 filas
+- [x] Una conversación PRIVATE no muestra nombre en ninguna fila
 
 Commits sugeridos:
 `feat(backend): endpoint de lectura del audit trail para admin`

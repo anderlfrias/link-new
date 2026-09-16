@@ -1,4 +1,4 @@
-import { ConversationType, FileProvider, MessageType } from "@prisma/client";
+import { AuditAction, ConversationType, FileProvider, MessageType } from "@prisma/client";
 
 /// Forma del `metadata` de cada acción. `undefined` significa "esta acción no
 /// lleva metadata" — y es distinto de `Record<string, unknown>`: dejarlo
@@ -46,3 +46,45 @@ export type AuditMetadataMap = {
   /// (LOGGING_PLAN.md §4.5).
   ADMIN_DELETE_FILE: { provider: FileProvider; sizeBytes: number; mimeType: string };
 };
+
+export const DEFAULT_ADMIN_AUDIT_ACTIONS: AuditAction[] = [
+  AuditAction.LOGIN,
+  AuditAction.LOGIN_FAILED,
+  AuditAction.UPDATE_SETTINGS,
+  AuditAction.ADMIN_DELETE_FILE,
+];
+
+export interface AuditLogFilters {
+  action?: AuditAction | AuditAction[];
+  userId?: string;
+  targetType?: string;
+  from?: Date;
+  to?: Date;
+}
+
+export interface AuditLogListOptions {
+  beforeId?: string;
+  limit?: number;
+}
+
+export interface AuditLogListItem {
+  id: string;
+  action: AuditAction;
+  createdAt: string;
+  actor: { id: string | null; email: string | null; name: string | null };
+  conversationId: string | null;
+  /// Solo para conversaciones GROUP — null para PRIVATE, SELF o eventos sin conversación.
+  conversationName: string | null;
+  messageId: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: unknown;
+  ip: string | null;
+  userAgent: string | null;
+  requestId: string | null;
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogListItem[];
+  nextCursor: string | null;
+}

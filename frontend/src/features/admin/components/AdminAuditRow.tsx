@@ -1,0 +1,82 @@
+"use client";
+
+import { useState } from "react";
+import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
+import { getAuditActionLabel } from "@/features/admin/constants/audit-action-labels.constant";
+import type { AdminAuditLogListItem } from "@/features/admin/types/admin-audit.types";
+
+interface AdminAuditRowProps {
+  item: AdminAuditLogListItem;
+}
+
+export function AdminAuditRow({ item }: AdminAuditRowProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const actionLabel = getAuditActionLabel(item.action);
+
+  const actorLabel = item.actor.name
+    ? `${item.actor.name} · ${item.actor.email ?? ""}`
+    : (item.actor.email ?? "Sistema");
+
+  let resourceLabel = "—";
+  if (item.conversationName) {
+    resourceLabel = `Grupo: ${item.conversationName}`;
+  } else if (item.conversationId) {
+    resourceLabel = `Conversación: ${item.conversationId.slice(0, 8)}…`;
+  } else if (item.targetType) {
+    resourceLabel = `${item.targetType}${item.targetId ? ` (${item.targetId.slice(0, 8)}…)` : ""}`;
+  }
+
+  const hasMetadata = item.metadata !== undefined && item.metadata !== null;
+
+  return (
+    <div className="border-b border-black/5 px-2 py-3 last:border-0 dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-brand-blue/10 px-2.5 py-0.5 text-xs font-semibold text-brand-blue dark:bg-brand-blue/20">
+              {actionLabel}
+            </span>
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              {new Date(item.createdAt).toLocaleString("es-AR")}
+            </span>
+          </div>
+          <p className="mt-1 truncate font-medium text-brand-ink dark:text-white">
+            {actorLabel}
+          </p>
+          <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+            Recurso: <span className="font-mono text-neutral-700 dark:text-neutral-300">{resourceLabel}</span>
+            {item.ip && ` · IP: ${item.ip}`}
+          </p>
+        </div>
+
+        {hasMetadata && (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            aria-label={expanded ? "Ocultar detalle" : "Ver detalle"}
+            className="flex items-center gap-1 rounded-lg border border-black/10 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            <span>{expanded ? "Ocultar detalle" : "Ver detalle"}</span>
+            {expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+          </button>
+        )}
+      </div>
+
+      {expanded && hasMetadata && (
+        <div className="mt-3 rounded-lg bg-neutral-100/70 p-3 text-xs dark:bg-neutral-900/60" data-testid="metadata-detail">
+          <p className="mb-1 font-semibold text-neutral-700 dark:text-neutral-300">Metadatos:</p>
+          <pre className="max-h-60 overflow-x-auto whitespace-pre-wrap break-all rounded bg-neutral-50 p-2 font-mono text-[11px] text-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
+            {JSON.stringify(item.metadata, null, 2)}
+          </pre>
+          {(item.userAgent || item.requestId) && (
+            <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-neutral-500 dark:text-neutral-400">
+              {item.requestId && <span>Request ID: {item.requestId}</span>}
+              {item.userAgent && <span className="truncate max-w-md">UA: {item.userAgent}</span>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

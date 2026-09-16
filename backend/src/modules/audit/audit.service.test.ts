@@ -161,4 +161,156 @@ describe("AuditService", () => {
       errorSpy.mockRestore();
     });
   });
+
+  describe("listAuditLogs", () => {
+    it("sin filtro action, aplica el default de §4.0 (solo admin+auth)", async () => {
+      vi.mocked(AuditRepository.listForAdmin).mockResolvedValue([]);
+
+      await AuditService.listAuditLogs({});
+
+      expect(AuditRepository.listForAdmin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: [
+            AuditAction.LOGIN,
+            AuditAction.LOGIN_FAILED,
+            AuditAction.UPDATE_SETTINGS,
+            AuditAction.ADMIN_DELETE_FILE,
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("con action explícito incluyendo acciones de chat, las devuelve", async () => {
+      const mockRows = [
+        {
+          id: "log-msg-1",
+          action: AuditAction.SEND_MESSAGE,
+          createdAt: new Date("2026-09-10T12:00:00.000Z"),
+          userId: "u-1",
+          actorEmail: "alice@example.com",
+          user: { id: "u-1", email: "alice@example.com", name: "Alice" },
+          conversationId: "c-1",
+          conversation: { id: "c-1", name: null, type: ConversationType.PRIVATE },
+          messageId: "m-1",
+          targetType: null,
+          targetId: null,
+          metadata: { messageType: "TEXT", fileCount: 0 },
+          ip: "10.0.0.1",
+          userAgent: "TestAgent",
+          requestId: "req-1",
+        },
+      ];
+      vi.mocked(AuditRepository.listForAdmin).mockResolvedValue(mockRows as any);
+
+      const result = await AuditService.listAuditLogs({ action: AuditAction.SEND_MESSAGE });
+
+      expect(AuditRepository.listForAdmin).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.SEND_MESSAGE,
+        }),
+        expect.anything(),
+      );
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].action).toBe(AuditAction.SEND_MESSAGE);
+    });
+
+    it("limit mayor a 200 se topea a 200", async () => {
+      vi.mocked(AuditRepository.listForAdmin).mockResolvedValue([]);
+
+      await AuditService.listAuditLogs({}, { limit: 350 });
+
+      // Capped at 200, so repository receives limit: 201 (limit + 1)
+      expect(AuditRepository.listForAdmin).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          limit: 201,
+        }),
+      );
+    });
+
+    it("nextCursor es el id de la última fila cuando hay más, y null cuando no", async () => {
+      const generateLogs = (count: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          id: `log-${i + 1}`,
+          action: AuditAction.LOGIN,
+          createdAt: new Date(),
+          userId: `u-${i}`,
+          actorEmail: `u${i}@test.com`,
+          user: null,
+          conversationId: null,
+          conversation: null,
+          messageId: null,
+          targetType: null,
+          targetId: null,
+          metadata: null,
+          ip: null,
+          userAgent: null,
+          requestId: null,
+        }));
+
+      // Cuando hay más (51 filas retornadas para limit 50)
+      vi.mocked(AuditRepository.listForAdmin).mockResolvedValueOnce(generateLogs(51) as any);
+      const resWithMore = await AuditService.listAuditLogs({}, { limit: 50 });
+      expect(resWithMore.items).toHaveLength(50);
+      expect(resWithMore.nextCursor).toBe("log-50");
+
+      // Cuando no hay más (50 o menos filas)
+      vi.mocked(AuditRepository.listForAdmin).mockResolvedValueOnce(generateLogs(50) as any);
+      const resNoMore = await AuditService.listAuditLogs({}, { limit: 50 });
+      expect(resNoMore.items).toHaveLength(50);
+      expect(resNoMore.nextCursor).toBeNull();
+    });
+
+    it("conversationName es null para una conversación PRIVATE y trae el nombre para una GROUP", async () => {
+      const mockRows = [
+        {
+          id: "log-private",
+          action: AuditAction.SEND_MESSAGE,
+          createdAt: new Date(),
+          userId: "u-1",
+          actorEmail: "alice@test.com",
+          user: { id: "u-1", email: "alice@test.com", name: "Alice" },
+          conversationId: "conv-priv",
+          conversation: { id: "conv-priv", name: "Bob", type: ConversationType.PRIVATE },
+          messageId: null,
+          targetType: null,
+          targetId: null,
+          metadata: null,
+          ip: null,
+          userAgent: null,
+          requestId: null,
+        },
+        {
+          id: "log-group",
+          action: AuditAction.CHANGE_NAME,
+          createdAt: new Date(),
+          userId: "u-2",
+          actorEmail: "bob@test.com",
+          user: { id: "u-2", email: "bob@test.com", name: "Bob" },
+          conversationId: "conv-grp",
+          conversation: { id: "conv-grp", name: "Equipo Guardia", type: ConversationType.GROUP },
+          messageId: null,
+          targetType: null,
+          targetId: null,
+          metadata: null,
+          ip: null,
+          userAgent: null,
+          requestId: null,
+        },
+      ];
+
+      vi.mocked(AuditRepository.listForAdmin).mockResolvedValue(mockRows as any);
+
+      const res = await AuditService.listAuditLogs({
+        action: [AuditAction.SEND_MESSAGE, AuditAction.CHANGE_NAME],
+      });
+
+      expect(res.items).toHaveLength(2);
+      // Para PRIVATE debe ser estrictamente null
+      expect(res.items[0].conversationName).toBeNull();
+      // Para GROUP debe preservar el nombre
+      expect(res.items[1].conversationName).toBe("Equipo Guardia");
+    });
+  });
 });

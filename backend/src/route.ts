@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { adminAuditRouter } from "./modules/audit/audit.route";
 import authRoutes from "./modules/auth/auth.route";
 import conversationRoutes from "./modules/conversations/conversation.route";
 import fileRoutes, { adminFileRouter } from "./modules/files/file.route";
@@ -37,6 +38,7 @@ router.use("/v1/giphy", giphyRoutes);
 router.use("/v1/admin/settings", adminSettingsRouter);
 router.use("/v1/admin/files", adminFileRouter);
 router.use("/v1/admin/users", adminUserRouter);
+router.use("/v1/admin/audit-logs", adminAuditRouter);
 router.use("/v1/settings/public", publicSettingsRouter);
 
 export default router;

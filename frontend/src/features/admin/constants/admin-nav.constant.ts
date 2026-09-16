@@ -1,4 +1,4 @@
-import { IconFiles, IconSettings, IconUsers, type TablerIcon } from "@tabler/icons-react";
+import { IconFiles, IconHistory, IconSettings, IconUsers, type TablerIcon } from "@tabler/icons-react";
 
 export interface AdminNavItem {
   href: string;
@@ -13,4 +13,5 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   { href: "/admin", label: "Configuración global", icon: IconSettings },
   { href: "/admin/files", label: "Archivos", icon: IconFiles },
   { href: "/admin/users", label: "Usuarios", icon: IconUsers },
+  { href: "/admin/audit", label: "Auditoría", icon: IconHistory },
 ];
