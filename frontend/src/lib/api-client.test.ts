@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/types/api.types";
-import { apiRequest } from "./api-client";
+import { apiRequest, setUnauthorizedHandler, SESSION_EXPIRED_EVENT } from "./api-client";
 
 describe("api-client", () => {
   const originalFetch = global.fetch;
@@ -163,5 +163,56 @@ describe("api-client", () => {
 
     const result = await apiRequest("/image", { responseType: "blob" });
     expect(result).toBe(mockBlob);
+  });
+
+  it("notifies unauthorized and dispatches session-expired event on 401 for authenticated endpoints", async () => {
+    const mockHandler = vi.fn();
+    setUnauthorizedHandler(mockHandler);
+
+    const eventListener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, eventListener);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: async () => ({ error: "Token expired" }),
+    });
+    global.fetch = mockFetch;
+
+    await expect(apiRequest("/v1/conversations", { token: "expired-token" })).rejects.toThrow(ApiError);
+
+    expect(mockHandler).toHaveBeenCalledTimes(1);
+    expect(mockHandler).toHaveBeenCalledWith(expect.objectContaining({ status: 401, message: "Token expired" }));
+    expect(eventListener).toHaveBeenCalledTimes(1);
+
+    setUnauthorizedHandler(null);
+    window.removeEventListener(SESSION_EXPIRED_EVENT, eventListener);
+  });
+
+  it("does not notify unauthorized or dispatch session-expired event on 401 for /v1/auth/login", async () => {
+    const mockHandler = vi.fn();
+    setUnauthorizedHandler(mockHandler);
+
+    const eventListener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, eventListener);
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: async () => ({ error: "Usuario o contraseña incorrectos." }),
+    });
+    global.fetch = mockFetch;
+
+    await expect(apiRequest("/v1/auth/login", { method: "POST", body: { user: "a", password: "b" } })).rejects.toThrow(
+      ApiError,
+    );
+
+    expect(mockHandler).not.toHaveBeenCalled();
+    expect(eventListener).not.toHaveBeenCalled();
+
+    setUnauthorizedHandler(null);
+    window.removeEventListener(SESSION_EXPIRED_EVENT, eventListener);
   });
 });

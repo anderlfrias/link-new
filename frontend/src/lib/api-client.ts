@@ -22,6 +22,23 @@ function buildUrl(path: string, query?: ApiRequestOptions["query"]): string {
   return url.toString();
 }
 
+export type UnauthorizedHandler = (error: ApiError) => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+export const SESSION_EXPIRED_EVENT = "chat-interno:session-expired";
+
+export function notifySessionExpired(error: ApiError): void {
+  unauthorizedHandler?.(error);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: error }));
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   { method = "GET", body, token, query, signal, responseType = "json" }: ApiRequestOptions = {},
@@ -40,7 +57,13 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as ApiErrorBody | null;
-    throw new ApiError(response.status, errorBody?.error ?? response.statusText);
+    const error = new ApiError(response.status, errorBody?.error ?? response.statusText);
+
+    if (response.status === 401 && !path.startsWith("/v1/auth/login")) {
+      notifySessionExpired(error);
+    }
+
+    throw error;
   }
 
   if (response.status === 204) {
