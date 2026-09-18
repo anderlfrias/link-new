@@ -1,0 +1,37 @@
+Lista de Tareas (TODO) - Funcionalidades del Chat
+
+Mensajería y Chat
+
+[ ] Reacciones a mensajes
+
+[ ] Buscador dentro del chat
+
+[ ] Menciones y contactos: Enviar y mencionar contactos dentro de los chats usando @ y el nombre de usuario.
+
+[ ] Borradores en mensajes
+
+[ ] Copiar texto parcial: Poder copiar solo el texto seleccionado cuando lo hay en un mensaje. (Si no hay nada seleccionado se copia todo el chat; si hay algo seleccionado debe salir la opción “Copiar texto seleccionado” además de la opción de copiar todo el mensaje).
+
+Archivos Adjuntos y Multimedia
+
+[ ] Segmentar archivos adjuntos: Identificar notas de voz, imágenes, gifs, stickers, etc. (De modo que en las notificaciones y en la lista de chats sea más específico).
+
+[ ] Favoritos: Agregar GIFs, Emojis y Stickers a Favoritos.
+
+[ ] Cámara integrada: Tomar fotografías directamente desde la app.
+
+Grupos y Llamadas
+
+[ ] Gestión de salida de grupos: Los usuarios deben poder salirse de los grupos (configurable desde el admin y desde el grupo, si desde el admin es permitido).
+
+[ ] Encuestas: Agregar encuestas (dentro de chats grupales).
+
+[ ] Llamadas: Agregar llamadas y videollamadas.
+
+Sistema y Configuración
+
+[ ] Gestión de almacenamiento (S3): Agregar a la configuración el tamaño de los archivos a partir del cual se enviarán a Amazon S3.
+
+[ ] Multi-idioma: Soporte para múltiples idiomas.
+
+[ ] Versionamiento: Versionar la aplicación.- [ ]
