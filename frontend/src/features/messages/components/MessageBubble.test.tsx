@@ -694,5 +694,39 @@ describe("MessageBubble", () => {
 
     expect(onToggleReaction).toHaveBeenCalledWith("msg-reactions", "🔥");
   });
+
+  it("renderiza menciones con badge y resalta si coincide con currentUserName", () => {
+    const messageWithMention: Message = {
+      ...baseMessage,
+      id: "msg-mention",
+      content: "Hola @anag y también @carlos, favor revisar",
+    };
+
+    render(
+      <MessageBubble
+        message={messageWithMention}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        currentUserName="anag"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const mentionAna = screen.getByText("@anag");
+    const mentionCarlos = screen.getByText("@carlos");
+
+    expect(mentionAna).toBeInTheDocument();
+    expect(mentionCarlos).toBeInTheDocument();
+    // La mención propia de anag debe tener clases de resalte (amber)
+    expect(mentionAna.className).toContain("amber");
+    // La mención a carlos no es propia
+    expect(mentionCarlos.className).not.toContain("amber");
+  });
 });
 

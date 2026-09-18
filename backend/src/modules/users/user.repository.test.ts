@@ -36,6 +36,7 @@ describe("user.repository", () => {
           OR: [
             { name: { contains: "ana", mode: "insensitive" } },
             { email: { contains: "ana", mode: "insensitive" } },
+            { username: { contains: "ana", mode: "insensitive" } },
           ],
         },
         select: expect.any(Object),

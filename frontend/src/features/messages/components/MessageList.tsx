@@ -15,6 +15,7 @@ interface MessageListProps {
   messages: Message[];
   status: MessagesStatus;
   currentUserId: string;
+  currentUserName?: string;
   conversationType: ConversationType;
   hasMore: boolean;
   loadingMore: boolean;
@@ -48,6 +49,7 @@ export function MessageList({
   messages,
   status,
   currentUserId,
+  currentUserName,
   conversationType,
   hasMore,
   loadingMore,
@@ -386,6 +388,7 @@ export function MessageList({
                 showSender={showSender}
                 isSelfChat={conversationType === "SELF"}
                 currentUserId={currentUserId}
+                currentUserName={currentUserName}
                 onEdit={onEditMessage}
                 onDelete={onDeleteMessage}
                 onReply={onReplyMessage}

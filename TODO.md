@@ -6,7 +6,7 @@ Mensajería y Chat
 
 [x] Buscador dentro del chat
 
-[ ] Menciones y contactos: Enviar y mencionar contactos dentro de los chats usando @ y el nombre de usuario.
+[x] Menciones y contactos: Enviar y mencionar contactos dentro de los chats usando @ y el nombre de usuario.
 
 [ ] Borradores en mensajes
 

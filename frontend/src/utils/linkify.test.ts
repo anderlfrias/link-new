@@ -176,5 +176,32 @@ describe("linkify utils", () => {
       const tokens = tokenizeMessageContent(text);
       expect(tokens).toEqual([{ type: "text", value: "La cita es el 2026-09-15 a las 10:30." }]);
     });
+
+    it("detecta menciones (@usuario) y no las confunde con correos electrónicos", () => {
+      const text = "Hola @carlos, envía el informe a carlos@example.org o avisa a @maria.perez.";
+      const tokens = tokenizeMessageContent(text);
+
+      expect(tokens).toEqual([
+        { type: "text", value: "Hola " },
+        { type: "mention", value: "@carlos" },
+        { type: "text", value: ", envía el informe a " },
+        { type: "email", value: "carlos@example.org", href: "mailto:carlos@example.org" },
+        { type: "text", value: " o avisa a " },
+        { type: "mention", value: "@maria.perez" },
+        { type: "text", value: "." },
+      ]);
+    });
+
+    it("detecta mención al principio del texto y entre paréntesis", () => {
+      const text = "@doctor (@juan) revisa el caso";
+      const tokens = tokenizeMessageContent(text);
+
+      expect(tokens).toEqual([
+        { type: "mention", value: "@doctor" },
+        { type: "text", value: " (" },
+        { type: "mention", value: "@juan" },
+        { type: "text", value: ") revisa el caso" },
+      ]);
+    });
   });
 });

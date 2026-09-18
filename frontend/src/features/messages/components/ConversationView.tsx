@@ -17,6 +17,7 @@ import { ConversationDetailPanel } from "@/features/conversations/components/Con
 import { ForwardMessageModal } from "@/features/messages/components/ForwardMessageModal";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
+import { getAvatarUrl } from "@/utils/file-url";
 import { extractFilesFromClipboard } from "@/utils/clipboard";
 import type { Message } from "@/features/messages/types/message.types";
 
@@ -27,12 +28,23 @@ interface ConversationViewProps {
 export function ConversationView({ conversationId }: ConversationViewProps) {
   const { session } = useAuth();
   const currentUserId = session?.user.internalUserId ?? "";
+  const currentUserName = session?.user.username || session?.user.fullName || "";
 
   const { conversation, status: conversationStatus } = useConversation(conversationId);
   const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction } =
     useMessages(conversationId);
   const { typingUserIds, notifyTyping, notifyStopped } = useTyping(conversationId);
   const attachmentsState = useMessageAttachments(conversationId);
+
+  const mentionCandidates = useMemo(() => {
+    if (!conversation?.members) return [];
+    return conversation.members.map((m) => ({
+      id: m.user.id,
+      name: m.user.name,
+      username: m.user.username,
+      avatarUrl: getAvatarUrl(m.user),
+    }));
+  }, [conversation?.members]);
 
   // Arrastrar un archivo sobre un hijo (ej. una burbuja de mensaje) dispara
   // dragLeave del contenedor antes que dragEnter del hijo — un contador evita
@@ -238,6 +250,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           messages={messages}
           status={messagesStatus}
           currentUserId={currentUserId}
+          currentUserName={currentUserName}
           conversationType={conversation.type}
           hasMore={hasMore}
           loadingMore={loadingMore}
@@ -260,6 +273,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           replyTo={replyTarget}
           onCancelReply={() => setReplyTarget(null)}
           currentUserId={currentUserId}
+          mentionCandidates={mentionCandidates}
         />
         {isDraggingFile && (
           <div className="pointer-events-none absolute inset-0 z-20 p-10 bg-brand-ink/5 dark:bg-black/35 backdrop-blur-[2px] transition-all duration-300">

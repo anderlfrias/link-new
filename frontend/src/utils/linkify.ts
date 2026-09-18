@@ -3,7 +3,7 @@
  * en mensajes de texto para permitir interacción directa (abrir página, enviar correo, llamar).
  */
 
-export type LinkTokenType = "text" | "url" | "email" | "phone";
+export type LinkTokenType = "text" | "url" | "email" | "phone" | "mention";
 
 export interface LinkToken {
   type: LinkTokenType;
@@ -13,6 +13,9 @@ export interface LinkToken {
 
 // Regex para detectar emails estándar
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+// Regex para detectar menciones (@usuario o @nombre)
+const MENTION_REGEX = /(?:^|[\s(\[])(@[a-zA-Z0-9_.\u00C0-\u017F]+)/g;
 
 // Regex para detectar URLs (con protocolo http/https, con www, o con dominios conocidos)
 const URL_REGEX = /(?:https?:\/\/|www\.)[^\s<]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.(?:com|org|net|edu|gov|do|lat|io|co|me|info|biz|app|dev|es)(?:\/[^\s<]*)?/gi;
@@ -195,7 +198,7 @@ export function tokenizeMessageContent(content: string): LinkToken[] {
     });
   }
 
-  // Paso 2: Para cada segmento de texto que NO sea un link, buscar números telefónicos
+  // Paso 2: Para cada segmento de texto que NO sea un link (url/email), buscar menciones y números telefónicos
   const finalTokens: LinkToken[] = [];
 
   for (const seg of intermediate) {
@@ -208,36 +211,73 @@ export function tokenizeMessageContent(content: string): LinkToken[] {
       continue;
     }
 
-    // Buscar teléfonos en seg.value
     const text = seg.value;
-    const phoneRegex = new RegExp(PHONE_CANDIDATE_REGEX.source, "g");
-    let phoneMatch: RegExpExecArray | null;
-    let textCursor = 0;
 
-    while ((phoneMatch = phoneRegex.exec(text)) !== null) {
-      const matchIndex = phoneMatch.index;
-      const rawMatch = phoneMatch[0];
-      const { clean } = trimTrailingPunctuation(rawMatch);
+    interface SubMatch {
+      start: number;
+      end: number;
+      type: "mention" | "phone";
+      value: string;
+      href?: string;
+    }
+    const matches: SubMatch[] = [];
 
-      if (!clean || !isValidPhoneNumber(clean)) {
-        continue;
-      }
-
-      if (matchIndex > textCursor) {
-        finalTokens.push({
-          type: "text",
-          value: text.slice(textCursor, matchIndex),
+    // 1. Detectar menciones (@usuario)
+    const mentionRegex = new RegExp(MENTION_REGEX.source, "g");
+    let mMatch: RegExpExecArray | null;
+    while ((mMatch = mentionRegex.exec(text)) !== null) {
+      const full = mMatch[0];
+      const mentionRaw = mMatch[1]; // ej: "@carlos,"
+      const { clean } = trimTrailingPunctuation(mentionRaw);
+      if (clean && clean.length > 1) {
+        const matchStart = mMatch.index + (full.length - mentionRaw.length);
+        matches.push({
+          start: matchStart,
+          end: matchStart + clean.length,
+          type: "mention",
+          value: clean,
         });
       }
+    }
 
-      finalTokens.push({
+    // 2. Detectar números de teléfono
+    const phoneRegex = new RegExp(PHONE_CANDIDATE_REGEX.source, "g");
+    let phoneMatch: RegExpExecArray | null;
+    while ((phoneMatch = phoneRegex.exec(text)) !== null) {
+      const rawMatch = phoneMatch[0];
+      const { clean } = trimTrailingPunctuation(rawMatch);
+      if (!clean || !isValidPhoneNumber(clean)) continue;
+
+      const start = phoneMatch.index;
+      const end = start + clean.length;
+      // Evitar solapar con una mención ya identificada
+      if (matches.some((m) => start < m.end && end > m.start)) continue;
+
+      matches.push({
+        start,
+        end,
         type: "phone",
         value: clean,
         href: buildTelHref(clean),
       });
+    }
 
-      textCursor = matchIndex + clean.length;
-      phoneRegex.lastIndex = textCursor;
+    matches.sort((a, b) => a.start - b.start);
+
+    let textCursor = 0;
+    for (const m of matches) {
+      if (m.start > textCursor) {
+        finalTokens.push({
+          type: "text",
+          value: text.slice(textCursor, m.start),
+        });
+      }
+      finalTokens.push({
+        type: m.type,
+        value: m.value,
+        href: m.href,
+      });
+      textCursor = m.end;
     }
 
     if (textCursor < text.length) {

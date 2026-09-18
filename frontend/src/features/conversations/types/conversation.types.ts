@@ -12,6 +12,7 @@ export type MessageReceiptStatus = "sent" | "delivered" | "read";
 export interface ConversationMemberUser {
   id: string;
   name: string;
+  username?: string | null;
   email: string;
   avatarFileId: string | null;
   avatarFile: { path: string } | null;

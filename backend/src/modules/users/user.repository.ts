@@ -6,6 +6,7 @@ const publicSelect = {
   id: true,
   name: true,
   email: true,
+  username: true,
   avatarFileId: true,
   avatarFile: { select: { path: true } },
   status: true,
@@ -21,6 +22,7 @@ export function search(currentUserId: string, query?: string) {
             OR: [
               { name: { contains: query, mode: "insensitive" } },
               { email: { contains: query, mode: "insensitive" } },
+              { username: { contains: query, mode: "insensitive" } },
             ],
           }
         : {}),

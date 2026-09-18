@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   IconCheck,
   IconFileText,
@@ -12,14 +12,17 @@ import {
   IconPhoto,
   IconSend2,
   IconTrash,
+  IconUser,
   IconVideo,
   type TablerIcon,
 } from "@tabler/icons-react";
 import { AttachmentErrorModal } from "@/features/messages/components/AttachmentErrorModal";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { EmojiGifStickerPicker } from "@/features/messages/components/EmojiGifStickerPicker";
+import { MentionAutocompleteList, type MentionCandidate } from "@/features/messages/components/MentionAutocompleteList";
 import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
 import { ResumableUploadBanner } from "@/features/messages/components/ResumableUploadBanner";
+import { ShareContactModal } from "@/features/messages/components/ShareContactModal";
 import { importGiphyAsset } from "@/features/giphy/api/giphy.api";
 import type { GiphyMediaKind } from "@/features/giphy/types/giphy.types";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
@@ -30,6 +33,8 @@ import { uploadFile } from "@/features/files/api/files.api";
 import { formatDuration } from "@/utils/format-duration";
 import { buildMessagePreview } from "@/utils/message-preview";
 import { extractFilesFromClipboard } from "@/utils/clipboard";
+import { getActiveMentionQuery, type ActiveMentionQuery } from "@/utils/mention";
+import type { DirectoryUser } from "@/features/users/types/user.types";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
@@ -44,6 +49,15 @@ interface MessageInputProps {
   replyTo: Message | null;
   onCancelReply: () => void;
   currentUserId: string;
+  mentionCandidates?: MentionCandidate[];
+  onShareContact?: (user: DirectoryUser) => void;
+}
+
+interface AttachmentOption {
+  label: string;
+  accept?: string;
+  icon: TablerIcon;
+  isContact?: boolean;
 }
 
 /** `accept: undefined` para "Documento" — a propósito, sin filtro (el
@@ -51,11 +65,12 @@ interface MessageInputProps {
  * sección 9). Las imágenes/videos que elijas acá igual pasan por la misma
  * compresión que "Foto" — la diferencia entre opciones es solo qué filtro
  * usa el picker nativo, no el manejo posterior. */
-const ATTACHMENT_OPTIONS: { label: string; accept?: string; icon: TablerIcon }[] = [
+const ATTACHMENT_OPTIONS: AttachmentOption[] = [
   { label: "Foto", accept: "image/*", icon: IconPhoto },
   { label: "Video", accept: "video/*", icon: IconVideo },
   { label: "Audio", accept: "audio/*", icon: IconHeadphones },
   { label: "Documento", icon: IconFileText },
+  { label: "Contacto", icon: IconUser, isContact: true },
 ];
 
 // Tope de altura para que el textarea crezca con mensajes largos sin comerse
@@ -72,8 +87,14 @@ export function MessageInput({
   replyTo,
   onCancelReply,
   currentUserId,
+  mentionCandidates,
+  onShareContact,
 }: MessageInputProps) {
   const [value, setValue] = useState("");
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const [mentionQuery, setMentionQuery] = useState<ActiveMentionQuery | null>(null);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+  const [isShareContactOpen, setIsShareContactOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [reactionsPickerOpen, setReactionsPickerOpen] = useState(false);
@@ -88,6 +109,73 @@ export function MessageInput({
   const { session } = useAuth();
   const publicSettings = usePublicSettings();
   const recorder = useVoiceRecorder();
+
+  const filteredMentionCandidates = useMemo(() => {
+    if (!mentionQuery || !mentionCandidates) return [];
+    const q = mentionQuery.query.toLowerCase();
+    return mentionCandidates
+      .filter((candidate) => candidate.id !== currentUserId)
+      .filter((candidate) => {
+        if (!q) return true;
+        const nameMatch = candidate.name.toLowerCase().includes(q);
+        const usernameMatch = candidate.username ? candidate.username.toLowerCase().includes(q) : false;
+        return nameMatch || usernameMatch;
+      });
+  }, [mentionQuery, mentionCandidates, currentUserId]);
+
+  function handleSelectMention(candidate: MentionCandidate) {
+    if (!mentionQuery) return;
+    const textarea = textareaRef.current;
+    const handle = candidate.username || candidate.name.replace(/\s+/g, "_");
+    const mentionText = `@${handle} `;
+
+    const beforeMention = value.slice(0, mentionQuery.startIndex);
+    const afterMention = value.slice(cursorPosition);
+    const nextValue = `${beforeMention}${mentionText}${afterMention}`;
+    setValue(nextValue);
+    setMentionQuery(null);
+    setMentionSelectedIndex(0);
+
+    const nextCursor = beforeMention.length + mentionText.length;
+    setCursorPosition(nextCursor);
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(nextCursor, nextCursor);
+      }
+    });
+  }
+
+  function handleShareContact(user: DirectoryUser) {
+    if (onShareContact) {
+      onShareContact(user);
+    } else {
+      const contactText = user.username
+        ? `👤 Contacto: ${user.name} (@${user.username}) • ${user.email}`
+        : `👤 Contacto: ${user.name} • ${user.email}`;
+      void onSend(contactText);
+    }
+    setIsShareContactOpen(false);
+  }
+
+  function handleTextChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    const nextValue = event.target.value;
+    const cursorPos = event.target.selectionStart ?? nextValue.length;
+    setValue(nextValue);
+    setCursorPosition(cursorPos);
+    const nextQuery = getActiveMentionQuery(nextValue, cursorPos);
+    setMentionQuery(nextQuery);
+    setMentionSelectedIndex(0);
+    onTyping();
+  }
+
+  function handleTextareaCursorUpdate(event: React.SyntheticEvent<HTMLTextAreaElement>) {
+    const target = event.currentTarget;
+    const cursorPos = target.selectionStart ?? target.value.length;
+    setCursorPosition(cursorPos);
+    const nextQuery = getActiveMentionQuery(target.value, cursorPos);
+    setMentionQuery(nextQuery);
+  }
   const {
     attachments,
     addFiles,
@@ -170,6 +258,8 @@ export function MessageInput({
     const readyFileIds = [...fileIds];
     setSending(true);
     setValue("");
+    setMentionQuery(null);
+    setCursorPosition(0);
     onStopTyping();
     try {
       await onSend(content, readyFileIds.length > 0 ? readyFileIds : undefined);
@@ -189,6 +279,32 @@ export function MessageInput({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionQuery && filteredMentionCandidates.length > 0) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setMentionSelectedIndex((prev) => (prev + 1) % filteredMentionCandidates.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setMentionSelectedIndex((prev) => (prev - 1 + filteredMentionCandidates.length) % filteredMentionCandidates.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        const candidate = filteredMentionCandidates[mentionSelectedIndex];
+        if (candidate) {
+          handleSelectMention(candidate);
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void submit();
@@ -361,15 +477,29 @@ export function MessageInput({
       ) : (
         <form onSubmit={handleSubmit} className="flex items-end gap-2 pl-3 pr-5 py-2.5">
           <input ref={fileInputRef} type="file" multiple onChange={handleFilesSelected} className="hidden" />
-          <div className="flex min-w-0 flex-1 items-end gap-0.5 rounded-2xl border border-black/10 bg-white py-1 pl-1 pr-1.5 focus-within:border-brand-blue dark:border-white/10 dark:bg-white/5">
+          <div className="relative flex min-w-0 flex-1 items-end gap-0.5 rounded-2xl border border-black/10 bg-white py-1 pl-1 pr-1.5 focus-within:border-brand-blue dark:border-white/10 dark:bg-white/5">
+            {filteredMentionCandidates.length > 0 && mentionQuery && (
+              <MentionAutocompleteList
+                candidates={filteredMentionCandidates}
+                selectedIndex={mentionSelectedIndex}
+                onSelect={handleSelectMention}
+              />
+            )}
             <div className="relative shrink-0" ref={attachMenuRef}>
               {attachMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
-                  {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon }) => (
+                  {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon, isContact }) => (
                     <button
                       key={label}
                       type="button"
-                      onClick={() => openPicker(accept)}
+                      onClick={() => {
+                        if (isContact) {
+                          setAttachMenuOpen(false);
+                          setIsShareContactOpen(true);
+                        } else {
+                          openPicker(accept);
+                        }
+                      }}
                       className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
                     >
                       <OptionIcon size={18} stroke={1.75} />
@@ -394,10 +524,9 @@ export function MessageInput({
               ref={textareaRef}
               rows={1}
               value={value}
-              onChange={(event) => {
-                setValue(event.target.value);
-                onTyping();
-              }}
+              onChange={handleTextChange}
+              onClick={handleTextareaCursorUpdate}
+              onKeyUp={handleTextareaCursorUpdate}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
@@ -463,6 +592,14 @@ export function MessageInput({
           reason={currentValidationError.reason}
           maxUploadSizeMb={publicSettings?.maxUploadSizeMb}
           onAccept={() => dismissValidationError(currentValidationError.id)}
+        />
+      )}
+
+      {isShareContactOpen && (
+        <ShareContactModal
+          onClose={() => setIsShareContactOpen(false)}
+          onSelectContact={handleShareContact}
+          currentUserId={currentUserId}
         />
       )}
     </div>

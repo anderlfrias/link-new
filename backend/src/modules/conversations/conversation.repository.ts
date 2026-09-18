@@ -9,6 +9,7 @@ const withMembers = {
         select: {
           id: true,
           name: true,
+          username: true,
           email: true,
           avatarFileId: true,
           avatarFile: { select: { path: true } },

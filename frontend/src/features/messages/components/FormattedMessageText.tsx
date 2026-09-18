@@ -2,11 +2,14 @@
 
 import { useMemo } from "react";
 import { tokenizeMessageContent } from "@/utils/linkify";
+import { cn } from "@/utils/cn";
 
 interface FormattedMessageTextProps {
   content: string;
   isOwn?: boolean;
   searchQuery?: string;
+  currentUserId?: string;
+  currentUserName?: string;
 }
 
 function renderWithHighlight(text: string, query: string | undefined, keyPrefix: string | number) {
@@ -38,7 +41,13 @@ function renderWithHighlight(text: string, query: string | undefined, keyPrefix:
  * Renderiza el texto de un mensaje transformando automáticamente URLs en enlaces navegables,
  * correos electrónicos en enlaces 'mailto:' y números telefónicos en enlaces 'tel:'.
  */
-export function FormattedMessageText({ content, isOwn = false, searchQuery }: FormattedMessageTextProps) {
+export function FormattedMessageText({
+  content,
+  isOwn = false,
+  searchQuery,
+  currentUserId,
+  currentUserName,
+}: FormattedMessageTextProps) {
   const tokens = useMemo(() => tokenizeMessageContent(content), [content]);
 
   const linkClasses = isOwn
@@ -50,6 +59,31 @@ export function FormattedMessageText({ content, isOwn = false, searchQuery }: Fo
       {tokens.map((token, index) => {
         if (token.type === "text") {
           return renderWithHighlight(token.value, searchQuery, index);
+        }
+
+        if (token.type === "mention") {
+          const mentionText = token.value;
+          const cleanMention = mentionText.slice(1).toLowerCase();
+          const isSelfMention =
+            currentUserName &&
+            (cleanMention === currentUserName.toLowerCase() ||
+              cleanMention === currentUserName.toLowerCase().replace(/\s+/g, "") ||
+              cleanMention === currentUserName.toLowerCase().split(" ")[0]);
+
+          const mentionClasses = isSelfMention
+            ? "inline-flex items-center rounded px-1 py-0.5 font-bold text-amber-900 bg-amber-300 dark:bg-amber-400/30 dark:text-amber-200 ring-1 ring-amber-400/50 text-[13px]"
+            : isOwn
+              ? "inline-flex items-center rounded px-1 py-0.5 font-semibold bg-white/20 text-white text-[13px]"
+              : "inline-flex items-center rounded px-1 py-0.5 font-semibold bg-brand-blue/10 text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue-light text-[13px]";
+
+          return (
+            <span
+              key={index}
+              className={cn(mentionClasses, "transition-colors select-text cursor-default align-baseline my-0.5")}
+            >
+              {renderWithHighlight(mentionText, searchQuery, index)}
+            </span>
+          );
         }
 
         if (token.type === "url") {

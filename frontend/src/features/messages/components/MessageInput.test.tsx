@@ -38,6 +38,16 @@ vi.mock("@/features/giphy/api/giphy.api", () => ({
   importGiphyAsset: (...args: unknown[]) => mockImportGiphyAsset(...args),
 }));
 
+const mockDirectoryUsers = [
+  { id: "u-contact", name: "Contacto Ejemplo", username: "ejemplo", email: "ejemplo@test.com", avatarFileId: null, avatarFile: null, status: "ACTIVE" },
+];
+vi.mock("@/features/users/hooks/use-users", () => ({
+  useUsers: () => ({
+    users: mockDirectoryUsers,
+    status: "success",
+  }),
+}));
+
 const sampleReplyMessage: Message = {
   id: "reply-msg-1",
   conversationId: "conv-1",
@@ -494,6 +504,112 @@ describe("MessageInput", () => {
     expect(
       screen.getByText("El archivo seleccionado no coincide con la subida pendiente."),
     ).toBeInTheDocument();
+  });
+
+  it("despliega sugerencias de mención al escribir @ y permite seleccionar un candidato", async () => {
+    const user = userEvent.setup();
+    const mentionCandidates = [
+      { id: "u-1", name: "Ana Gomez", username: "anag" },
+      { id: "u-2", name: "Carlos Perez", username: "cperez" },
+    ];
+
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+        mentionCandidates={mentionCandidates}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    await user.type(textarea, "Hola @");
+
+    expect(screen.getByTestId("mention-autocomplete-list")).toBeInTheDocument();
+    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
+    expect(screen.getByText("Carlos Perez")).toBeInTheDocument();
+
+    // Seleccionar Ana Gomez con click
+    await user.click(screen.getByText("Ana Gomez"));
+
+    // El textarea debe haberse actualizado con "@anag "
+    expect(textarea).toHaveValue("Hola @anag ");
+    expect(screen.queryByTestId("mention-autocomplete-list")).not.toBeInTheDocument();
+  });
+
+  it("permite navegar candidatos con flechas y seleccionar con Enter", async () => {
+    const user = userEvent.setup();
+    const mentionCandidates = [
+      { id: "u-1", name: "Ana Gomez", username: "anag" },
+      { id: "u-2", name: "Carlos Perez", username: "cperez" },
+    ];
+
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+        mentionCandidates={mentionCandidates}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    await user.type(textarea, "@");
+
+    expect(screen.getByTestId("mention-autocomplete-list")).toBeInTheDocument();
+
+    // Presionar ArrowDown para pasar a Carlos Perez (índice 1) y luego Enter
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(textarea).toHaveValue("@cperez ");
+    // Al seleccionar mención no debe dispararse onSend
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("abre el modal de compartir contacto desde el menú de adjuntos y envía el contacto", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+      />,
+    );
+
+    // Abrir menú de adjuntos
+    await user.click(screen.getByRole("button", { name: "Adjuntar" }));
+
+    // Click en "Contacto"
+    const contactOption = screen.getByRole("button", { name: "Contacto" });
+    await user.click(contactOption);
+
+    // Debe abrirse el modal de Compartir contacto
+    expect(screen.getByText("Compartir contacto")).toBeInTheDocument();
+    expect(screen.getByText("Contacto Ejemplo")).toBeInTheDocument();
+
+    // Seleccionar el contacto
+    await user.click(screen.getByText("Contacto Ejemplo"));
+
+    // Debe llamar a onSend con el formato de contacto
+    expect(onSend).toHaveBeenCalledWith(
+      "👤 Contacto: Contacto Ejemplo (@ejemplo) • ejemplo@test.com",
+    );
   });
 });
 

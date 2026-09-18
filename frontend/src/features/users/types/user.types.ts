@@ -5,6 +5,7 @@ export interface DirectoryUser {
   id: string;
   name: string;
   email: string;
+  username?: string | null;
   avatarFileId: string | null;
   avatarFile: { path: string } | null;
   status: UserStatus;
