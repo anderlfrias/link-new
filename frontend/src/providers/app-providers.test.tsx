@@ -10,6 +10,13 @@ vi.mock("@/lib/socket-client", () => ({
   disconnectSocket: vi.fn(),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: vi.fn(),
+    push: vi.fn(),
+  }),
+}));
+
 function SmokeConsumer() {
   const { theme } = useTheme();
   const { status } = useAuth();

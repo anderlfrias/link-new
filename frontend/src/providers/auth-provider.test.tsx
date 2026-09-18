@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "./auth-provider";
 import { login as loginRequest } from "@/features/auth/api/auth.api";
 import { disconnectSocket } from "@/lib/socket-client";
 import { createMockSession } from "@/test/test-utils";
+
+const mockReplace = vi.fn();
+const mockPush = vi.fn();
+const mockRouter = {
+  replace: mockReplace,
+  push: mockPush,
+};
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => mockRouter,
+}));
 
 vi.mock("@/features/auth/api/auth.api", () => ({
   login: vi.fn(),
@@ -15,7 +26,7 @@ vi.mock("@/lib/socket-client", () => ({
 }));
 
 function AuthConsumer() {
-  const { session, status, login, logout, updateSessionUser } = useAuth();
+  const { session, status, login, logout, updateSessionUser, expireSession } = useAuth();
   return (
     <div>
       <span data-testid="status">{status}</span>
@@ -25,6 +36,7 @@ function AuthConsumer() {
         Login
       </button>
       <button onClick={logout}>Logout</button>
+      <button onClick={expireSession}>Expire</button>
       <button onClick={() => updateSessionUser({ fullName: "Alice Updated" })}>
         Update User
       </button>
@@ -51,8 +63,14 @@ describe("AuthProvider and useAuth", () => {
     expect(screen.getByTestId("username").textContent).toBe("none");
   });
 
-  it("restores session from localStorage on mount", async () => {
-    const mockSession = createMockSession();
+  it("restores session from localStorage on mount when token is valid", async () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const mockSession = createMockSession({
+      user: {
+        ...createMockSession().user,
+        exp: futureExp,
+      },
+    });
     window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
 
     render(
@@ -66,6 +84,32 @@ describe("AuthProvider and useAuth", () => {
     });
     expect(screen.getByTestId("username").textContent).toBe("testuser");
     expect(screen.getByTestId("fullname").textContent).toBe("Test User");
+    expect(screen.queryByRole("dialog", { name: "Sesión expirada" })).not.toBeInTheDocument();
+  });
+
+  it("detects expired token in localStorage on mount, clears storage, and shows SessionExpiredModal", async () => {
+    const pastExp = Math.floor(Date.now() / 1000) - 3600; // Expired 1 hour ago
+    const mockSession = createMockSession({
+      user: {
+        ...createMockSession().user,
+        exp: pastExp,
+      },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+    });
+    expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Sesión expirada" })).toBeInTheDocument();
+    expect(screen.getByText("Tu sesión ha expirado. Por favor, iniciá sesión nuevamente para continuar.")).toBeInTheDocument();
+    expect(mockReplace).toHaveBeenCalledWith("/login");
   });
 
   it("handles corrupted JSON in localStorage gracefully", async () => {
@@ -118,8 +162,13 @@ describe("AuthProvider and useAuth", () => {
     expect(saved.user.username).toBe("alice");
   });
 
-  it("logout clears session, disconnects socket, and removes from localStorage", async () => {
-    const mockSession = createMockSession();
+  it("logout clears session, disconnects socket, and removes from localStorage without opening expired modal", async () => {
+    const mockSession = createMockSession({
+      user: {
+        ...createMockSession().user,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+    });
     window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
 
     const user = userEvent.setup();
@@ -139,10 +188,76 @@ describe("AuthProvider and useAuth", () => {
     expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
     expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
     expect(screen.getByTestId("username").textContent).toBe("none");
+    expect(screen.queryByRole("dialog", { name: "Sesión expirada" })).not.toBeInTheDocument();
+  });
+
+  it("session-expired event triggers session expiration, opens modal, and redirects to /login", async () => {
+    const mockSession = createMockSession({
+      user: {
+        ...createMockSession().user,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    });
+
+    // Simulate session expired event
+    act(() => {
+      window.dispatchEvent(new CustomEvent("chat-interno:session-expired"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+    });
+    expect(disconnectSocket).toHaveBeenCalled();
+    expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Sesión expirada" })).toBeInTheDocument();
+    expect(mockReplace).toHaveBeenCalledWith("/login");
+  });
+
+  it("closing the SessionExpiredModal closes it and redirects to /login", async () => {
+    const user = userEvent.setup();
+    const pastExp = Math.floor(Date.now() / 1000) - 3600;
+    const mockSession = createMockSession({
+      user: {
+        ...createMockSession().user,
+        exp: pastExp,
+      },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: "Sesión expirada" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+
+    expect(screen.queryByRole("dialog", { name: "Sesión expirada" })).not.toBeInTheDocument();
+    expect(mockReplace).toHaveBeenCalledWith("/login");
   });
 
   it("updateSessionUser updates user fields in memory and in localStorage", async () => {
-    const mockSession = createMockSession();
+    const mockSession = createMockSession({
+      user: {
+        ...createMockSession().user,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+    });
     window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
 
     const user = userEvent.setup();
