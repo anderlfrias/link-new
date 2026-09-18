@@ -104,6 +104,7 @@ export interface EditMessageInput {
 export interface ListMessagesQuery {
   before?: string;
   limit?: number;
+  query?: string;
 }
 
 /** Ver backend/API.md, sección 6.4 (`GET /messages/files`). */

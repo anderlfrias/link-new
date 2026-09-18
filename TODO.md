@@ -4,7 +4,7 @@ Mensajería y Chat
 
 [x] Reacciones a mensajes
 
-[ ] Buscador dentro del chat
+[x] Buscador dentro del chat
 
 [ ] Menciones y contactos: Enviar y mencionar contactos dentro de los chats usando @ y el nombre de usuario.
 

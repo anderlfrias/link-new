@@ -6,13 +6,39 @@ import { tokenizeMessageContent } from "@/utils/linkify";
 interface FormattedMessageTextProps {
   content: string;
   isOwn?: boolean;
+  searchQuery?: string;
+}
+
+function renderWithHighlight(text: string, query: string | undefined, keyPrefix: string | number) {
+  const trimmed = query?.trim();
+  if (!trimmed) return text;
+
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+  const parts = text.split(regex);
+
+  if (parts.length <= 1) return text;
+
+  return parts.map((part, i) => {
+    if (part.toLowerCase() === trimmed.toLowerCase()) {
+      return (
+        <mark
+          key={`${keyPrefix}-${i}`}
+          className="rounded-sm bg-yellow-300/90 px-0.5 font-medium text-neutral-900 shadow-sm dark:bg-yellow-400/90 dark:text-neutral-900"
+        >
+          {part}
+        </mark>
+      );
+    }
+    return part;
+  });
 }
 
 /**
  * Renderiza el texto de un mensaje transformando automáticamente URLs en enlaces navegables,
  * correos electrónicos en enlaces 'mailto:' y números telefónicos en enlaces 'tel:'.
  */
-export function FormattedMessageText({ content, isOwn = false }: FormattedMessageTextProps) {
+export function FormattedMessageText({ content, isOwn = false, searchQuery }: FormattedMessageTextProps) {
   const tokens = useMemo(() => tokenizeMessageContent(content), [content]);
 
   const linkClasses = isOwn
@@ -23,7 +49,7 @@ export function FormattedMessageText({ content, isOwn = false }: FormattedMessag
     <>
       {tokens.map((token, index) => {
         if (token.type === "text") {
-          return token.value;
+          return renderWithHighlight(token.value, searchQuery, index);
         }
 
         if (token.type === "url") {

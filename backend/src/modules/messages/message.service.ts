@@ -346,15 +346,22 @@ export async function listMessages(
   const conversation = await assertMembership(conversationId, currentUserId);
 
   const limit = Math.min(Math.max(options.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
-  const messages = await MessageRepository.listMessages(conversationId, { beforeId: options.beforeId, limit });
+  const messages = await MessageRepository.listMessages(conversationId, {
+    beforeId: options.beforeId,
+    limit,
+    query: options.query,
+  });
   const ordered = messages.reverse();
 
   // Pedir el historial también cuenta como "entregado" para quien lo pide:
   // alcanza con avanzar el puntero hasta el mensaje más nuevo de esta página
   // (markDelivered ya se encarga de no retroceder si ya estaba más adelante).
-  const newest = ordered[ordered.length - 1];
-  if (newest) {
-    await markDelivered(conversationId, currentUserId, newest.id, newest.createdAt, conversation.members);
+  // Si la petición es una búsqueda puntual filtrada (`query`), no se altera el recibo de entrega.
+  if (!options.query) {
+    const newest = ordered[ordered.length - 1];
+    if (newest) {
+      await markDelivered(conversationId, currentUserId, newest.id, newest.createdAt, conversation.members);
+    }
   }
 
   return ordered.map((message) => ({

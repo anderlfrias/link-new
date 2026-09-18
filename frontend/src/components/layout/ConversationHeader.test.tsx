@@ -50,4 +50,23 @@ describe("ConversationHeader", () => {
     });
     expect(button).toBeDisabled();
   });
+
+  it("renders search button when onToggleSearch is provided and calls callback on click", async () => {
+    const handleToggleSearch = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ConversationHeader
+        title="Chat de Pruebas"
+        onToggleSearch={handleToggleSearch}
+        isSearchOpen={false}
+      />,
+    );
+
+    const searchButton = screen.getByRole("button", { name: "Buscar en el chat" });
+    expect(searchButton).toBeInTheDocument();
+
+    await user.click(searchButton);
+    expect(handleToggleSearch).toHaveBeenCalledTimes(1);
+  });
 });

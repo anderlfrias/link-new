@@ -18,7 +18,7 @@ export function listMessages(
 ): Promise<Message[]> {
   return apiRequest<Message[]>(basePath(conversationId), {
     token,
-    query: { before: query.before, limit: query.limit },
+    query: { before: query.before, limit: query.limit, query: query.query },
   });
 }
 

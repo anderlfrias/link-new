@@ -25,11 +25,11 @@ describe("messages.api", () => {
     const mockMessages = [{ id: "msg-1", content: "Hola" }];
     vi.mocked(apiRequest).mockResolvedValueOnce(mockMessages);
 
-    const res = await listMessages(token, conversationId, { before: "2026-09-09T00:00:00Z", limit: 30 });
+    const res = await listMessages(token, conversationId, { before: "2026-09-09T00:00:00Z", limit: 30, query: "hola" });
 
     expect(apiRequest).toHaveBeenCalledWith("/v1/conversations/conv-123/messages", {
       token: "test-token",
-      query: { before: "2026-09-09T00:00:00Z", limit: 30 },
+      query: { before: "2026-09-09T00:00:00Z", limit: 30, query: "hola" },
     });
     expect(res).toEqual(mockMessages);
   });
@@ -41,7 +41,7 @@ describe("messages.api", () => {
 
     expect(apiRequest).toHaveBeenCalledWith("/v1/conversations/conv-123/messages", {
       token: "test-token",
-      query: { before: undefined, limit: undefined },
+      query: { before: undefined, limit: undefined, query: undefined },
     });
   });
 

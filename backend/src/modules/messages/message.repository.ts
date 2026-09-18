@@ -91,9 +91,21 @@ export function createMessage(data: {
 /// Paginación por cursor (`beforeId`), más reciente primero. El service
 /// invierte el orden antes de responder para que el cliente reciba los
 /// mensajes en orden cronológico ascendente.
-export function listMessages(conversationId: string, options: { beforeId?: string; limit: number }) {
+export function listMessages(conversationId: string, options: { beforeId?: string; limit: number; query?: string }) {
+  const trimmedQuery = options.query?.trim();
   return prisma.message.findMany({
-    where: { conversationId, deletedAt: null },
+    where: {
+      conversationId,
+      deletedAt: null,
+      ...(trimmedQuery
+        ? {
+            content: {
+              contains: trimmedQuery,
+              mode: "insensitive",
+            },
+          }
+        : {}),
+    },
     include: withRelations,
     orderBy: { createdAt: "desc" },
     take: options.limit,

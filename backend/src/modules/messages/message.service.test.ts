@@ -341,6 +341,27 @@ describe("message.service", () => {
       expect(file.checksum).toBeUndefined();
       expect(file.provider).toBeUndefined();
     });
+
+    it("pasa query al repositorio y no marca entregado cuando se busca por texto", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMatches = [
+        buildMockMessage({ id: "m-match-1", content: "hola mundo", createdAt: new Date("2026-01-01T10:00:00Z") }),
+      ];
+      vi.mocked(MessageRepository.listMessages).mockResolvedValue(mockMatches as any);
+
+      const result = await listMessages("u-1", "conv-1", { limit: 20, query: "hola" });
+
+      expect(MessageRepository.listMessages).toHaveBeenCalledWith("conv-1", {
+        beforeId: undefined,
+        limit: 20,
+        query: "hola",
+      });
+      expect(ConversationService.markDelivered).not.toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("m-match-1");
+    });
   });
 
   describe("listConversationFiles", () => {

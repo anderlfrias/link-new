@@ -39,6 +39,7 @@ interface MessageBubbleProps {
   onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  searchQuery?: string;
 }
 
 function formatBubbleTime(iso: string): string {
@@ -57,6 +58,7 @@ export function MessageBubble({
   onForward,
   onJumpToMessage,
   onToggleReaction,
+  searchQuery,
 }: MessageBubbleProps) {
   const settings = usePublicSettings();
   const isDeleted = Boolean(message.deletedAt);
@@ -487,7 +489,7 @@ export function MessageBubble({
                 {isDeleted ? (
                   "Mensaje eliminado"
                 ) : (
-                  <FormattedMessageText content={message.content} isOwn={renderAsOwn} />
+                  <FormattedMessageText content={message.content} isOwn={renderAsOwn} searchQuery={searchQuery} />
                 )}
                 <span className="float-right ml-2 mt-[3px]">{footer}</span>
               </p>

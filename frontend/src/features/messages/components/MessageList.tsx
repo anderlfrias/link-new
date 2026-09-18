@@ -25,6 +25,8 @@ interface MessageListProps {
   onReplyMessage: (message: Message) => void;
   onForwardMessage: (message: Message) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  searchQuery?: string;
+  searchJumpTarget?: { messageId: string; nonce: number } | null;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
@@ -56,6 +58,8 @@ export function MessageList({
   onReplyMessage,
   onForwardMessage,
   onToggleReaction,
+  searchQuery,
+  searchJumpTarget,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -100,11 +104,19 @@ export function MessageList({
   function jumpToMessage(messageId: string) {
     const element = messageElementsRef.current.get(messageId);
     if (!element) return;
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (typeof element.scrollIntoView === "function") {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     setHighlightedId(messageId);
     highlightTimerRef.current = setTimeout(() => setHighlightedId(null), HIGHLIGHT_DURATION_MS);
   }
+
+  useEffect(() => {
+    if (searchJumpTarget?.messageId) {
+      jumpToMessage(searchJumpTarget.messageId);
+    }
+  }, [searchJumpTarget]);
 
   useEffect(() => {
     return () => {
@@ -380,6 +392,7 @@ export function MessageList({
                 onForward={onForwardMessage}
                 onJumpToMessage={jumpToMessage}
                 onToggleReaction={onToggleReaction}
+                searchQuery={searchQuery}
               />
             </div>
           );

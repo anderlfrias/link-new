@@ -28,9 +28,11 @@ export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const before = typeof req.query.before === "string" ? req.query.before : undefined;
     const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+    const query = typeof req.query.query === "string" ? req.query.query : undefined;
     const messages = await MessageService.listMessages(currentUserId(req), req.params.conversationId, {
       beforeId: before,
       limit: Number.isFinite(limit) ? limit : undefined,
+      query,
     });
     res.json(messages);
   } catch (error) {

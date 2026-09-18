@@ -32,6 +32,8 @@ export interface ListMessagesOptions {
   /// Id del mensaje más antiguo ya cargado por el cliente (paginación por cursor).
   beforeId?: string;
   limit?: number;
+  /// Texto a buscar dentro del contenido del mensaje (case-insensitive).
+  query?: string;
 }
 
 export interface ListConversationFilesOptions {

@@ -95,8 +95,30 @@ describe("message.controller", () => {
       expect(MessageService.listMessages).toHaveBeenCalledWith("u-internal-1", "conv-1", {
         beforeId: "msg-cursor",
         limit: 30,
+        query: undefined,
       });
       expect(res.json).toHaveBeenCalledWith([{ id: "m-1" }]);
+    });
+
+    it("parsea query param query y lo pasa a MessageService.listMessages", async () => {
+      const req = createMockRequest({
+        user: mockUser as any,
+        params: { conversationId: "conv-1" },
+        query: { query: "urgente" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      vi.mocked(MessageService.listMessages).mockResolvedValue([{ id: "m-2" }] as any);
+
+      await list(req, res, next);
+
+      expect(MessageService.listMessages).toHaveBeenCalledWith("u-internal-1", "conv-1", {
+        beforeId: undefined,
+        limit: undefined,
+        query: "urgente",
+      });
+      expect(res.json).toHaveBeenCalledWith([{ id: "m-2" }]);
     });
   });
 

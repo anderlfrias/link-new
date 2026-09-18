@@ -282,5 +282,30 @@ describe("ConversationView", () => {
     })]);
     expect(pasteEvent.defaultPrevented).toBe(true);
   });
+
+  it("abre el buscador al hacer clic en el botón de búsqueda del header y busca coincidencias", async () => {
+    const user = userEvent.setup();
+    render(<ConversationView conversationId="conv-1" />);
+
+    const searchBtn = screen.getByRole("button", { name: "Buscar en el chat" });
+    await user.click(searchBtn);
+
+    const input = screen.getByPlaceholderText("Buscar en la conversación...");
+    expect(input).toBeInTheDocument();
+
+    await user.type(input, "doctor");
+    expect(screen.getByText("1 de 1")).toBeInTheDocument();
+
+    const closeBtn = screen.getByRole("button", { name: "Cerrar búsqueda" });
+    await user.click(closeBtn);
+    expect(screen.queryByPlaceholderText("Buscar en la conversación...")).not.toBeInTheDocument();
+  });
+
+  it("abre el buscador al presionar la combinación de teclas Ctrl+F", async () => {
+    render(<ConversationView conversationId="conv-1" />);
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    expect(screen.getByPlaceholderText("Buscar en la conversación...")).toBeInTheDocument();
+  });
 });
 

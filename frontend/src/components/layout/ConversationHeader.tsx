@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { IconChevronLeft } from "@tabler/icons-react";
+import { IconChevronLeft, IconSearch } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import type { ReactNode } from "react";
 
@@ -9,9 +9,19 @@ interface ConversationHeaderProps {
   imageUrl?: string | null;
   icon?: ReactNode;
   onOpenDetails?: () => void;
+  onToggleSearch?: () => void;
+  isSearchOpen?: boolean;
 }
 
-export function ConversationHeader({ title, subtitle, imageUrl, icon, onOpenDetails }: ConversationHeaderProps) {
+export function ConversationHeader({
+  title,
+  subtitle,
+  imageUrl,
+  icon,
+  onOpenDetails,
+  onToggleSearch,
+  isSearchOpen = false,
+}: ConversationHeaderProps) {
   return (
     <div className="flex items-center gap-3 border-b border-black/5 px-3 py-2.5 dark:border-white/10">
       <Link
@@ -36,6 +46,21 @@ export function ConversationHeader({ title, subtitle, imageUrl, icon, onOpenDeta
           )}
         </div>
       </button>
+      {onToggleSearch && (
+        <button
+          type="button"
+          onClick={onToggleSearch}
+          aria-label="Buscar en el chat"
+          title="Buscar en el chat (Ctrl+F)"
+          className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
+            isSearchOpen
+              ? "bg-brand-blue/15 text-brand-blue dark:bg-brand-blue/25 dark:text-brand-blue-light"
+              : "text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+          }`}
+        >
+          <IconSearch size={20} stroke={1.8} />
+        </button>
+      )}
     </div>
   );
 }

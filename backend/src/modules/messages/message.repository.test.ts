@@ -159,6 +159,42 @@ describe("message.repository", () => {
         }),
       );
     });
+
+    it("filtra por query insensible a mayúsculas si se provee texto", async () => {
+      vi.mocked(prisma.message.findMany).mockResolvedValue([]);
+
+      await listMessages("conv-1", { limit: 10, query: "  reunión  " });
+
+      expect(prisma.message.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            conversationId: "conv-1",
+            deletedAt: null,
+            content: {
+              contains: "reunión",
+              mode: "insensitive",
+            },
+          },
+          take: 10,
+        }),
+      );
+    });
+
+    it("no agrega filtro de content si la query consiste solo en espacios", async () => {
+      vi.mocked(prisma.message.findMany).mockResolvedValue([]);
+
+      await listMessages("conv-1", { limit: 10, query: "   " });
+
+      expect(prisma.message.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            conversationId: "conv-1",
+            deletedAt: null,
+          },
+          take: 10,
+        }),
+      );
+    });
   });
 
   describe("listFiles", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { DragEvent, useEffect, useRef, useState } from "react";
+import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { IconBookmark, IconLoader2, IconCloudUpload } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversation } from "@/features/conversations/hooks/use-conversation";
@@ -10,6 +10,7 @@ import { useMessageAttachments } from "@/features/messages/hooks/use-message-att
 import { Drawer } from "@/components/ui/Drawer";
 import { Modal } from "@/components/ui/Modal";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
+import { InChatSearchBar } from "@/features/messages/components/InChatSearchBar";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
 import { ConversationDetailPanel } from "@/features/conversations/components/ConversationDetailPanel";
@@ -41,6 +42,77 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [replyTarget, setReplyTarget] = useState<Message | null>(null);
   const [forwardTarget, setForwardTarget] = useState<Message | null>(null);
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [searchJumpTarget, setSearchJumpTarget] = useState<{ messageId: string; nonce: number } | null>(null);
+
+  useEffect(() => {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setActiveMatchIndex(0);
+    setSearchJumpTarget(null);
+  }, [conversationId]);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+
+  const matchingMessages = useMemo(() => {
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (!trimmed) return [];
+    return messages.filter(
+      (m) => !m.deletedAt && m.content.toLowerCase().includes(trimmed),
+    );
+  }, [messages, searchQuery]);
+
+  useEffect(() => {
+    if (matchingMessages.length > 0) {
+      const initialIndex = matchingMessages.length;
+      setActiveMatchIndex(initialIndex);
+      const target = matchingMessages[initialIndex - 1];
+      if (target) {
+        setSearchJumpTarget({ messageId: target.id, nonce: Date.now() });
+      }
+    } else {
+      setActiveMatchIndex(0);
+    }
+  }, [matchingMessages]);
+
+  function handlePrevMatch() {
+    if (matchingMessages.length === 0) return;
+    const nextIndex = activeMatchIndex <= 1 ? matchingMessages.length : activeMatchIndex - 1;
+    setActiveMatchIndex(nextIndex);
+    const target = matchingMessages[nextIndex - 1];
+    if (target) {
+      setSearchJumpTarget({ messageId: target.id, nonce: Date.now() });
+    }
+  }
+
+  function handleNextMatch() {
+    if (matchingMessages.length === 0) return;
+    const nextIndex = activeMatchIndex >= matchingMessages.length ? 1 : activeMatchIndex + 1;
+    setActiveMatchIndex(nextIndex);
+    const target = matchingMessages[nextIndex - 1];
+    if (target) {
+      setSearchJumpTarget({ messageId: target.id, nonce: Date.now() });
+    }
+  }
+
+  function handleCloseSearch() {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setActiveMatchIndex(0);
+    setSearchJumpTarget(null);
+  }
 
   // El propio `send` no sabe nada de "a qué estoy respondiendo" — ese estado
   // es puramente de esta pantalla (qué está armado en el composer ahora
@@ -146,7 +218,20 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           imageUrl={avatarUrl}
           icon={conversation.type === "SELF" ? <IconBookmark size={20} stroke={1.75} /> : undefined}
           onOpenDetails={() => setShowDetails(true)}
+          onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
+          isSearchOpen={isSearchOpen}
         />
+        {isSearchOpen && (
+          <InChatSearchBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            matchCount={matchingMessages.length}
+            activeMatchIndex={activeMatchIndex}
+            onPrevMatch={handlePrevMatch}
+            onNextMatch={handleNextMatch}
+            onClose={handleCloseSearch}
+          />
+        )}
         <MessageList
           key={conversationId}
           conversationId={conversationId}
@@ -163,6 +248,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onReplyMessage={setReplyTarget}
           onForwardMessage={setForwardTarget}
           onToggleReaction={toggleReaction}
+          searchQuery={isSearchOpen ? searchQuery : undefined}
+          searchJumpTarget={searchJumpTarget}
         />
         <MessageInput
           conversationId={conversationId}

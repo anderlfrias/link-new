@@ -63,4 +63,33 @@ describe("FormattedMessageText", () => {
     link = screen.getByRole("link");
     expect(link.className).toContain("text-brand-blue");
   });
+
+  it("resalta coincidencias con la etiqueta mark cuando se proporciona searchQuery", () => {
+    const { container } = render(
+      <FormattedMessageText content="Hola a todos, reunión hoy a las 3pm" searchQuery="reunión" />,
+    );
+
+    const mark = container.querySelector("mark");
+    expect(mark).toBeInTheDocument();
+    expect(mark?.textContent).toBe("reunión");
+  });
+
+  it("resalta coincidencias de manera insensible a mayúsculas y minúsculas", () => {
+    const { container } = render(
+      <FormattedMessageText content="INFORMACIÓN importante sobre el caso" searchQuery="información" />,
+    );
+
+    const mark = container.querySelector("mark");
+    expect(mark).toBeInTheDocument();
+    expect(mark?.textContent).toBe("INFORMACIÓN");
+  });
+
+  it("no altera el texto ni agrega mark si searchQuery está vacío o solo contiene espacios", () => {
+    const { container } = render(
+      <FormattedMessageText content="Mensaje de prueba" searchQuery="   " />,
+    );
+
+    expect(container.querySelector("mark")).toBeNull();
+    expect(container.textContent).toBe("Mensaje de prueba");
+  });
 });
