@@ -8,10 +8,11 @@ vi.mock("./message.service", () => ({
   listConversationFiles: vi.fn(),
   editMessage: vi.fn(),
   deleteMessage: vi.fn(),
+  toggleReaction: vi.fn(),
 }));
 
 import * as MessageService from "./message.service";
-import { create, forward, list, listFiles, remove, update } from "./message.controller";
+import { create, forward, list, listFiles, remove, toggleReaction, update } from "./message.controller";
 
 describe("message.controller", () => {
   const mockUser = {
@@ -161,6 +162,51 @@ describe("message.controller", () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: "conv-1", messageId: "msg-1" }),
       );
+    });
+  });
+
+  describe("toggleReaction", () => {
+    it("llama a MessageService.toggleReaction y responde con el resultado", async () => {
+      const req = createMockRequest({
+        user: mockUser as any,
+        params: { conversationId: "conv-1", id: "msg-1" },
+        body: { emoji: "👍" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const mockResult = {
+        conversationId: "conv-1",
+        messageId: "msg-1",
+        reactions: [{ id: "r-1", emoji: "👍", userId: "u-internal-1" }],
+        userId: "u-internal-1",
+        emoji: "👍",
+        action: "added",
+      };
+      vi.mocked(MessageService.toggleReaction).mockResolvedValue(mockResult as any);
+
+      await toggleReaction(req, res, next);
+
+      expect(MessageService.toggleReaction).toHaveBeenCalledWith("u-internal-1", "conv-1", "msg-1", "👍");
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("pasa error a next si toggleReaction rechaza", async () => {
+      const req = createMockRequest({
+        user: mockUser as any,
+        params: { conversationId: "conv-1", id: "msg-1" },
+        body: { emoji: "👍" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const err = new Error("Failed");
+      vi.mocked(MessageService.toggleReaction).mockRejectedValue(err);
+
+      await toggleReaction(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(err);
     });
   });
 });

@@ -28,3 +28,7 @@ export const updateMessageSchema = yup.object({
 export const forwardMessageSchema = yup.object({
   messageId: yup.string().required(),
 });
+
+export const toggleReactionSchema = yup.object({
+  emoji: yup.string().trim().min(1).max(32).required(),
+});

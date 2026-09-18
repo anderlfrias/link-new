@@ -51,6 +51,24 @@ export interface ForwardedFromPreview {
   senderName: string;
 }
 
+export interface MessageReaction {
+  id: string;
+  messageId: string;
+  userId: string;
+  userName?: string;
+  emoji: string;
+  createdAt: string;
+}
+
+export interface MessageReactionUpdatedEvent {
+  conversationId: string;
+  messageId: string;
+  reactions: MessageReaction[];
+  userId: string;
+  emoji: string;
+  action: "added" | "removed";
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -68,6 +86,7 @@ export interface Message {
   forwardedFromId: string | null;
   forwardedFrom: ForwardedFromPreview | null;
   receipts: MessageReceipt[];
+  reactions?: MessageReaction[];
 }
 
 export interface SendMessageInput {

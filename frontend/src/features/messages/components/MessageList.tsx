@@ -24,6 +24,7 @@ interface MessageListProps {
   onDeleteMessage: (messageId: string) => Promise<void>;
   onReplyMessage: (message: Message) => void;
   onForwardMessage: (message: Message) => void;
+  onToggleReaction?: (messageId: string, emoji: string) => void;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
@@ -54,6 +55,7 @@ export function MessageList({
   onDeleteMessage,
   onReplyMessage,
   onForwardMessage,
+  onToggleReaction,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -377,6 +379,7 @@ export function MessageList({
                 onReply={onReplyMessage}
                 onForward={onForwardMessage}
                 onJumpToMessage={jumpToMessage}
+                onToggleReaction={onToggleReaction}
               />
             </div>
           );

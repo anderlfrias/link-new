@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { IconArrowForwardUp, IconCornerUpLeft, IconPencil, IconTrash, IconCopy, IconPhoto } from "@tabler/icons-react";
+import { QUICK_EMOJIS } from "./QuickReactionPicker";
 import { cn } from "@/utils/cn";
 
 interface MessageOptionsMenuProps {
@@ -19,6 +20,7 @@ interface MessageOptionsMenuProps {
   onDelete: () => void;
   onCopyText?: () => void;
   onCopyImage?: () => void;
+  onSelectReaction?: (emoji: string) => void;
   align: "left" | "right";
   /** Coordenadas de pantalla del cursor si se abrió por click derecho (contextmenu).
    * Si está presente, el menú se posiciona con fixed calculando el espacio disponible en viewport. */
@@ -43,6 +45,7 @@ export function MessageOptionsMenu({
   onDelete,
   onCopyText,
   onCopyImage,
+  onSelectReaction,
   align,
   anchorPosition = null,
 }: MessageOptionsMenuProps) {
@@ -143,7 +146,12 @@ export function MessageOptionsMenu({
     };
   }, [open, onClose]);
 
-  if (!open || (!canReply && !canForward && !canEdit && !canDelete && !canCopyText && !canCopyImage)) return null;
+  if (
+    !open ||
+    (!canReply && !canForward && !canEdit && !canDelete && !canCopyText && !canCopyImage && !onSelectReaction)
+  ) {
+    return null;
+  }
 
   const isFixed = Boolean(fixedCoords);
 
@@ -170,6 +178,24 @@ export function MessageOptionsMenu({
         ],
       )}
     >
+      {onSelectReaction && (
+        <div className="flex items-center justify-between border-b border-black/5 px-2 py-1.5 dark:border-white/10">
+          {QUICK_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              onClick={() => {
+                onClose();
+                onSelectReaction(emoji);
+              }}
+              aria-label={`Reaccionar con ${emoji}`}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-sm transition-transform hover:scale-130 active:scale-95"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
       {canReply && (
         <button
           type="button"

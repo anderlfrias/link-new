@@ -16,6 +16,7 @@ export const SOCKET_EVENTS = {
     created: "message:created",
     updated: "message:updated",
     deleted: "message:deleted",
+    reactionUpdated: "message:reaction_updated",
     typingStart: "message:typing_start",
     typingStop: "message:typing_stop",
   },

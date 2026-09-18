@@ -6,6 +6,17 @@ import { login as loginRequest } from "@/features/auth/api/auth.api";
 import { disconnectSocket } from "@/lib/socket-client";
 import { createMockSession } from "@/test/test-utils";
 
+const mockReplace = vi.fn();
+const mockPush = vi.fn();
+const mockRouter = {
+  replace: mockReplace,
+  push: mockPush,
+};
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => mockRouter,
+}));
+
 vi.mock("@/features/auth/api/auth.api", () => ({
   login: vi.fn(),
 }));

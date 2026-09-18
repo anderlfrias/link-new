@@ -105,11 +105,25 @@ export interface PublicStoredFile {
 
 export type SerializableStoredFile = PublicStoredFile;
 
+export interface MessageReactionResponse {
+  id: string;
+  messageId: string;
+  userId: string;
+  userName?: string;
+  emoji: string;
+  createdAt: Date;
+}
+
+export interface ToggleReactionInput {
+  emoji: string;
+}
+
 export type MessageWithRelations = Message & {
   sender: Pick<User, "id" | "name" | "email" | "avatarFileId">;
   files: (MessageFile & { file: SerializableStoredFile })[];
   replyTo: MessageReplyPreview | null;
   forwardedFrom: ForwardedFromPreview | null;
+  reactions: MessageReactionResponse[];
 };
 
 /// Forma pública de un mensaje: la relación con sus destinatarios (todo

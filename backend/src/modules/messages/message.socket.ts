@@ -12,6 +12,7 @@ export const MESSAGE_EVENTS = {
   CREATED: "message:created",
   UPDATED: "message:updated",
   DELETED: "message:deleted",
+  REACTION_UPDATED: "message:reaction_updated",
   TYPING_START: "message:typing_start",
   TYPING_STOP: "message:typing_stop",
 } as const;

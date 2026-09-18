@@ -8,6 +8,7 @@ import {
   sendMessage as sendMessageApi,
   editMessage as editMessageApi,
   deleteMessage as deleteMessageApi,
+  toggleReaction as toggleReactionApi,
 } from "@/features/messages/api/messages.api";
 import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { SOCKET_EVENTS } from "@/constants/socket-events";
@@ -27,6 +28,7 @@ vi.mock("@/features/messages/api/messages.api", () => ({
   sendMessage: vi.fn(),
   editMessage: vi.fn(),
   deleteMessage: vi.fn(),
+  toggleReaction: vi.fn(),
 }));
 
 vi.mock("@/features/conversations/api/conversations.api", () => ({
@@ -276,5 +278,108 @@ describe("useMessages", () => {
     expect(deleteMessageApi).toHaveBeenCalledWith("msg-token", "conv-1", "m-1");
     expect(result.current.messages[0].deletedAt).toBe("2026-09-09T12:00:00Z");
     expect(result.current.messages[0].content).toBe("");
+  });
+
+  it("actualiza reacciones al recibir evento socket message:reaction_updated", async () => {
+    const { result } = renderHook(() => useMessages("conv-1"));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("ready");
+    });
+
+    const updatedReactions = [
+      { id: "r-1", messageId: "m-1", userId: "u-1", userName: "Dr. Otro", emoji: "❤️", createdAt: "2026-09-18" },
+    ];
+
+    act(() => {
+      const handler = eventListeners[SOCKET_EVENTS.message.reactionUpdated]?.[0];
+      handler?.({
+        conversationId: "conv-1",
+        messageId: "m-1",
+        reactions: updatedReactions,
+        userId: "u-1",
+        emoji: "❤️",
+        action: "added",
+      });
+    });
+
+    expect(result.current.messages[0].reactions).toEqual(updatedReactions);
+  });
+
+  it("alterna reacción llamando a API y actualiza el estado optimista", async () => {
+    const apiResult = {
+      conversationId: "conv-1",
+      messageId: "m-1",
+      reactions: [
+        { id: "r-server", messageId: "m-1", userId: "u-me", userName: "Mi Nombre", emoji: "👍", createdAt: "2026-09-18" },
+      ],
+      userId: "u-me",
+      emoji: "👍",
+      action: "added" as const,
+    };
+    vi.mocked(toggleReactionApi).mockResolvedValueOnce(apiResult);
+
+    const { result } = renderHook(() => useMessages("conv-1"));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("ready");
+    });
+
+    await act(async () => {
+      await result.current.toggleReaction("m-1", "👍");
+    });
+
+    expect(toggleReactionApi).toHaveBeenCalledWith("msg-token", "conv-1", "m-1", "👍");
+    expect(result.current.messages[0].reactions).toEqual(apiResult.reactions);
+  });
+
+  it("reemplaza la reacción previa del usuario cuando reacciona con un emoji distinto (solo 1 reacción por usuario)", async () => {
+    const initialMessageWithReaction: Message = {
+      ...baseMessage,
+      reactions: [
+        {
+          id: "r-prev",
+          messageId: "m-1",
+          userId: mockSession.user.internalUserId,
+          userName: mockSession.user.fullName,
+          emoji: "👍",
+          createdAt: "2026-09-18",
+        },
+      ],
+    };
+    vi.mocked(listMessages).mockResolvedValueOnce([initialMessageWithReaction]);
+
+    const apiResult = {
+      conversationId: "conv-1",
+      messageId: "m-1",
+      reactions: [
+        {
+          id: "r-new",
+          messageId: "m-1",
+          userId: mockSession.user.internalUserId,
+          userName: mockSession.user.fullName,
+          emoji: "❤️",
+          createdAt: "2026-09-18",
+        },
+      ],
+      userId: mockSession.user.internalUserId,
+      emoji: "❤️",
+      action: "updated" as const,
+    };
+    vi.mocked(toggleReactionApi).mockResolvedValueOnce(apiResult);
+
+    const { result } = renderHook(() => useMessages("conv-1"));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("ready");
+    });
+
+    await act(async () => {
+      await result.current.toggleReaction("m-1", "❤️");
+    });
+
+    expect(toggleReactionApi).toHaveBeenCalledWith("msg-token", "conv-1", "m-1", "❤️");
+    expect(result.current.messages[0].reactions).toHaveLength(1);
+    expect(result.current.messages[0].reactions![0].emoji).toBe("❤️");
   });
 });

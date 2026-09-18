@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMessageSchema,
   forwardMessageSchema,
+  toggleReactionSchema,
   updateMessageSchema,
 } from "./message.validator";
 
@@ -100,6 +101,22 @@ describe("message.validator", () => {
 
     it("rechaza si falta messageId", async () => {
       await expect(forwardMessageSchema.validate({})).rejects.toThrow();
+    });
+  });
+
+  describe("toggleReactionSchema", () => {
+    it("acepta un emoji válido y hace trim", async () => {
+      const result = await toggleReactionSchema.validate({ emoji: " 👍 " });
+      expect(result.emoji).toBe("👍");
+    });
+
+    it("rechaza si emoji está vacío o sólo espacios", async () => {
+      await expect(toggleReactionSchema.validate({ emoji: "   " })).rejects.toThrow();
+      await expect(toggleReactionSchema.validate({})).rejects.toThrow();
+    });
+
+    it("rechaza si el emoji excede 32 caracteres", async () => {
+      await expect(toggleReactionSchema.validate({ emoji: "👍".repeat(33) })).rejects.toThrow();
     });
   });
 });

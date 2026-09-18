@@ -74,3 +74,17 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
     next(error);
   }
 }
+
+export async function toggleReaction(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await MessageService.toggleReaction(
+      currentUserId(req),
+      req.params.conversationId,
+      req.params.id,
+      req.body.emoji,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}

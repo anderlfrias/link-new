@@ -245,4 +245,33 @@ describe("MessageOptionsMenu", () => {
     fireEvent.scroll(window);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders reaction buttons when onSelectReaction is provided and triggers callback", () => {
+    const onClose = vi.fn();
+    const onSelectReaction = vi.fn();
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={true}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onSelectReaction={onSelectReaction}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="right"
+      />,
+    );
+
+    const heartBtn = screen.getByLabelText("Reaccionar con ❤️");
+    expect(heartBtn).toBeInTheDocument();
+
+    fireEvent.click(heartBtn);
+    expect(onSelectReaction).toHaveBeenCalledWith("❤️");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

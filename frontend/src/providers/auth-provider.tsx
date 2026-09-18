@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { login as loginRequest } from "@/features/auth/api/auth.api";
 import type { LoginCredentials, Session } from "@/features/auth/types/auth.types";
 import { disconnectSocket } from "@/lib/socket-client";
@@ -51,14 +52,77 @@ function checkStoredSession(): StoredSessionCheck {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
+
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("idle");
+  const [isSessionExpiredModalOpen, setIsSessionExpiredModalOpen] = useState(false);
+
+  const expireSession = useCallback(() => {
+    disconnectSocket();
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+    setSession(null);
+    setStatus("unauthenticated");
+    setIsSessionExpiredModalOpen(true);
+    try {
+      routerRef.current?.replace("/login");
+    } catch {}
+  }, []);
 
   useEffect(() => {
-    const stored = readStoredSession();
+    const { session: stored, wasExpired } = checkStoredSession();
+    if (wasExpired) {
+      disconnectSocket();
+      setSession(null);
+      setStatus("unauthenticated");
+      setIsSessionExpiredModalOpen(true);
+      try {
+        routerRef.current?.replace("/login");
+      } catch {}
+      return;
+    }
     setSession(stored);
     setStatus(stored ? "authenticated" : "unauthenticated");
   }, []);
+
+  useEffect(() => {
+    const handleExpired = () => {
+      expireSession();
+    };
+
+    setUnauthorizedHandler(handleExpired);
+    if (typeof window !== "undefined") {
+      window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+    }
+
+    return () => {
+      setUnauthorizedHandler(null);
+      if (typeof window !== "undefined") {
+        window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired);
+      }
+    };
+  }, [expireSession]);
+
+  useEffect(() => {
+    if (!session?.user?.exp) return;
+
+    const msUntilExpiry = session.user.exp * 1000 - Date.now();
+    if (msUntilExpiry <= 0) {
+      expireSession();
+      return;
+    }
+
+    if (msUntilExpiry < 2147483647) {
+      const timer = setTimeout(() => {
+        expireSession();
+      }, msUntilExpiry);
+      return () => clearTimeout(timer);
+    }
+  }, [session, expireSession]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     const response = await loginRequest(credentials);
@@ -84,6 +148,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
+  }, []);
+
+  const handleCloseSessionExpiredModal = useCallback(() => {
+    setIsSessionExpiredModalOpen(false);
+    try {
+      routerRef.current?.replace("/login");
+    } catch {}
   }, []);
 
   const value = useMemo(

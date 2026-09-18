@@ -8,10 +8,11 @@ import {
   editMessage as editMessageRequest,
   listMessages,
   sendMessage as sendMessageRequest,
+  toggleReaction as toggleReactionRequest,
 } from "@/features/messages/api/messages.api";
 import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { SOCKET_EVENTS } from "@/constants/socket-events";
-import type { Message } from "@/features/messages/types/message.types";
+import type { Message, MessageReactionUpdatedEvent } from "@/features/messages/types/message.types";
 import type { MessageReceiptStatus } from "@/features/conversations/types/conversation.types";
 
 export type MessagesStatus = "idle" | "loading" | "ready" | "error";
@@ -156,14 +157,23 @@ export function useMessages(conversationId: string) {
       setMessages((prev) => prev.map((message) => advanceReceipt(message, payload)));
     }
 
+    function handleReactionUpdated(payload: MessageReactionUpdatedEvent) {
+      if (payload.conversationId !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === payload.messageId ? { ...m, reactions: payload.reactions } : m)),
+      );
+    }
+
     socket.on(SOCKET_EVENTS.message.created, handleCreated);
     socket.on(SOCKET_EVENTS.message.updated, handleUpdated);
     socket.on(SOCKET_EVENTS.message.deleted, handleDeleted);
+    socket.on(SOCKET_EVENTS.message.reactionUpdated, handleReactionUpdated);
     socket.on(SOCKET_EVENTS.conversation.receiptUpdated, handleReceiptUpdated);
     return () => {
       socket.off(SOCKET_EVENTS.message.created, handleCreated);
       socket.off(SOCKET_EVENTS.message.updated, handleUpdated);
       socket.off(SOCKET_EVENTS.message.deleted, handleDeleted);
+      socket.off(SOCKET_EVENTS.message.reactionUpdated, handleReactionUpdated);
       socket.off(SOCKET_EVENTS.conversation.receiptUpdated, handleReceiptUpdated);
     };
   }, [socket, conversationId, token]);
@@ -220,5 +230,46 @@ export function useMessages(conversationId: string) {
     [token, conversationId],
   );
 
-  return { messages, status, hasMore, loadingMore, loadMore, send, edit, remove };
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!token) return;
+      const currentUserId = session?.user?.internalUserId;
+      const currentUserName = session?.user?.fullName;
+
+      // Optimistic update
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          const currentReactions = m.reactions ?? [];
+          const existsWithSameEmoji = currentReactions.some((r) => r.userId === currentUserId && r.emoji === emoji);
+          const nextReactions = existsWithSameEmoji
+            ? currentReactions.filter((r) => r.userId !== currentUserId)
+            : [
+                ...currentReactions.filter((r) => r.userId !== currentUserId),
+                {
+                  id: `temp-${Date.now()}`,
+                  messageId,
+                  userId: currentUserId ?? "",
+                  userName: currentUserName,
+                  emoji,
+                  createdAt: new Date().toISOString(),
+                },
+              ];
+          return { ...m, reactions: nextReactions };
+        }),
+      );
+
+      try {
+        const result = await toggleReactionRequest(token, conversationId, messageId, emoji);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, reactions: result.reactions } : m)),
+        );
+      } catch (error) {
+        console.error("Error al actualizar reacción:", error);
+      }
+    },
+    [token, conversationId, session?.user?.internalUserId, session?.user?.fullName],
+  );
+
+  return { messages, status, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction };
 }

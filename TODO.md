@@ -2,7 +2,7 @@ Lista de Tareas (TODO) - Funcionalidades del Chat
 
 Mensajería y Chat
 
-[ ] Reacciones a mensajes
+[x] Reacciones a mensajes
 
 [ ] Buscador dentro del chat
 

@@ -4,6 +4,16 @@ import { prisma } from "../../config/prisma";
 const withRelations = {
   sender: { select: { id: true, name: true, email: true, avatarFileId: true } },
   files: { include: { file: true } },
+  reactions: {
+    select: {
+      id: true,
+      messageId: true,
+      userId: true,
+      emoji: true,
+      createdAt: true,
+      user: { select: { id: true, name: true } },
+    },
+  },
   // Sin filtrar `deletedAt` acá tampoco (mismo criterio que `files[].file` más
   // abajo, ver README): si el original se borra después, la cita debe poder
   // seguir mostrando quién lo mandó y que fue borrado, no desaparecer.
@@ -144,4 +154,72 @@ export async function softDeleteOlderThan(cutoffDate: Date): Promise<number> {
     data: { deletedAt: new Date() },
   });
   return result.count;
+}
+
+export function findUserReaction(messageId: string, userId: string) {
+  return prisma.messageReaction.findUnique({
+    where: {
+      messageId_userId: {
+        messageId,
+        userId,
+      },
+    },
+  });
+}
+
+export function addReaction(messageId: string, userId: string, emoji: string) {
+  return prisma.messageReaction.create({
+    data: {
+      messageId,
+      userId,
+      emoji,
+    },
+    include: {
+      user: { select: { id: true, name: true } },
+    },
+  });
+}
+
+export function updateReaction(messageId: string, userId: string, emoji: string) {
+  return prisma.messageReaction.update({
+    where: {
+      messageId_userId: {
+        messageId,
+        userId,
+      },
+    },
+    data: {
+      emoji,
+      createdAt: new Date(),
+    },
+    include: {
+      user: { select: { id: true, name: true } },
+    },
+  });
+}
+
+export function removeReaction(messageId: string, userId: string) {
+  return prisma.messageReaction.delete({
+    where: {
+      messageId_userId: {
+        messageId,
+        userId,
+      },
+    },
+  });
+}
+
+export function getMessageReactions(messageId: string) {
+  return prisma.messageReaction.findMany({
+    where: { messageId },
+    select: {
+      id: true,
+      messageId: true,
+      userId: true,
+      emoji: true,
+      createdAt: true,
+      user: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
 }

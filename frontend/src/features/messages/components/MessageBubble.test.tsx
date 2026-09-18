@@ -620,5 +620,79 @@ describe("MessageBubble", () => {
     expect(phoneLink).toBeInTheDocument();
     expect(phoneLink).toHaveAttribute("href", "tel:8095884444");
   });
+
+  it("renderiza botón de reaccionar y permite seleccionar un emoji rápido", () => {
+    const onToggleReaction = vi.fn();
+
+    render(
+      <MessageBubble
+        message={baseMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+        onToggleReaction={onToggleReaction}
+      />,
+    );
+
+    const reactBtn = screen.getByLabelText("Reaccionar al mensaje");
+    expect(reactBtn).toBeInTheDocument();
+
+    fireEvent.click(reactBtn);
+
+    // Debe mostrar la barra de emojis rápidos
+    const heartEmojiBtn = screen.getByLabelText("Reaccionar con ❤️");
+    expect(heartEmojiBtn).toBeInTheDocument();
+
+    fireEvent.click(heartEmojiBtn);
+    expect(onToggleReaction).toHaveBeenCalledWith(baseMessage.id, "❤️");
+  });
+
+  it("renderiza la lista de reacciones existentes y permite alternarlas", () => {
+    const onToggleReaction = vi.fn();
+    const messageWithReactions: Message = {
+      ...baseMessage,
+      id: "msg-reactions",
+      reactions: [
+        {
+          id: "react-1",
+          messageId: "msg-reactions",
+          userId: "user-1",
+          userName: "Usuario 1",
+          emoji: "🔥",
+          createdAt: "2026-09-18",
+        },
+      ],
+    };
+
+    render(
+      <MessageBubble
+        message={messageWithReactions}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+        onToggleReaction={onToggleReaction}
+      />,
+    );
+
+    expect(screen.getByText("🔥")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+
+    const pill = screen.getByRole("button", { name: /🔥/ });
+    fireEvent.click(pill);
+
+    expect(onToggleReaction).toHaveBeenCalledWith("msg-reactions", "🔥");
+  });
 });
 

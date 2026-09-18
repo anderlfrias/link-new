@@ -5,6 +5,7 @@ import {
   IconChevronDown,
   IconCornerUpLeft,
   IconLoader2,
+  IconMoodSmile,
   IconX,
 } from "@tabler/icons-react";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
@@ -12,6 +13,8 @@ import { MessageAttachments } from "@/features/messages/components/MessageAttach
 import { MessageOptionsMenu } from "@/features/messages/components/MessageOptionsMenu";
 import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
 import { DeleteMessageConfirmModal } from "@/features/messages/components/DeleteMessageConfirmModal";
+import { QuickReactionPicker } from "@/features/messages/components/QuickReactionPicker";
+import { MessageReactionsList } from "@/features/messages/components/MessageReactionsList";
 import { useMessageGestures } from "@/features/messages/hooks/use-message-gestures";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { aggregateMessageStatus } from "@/utils/message-status";
@@ -35,6 +38,7 @@ interface MessageBubbleProps {
   onReply: (message: Message) => void;
   onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
+  onToggleReaction?: (messageId: string, emoji: string) => void;
 }
 
 function formatBubbleTime(iso: string): string {
@@ -52,6 +56,7 @@ export function MessageBubble({
   onReply,
   onForward,
   onJumpToMessage,
+  onToggleReaction,
 }: MessageBubbleProps) {
   const settings = usePublicSettings();
   const isDeleted = Boolean(message.deletedAt);
@@ -83,6 +88,7 @@ export function MessageBubble({
   // ya lo permite.
   const canReply = !isDeleted;
   const canForward = !isDeleted;
+  const canReact = !isDeleted && Boolean(onToggleReaction);
   const canEdit =
     isOwn &&
     !isDeleted &&
@@ -98,9 +104,10 @@ export function MessageBubble({
   const imageFiles = message.files.filter((f) => !f.file.deletedAt && isImageMimeType(f.file.mimeType));
   const canCopyImage = !isDeleted && (isSticker || imageFiles.length > 0);
   const showOptionsTrigger =
-    canReply || canForward || canEdit || canDelete || canCopyText || canCopyImage;
+    canReply || canForward || canEdit || canDelete || canCopyText || canCopyImage || canReact;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null);
   const [contextImageUrl, setContextImageUrl] = useState<string | null>(null);
   const [copiedFeedback, setCopiedFeedback] = useState<string | null>(null);
@@ -279,18 +286,21 @@ export function MessageBubble({
           transform: swipeOffset > 0 ? `translateX(${swipeOffset}px)` : undefined,
           transition: isSwiping ? "none" : "transform 200ms ease-out",
         }}
-        className={cn(
-          "group relative",
-          isSticker
-            ? "max-w-36"
-            : cn(
-                "max-w-[75%] min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
-                renderAsOwn
-                  ? "bg-brand-blue text-white"
-                  : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
-              ),
-        )}
+        className={cn("flex flex-col", renderAsOwn ? "items-end" : "items-start", "max-w-[75%]")}
       >
+        <div
+          className={cn(
+            "group relative",
+            isSticker
+              ? "max-w-36"
+              : cn(
+                  "min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
+                  renderAsOwn
+                    ? "bg-brand-blue text-white"
+                    : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
+                ),
+          )}
+        >
         {copiedFeedback && (
           <div
             role="status"
@@ -301,7 +311,31 @@ export function MessageBubble({
           </div>
         )}
         {showOptionsTrigger && !isEditing && (
-          <div className={cn("absolute -top-1", renderAsOwn ? "right-full mr-1" : "left-full ml-1")}>
+          <div className={cn("absolute -top-1 flex items-center gap-0.5", renderAsOwn ? "right-full mr-1" : "left-full ml-1")}>
+            {canReact && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setReactionPickerOpen((prev) => !prev)}
+                  aria-label="Reaccionar al mensaje"
+                  className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 dark:text-neutral-400 dark:hover:bg-white/10"
+                >
+                  <IconMoodSmile size={15} stroke={1.75} />
+                </button>
+                {reactionPickerOpen && (
+                  <div className={cn("absolute z-30 bottom-full mb-1", renderAsOwn ? "right-0" : "left-0")}>
+                    <QuickReactionPicker
+                      onSelectEmoji={(emoji) => {
+                        onToggleReaction?.(message.id, emoji);
+                        setReactionPickerOpen(false);
+                      }}
+                      onClose={() => setReactionPickerOpen(false)}
+                      align={renderAsOwn ? "right" : "left"}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -328,6 +362,7 @@ export function MessageBubble({
               canDelete={canDelete}
               canCopyText={canCopyText}
               canCopyImage={canCopyImage}
+              onSelectReaction={canReact ? (emoji) => onToggleReaction!(message.id, emoji) : undefined}
               onReply={() => onReply(message)}
               onForward={() => onForward(message)}
               onEdit={startEditing}
@@ -460,6 +495,16 @@ export function MessageBubble({
               <div className="flex justify-end">{footer}</div>
             )}
           </>
+        )}
+        </div>
+
+        {message.reactions && message.reactions.length > 0 && !isDeleted && (
+          <MessageReactionsList
+            reactions={message.reactions}
+            currentUserId={currentUserId}
+            onToggleReaction={(emoji) => onToggleReaction?.(message.id, emoji)}
+            className={renderAsOwn ? "justify-end" : "justify-start"}
+          />
         )}
       </div>
 

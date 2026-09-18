@@ -58,6 +58,7 @@ import {
   listConversationFiles,
   listMessages,
   sendMessage,
+  toggleReaction,
 } from "./message.service";
 
 function buildMockConversation(overrides: any = {}) {
@@ -571,6 +572,147 @@ describe("message.service", () => {
       await expect(
         deleteMessage("u-author", "conv-1", "msg-1"),
       ).rejects.toThrow("The time window to delete this message has expired");
+    });
+  });
+
+  describe("toggleReaction", () => {
+    it("agrega una reacción cuando el usuario no tenía ninguna y emite evento con action 'added'", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsg = buildMockMessage();
+      vi.mocked(MessageRepository.findById).mockResolvedValue(mockMsg as any);
+      vi.mocked(MessageRepository.findUserReaction).mockResolvedValue(null);
+      vi.mocked(MessageRepository.addReaction).mockResolvedValue({
+        id: "react-1",
+        messageId: "msg-1",
+        userId: "u-1",
+        emoji: "👍",
+        createdAt: new Date(),
+        user: { id: "u-1", name: "User 1" },
+      } as any);
+      vi.mocked(MessageRepository.getMessageReactions).mockResolvedValue([
+        {
+          id: "react-1",
+          messageId: "msg-1",
+          userId: "u-1",
+          emoji: "👍",
+          createdAt: new Date(),
+          user: { id: "u-1", name: "User 1" },
+        },
+      ] as any);
+
+      const result = await toggleReaction("u-1", "conv-1", "msg-1", "👍");
+
+      expect(ConversationService.assertMembership).toHaveBeenCalledWith("conv-1", "u-1");
+      expect(MessageRepository.findUserReaction).toHaveBeenCalledWith("msg-1", "u-1");
+      expect(MessageRepository.addReaction).toHaveBeenCalledWith("msg-1", "u-1", "👍");
+      expect(mockTo).toHaveBeenCalledWith("conversation:conv-1");
+      expect(mockEmit).toHaveBeenCalledWith(MESSAGE_EVENTS.REACTION_UPDATED, {
+        conversationId: "conv-1",
+        messageId: "msg-1",
+        reactions: [
+          expect.objectContaining({
+            id: "react-1",
+            messageId: "msg-1",
+            userId: "u-1",
+            userName: "User 1",
+            emoji: "👍",
+          }),
+        ],
+        userId: "u-1",
+        emoji: "👍",
+        action: "added",
+      });
+      expect(result.action).toBe("added");
+      expect(result.reactions).toHaveLength(1);
+    });
+
+    it("quita la reacción cuando el usuario ya tenía ese mismo emoji (toggle off)", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsg = buildMockMessage();
+      vi.mocked(MessageRepository.findById).mockResolvedValue(mockMsg as any);
+      vi.mocked(MessageRepository.findUserReaction).mockResolvedValue({
+        id: "react-1",
+        messageId: "msg-1",
+        userId: "u-1",
+        emoji: "👍",
+      } as any);
+      vi.mocked(MessageRepository.removeReaction).mockResolvedValue({} as any);
+      vi.mocked(MessageRepository.getMessageReactions).mockResolvedValue([]);
+
+      const result = await toggleReaction("u-1", "conv-1", "msg-1", "👍");
+
+      expect(MessageRepository.removeReaction).toHaveBeenCalledWith("msg-1", "u-1");
+      expect(mockEmit).toHaveBeenCalledWith(
+        MESSAGE_EVENTS.REACTION_UPDATED,
+        expect.objectContaining({
+          action: "removed",
+          reactions: [],
+        }),
+      );
+      expect(result.action).toBe("removed");
+      expect(result.reactions).toEqual([]);
+    });
+
+    it("reemplaza el emoji anterior cuando el usuario elige uno diferente (solo 1 reacción por usuario)", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsg = buildMockMessage();
+      vi.mocked(MessageRepository.findById).mockResolvedValue(mockMsg as any);
+      vi.mocked(MessageRepository.findUserReaction).mockResolvedValue({
+        id: "react-1",
+        messageId: "msg-1",
+        userId: "u-1",
+        emoji: "👍",
+      } as any);
+      vi.mocked(MessageRepository.updateReaction).mockResolvedValue({
+        id: "react-1",
+        messageId: "msg-1",
+        userId: "u-1",
+        emoji: "❤️",
+        createdAt: new Date(),
+      } as any);
+      vi.mocked(MessageRepository.getMessageReactions).mockResolvedValue([
+        {
+          id: "react-1",
+          messageId: "msg-1",
+          userId: "u-1",
+          emoji: "❤️",
+          createdAt: new Date(),
+          user: { id: "u-1", name: "User 1" },
+        },
+      ] as any);
+
+      const result = await toggleReaction("u-1", "conv-1", "msg-1", "❤️");
+
+      expect(MessageRepository.updateReaction).toHaveBeenCalledWith("msg-1", "u-1", "❤️");
+      expect(mockEmit).toHaveBeenCalledWith(
+        MESSAGE_EVENTS.REACTION_UPDATED,
+        expect.objectContaining({
+          action: "updated",
+          emoji: "❤️",
+          reactions: [expect.objectContaining({ emoji: "❤️" })],
+        }),
+      );
+      expect(result.action).toBe("updated");
+      expect(result.reactions[0].emoji).toBe("❤️");
+    });
+
+    it("lanza BadRequestError si el emoji está vacío o sólo contiene espacios", async () => {
+      await expect(toggleReaction("u-1", "conv-1", "msg-1", "")).rejects.toThrow(BadRequestError);
+      await expect(toggleReaction("u-1", "conv-1", "msg-1", "   ")).rejects.toThrow(BadRequestError);
+    });
+
+    it("lanza NotFoundError si el mensaje no pertenece a la conversación o no existe", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+      vi.mocked(MessageRepository.findById).mockResolvedValue(null);
+
+      await expect(toggleReaction("u-1", "conv-1", "msg-nonexistent", "👍")).rejects.toThrow(NotFoundError);
     });
   });
 });

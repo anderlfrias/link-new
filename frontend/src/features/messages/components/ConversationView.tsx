@@ -28,7 +28,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const currentUserId = session?.user.internalUserId ?? "";
 
   const { conversation, status: conversationStatus } = useConversation(conversationId);
-  const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send, edit, remove } =
+  const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction } =
     useMessages(conversationId);
   const { typingUserIds, notifyTyping, notifyStopped } = useTyping(conversationId);
   const attachmentsState = useMessageAttachments(conversationId);
@@ -162,6 +162,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onDeleteMessage={remove}
           onReplyMessage={setReplyTarget}
           onForwardMessage={setForwardTarget}
+          onToggleReaction={toggleReaction}
         />
         <MessageInput
           conversationId={conversationId}

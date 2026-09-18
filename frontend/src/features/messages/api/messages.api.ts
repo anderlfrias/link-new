@@ -5,6 +5,7 @@ import type {
   ListConversationFilesQuery,
   ListMessagesQuery,
   Message,
+  MessageReaction,
   SendMessageInput,
 } from "@/features/messages/types/message.types";
 
@@ -72,4 +73,24 @@ export function deleteMessage(
   messageId: string,
 ): Promise<{ conversationId: string; messageId: string; deletedAt: string }> {
   return apiRequest(`${basePath(conversationId)}/${messageId}`, { method: "DELETE", token });
+}
+
+export function toggleReaction(
+  token: string,
+  conversationId: string,
+  messageId: string,
+  emoji: string,
+): Promise<{
+  conversationId: string;
+  messageId: string;
+  reactions: MessageReaction[];
+  userId: string;
+  emoji: string;
+  action: "added" | "removed";
+}> {
+  return apiRequest(`${basePath(conversationId)}/${messageId}/reactions`, {
+    method: "POST",
+    token,
+    body: { emoji },
+  });
 }

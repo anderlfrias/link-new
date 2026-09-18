@@ -24,6 +24,7 @@ import {
   ListConversationFilesOptions,
   ListMessagesOptions,
   MessageReplyPreview,
+  MessageReactionResponse,
   MessageWithReceipts,
   MessageWithRelations,
   SerializableStoredFile,
@@ -71,23 +72,43 @@ function toSerializableFiles(
   }));
 }
 
+function toReactionResponse(raw: {
+  id: string;
+  messageId: string;
+  userId: string;
+  emoji: string;
+  createdAt: Date;
+  user?: { id: string; name: string } | null;
+}): MessageReactionResponse {
+  return {
+    id: raw.id,
+    messageId: raw.messageId,
+    userId: raw.userId,
+    userName: raw.user?.name,
+    emoji: raw.emoji,
+    createdAt: raw.createdAt,
+  };
+}
+
 function withPreviews<
   T extends {
     replyTo: Parameters<typeof toReplyPreview>[0];
     forwardedFrom: Parameters<typeof toForwardedFromPreview>[0];
     files: (MessageFile & { file: StoredFile })[];
+    reactions?: Parameters<typeof toReactionResponse>[0][];
   },
 >(message: T, currentUserId?: string) {
   // Desestructurar (en vez de spread-y-reescribir) para que TS calcule bien
-  // el tipo de `rest` sin `replyTo`/`forwardedFrom`/`files` — spreadear un
+  // el tipo de `rest` sin `replyTo`/`forwardedFrom`/`files`/`reactions` — spreadear un
   // `T` genérico y "pisar" una clave después no reemplaza su tipo de forma
   // confiable en la inferencia.
-  const { replyTo, forwardedFrom, files, ...rest } = message;
+  const { replyTo, forwardedFrom, files, reactions, ...rest } = message;
   return {
     ...rest,
     replyTo: toReplyPreview(replyTo),
     forwardedFrom: toForwardedFromPreview(forwardedFrom),
     files: toSerializableFiles(files, currentUserId),
+    reactions: (reactions ?? []).map(toReactionResponse),
   };
 }
 
@@ -445,5 +466,52 @@ export async function deleteMessage(currentUserId: string, conversationId: strin
   if (messageId === conversation.lastMessageId) {
     await notifyConversationListChanged(conversation.members, conversationId);
   }
+  return payload;
+}
+
+export async function toggleReaction(
+  currentUserId: string,
+  conversationId: string,
+  messageId: string,
+  emoji: string,
+) {
+  if (!emoji || typeof emoji !== "string" || !emoji.trim()) {
+    throw new BadRequestError("Emoji inválido o vacío");
+  }
+  const cleanEmoji = emoji.trim();
+
+  await assertMembership(conversationId, currentUserId);
+  await assertOwnedMessage(conversationId, messageId, currentUserId);
+
+  const existing = await MessageRepository.findUserReaction(messageId, currentUserId);
+  let action: "added" | "removed" | "updated" = "added";
+
+  if (existing) {
+    if (existing.emoji === cleanEmoji) {
+      await MessageRepository.removeReaction(messageId, currentUserId);
+      action = "removed";
+    } else {
+      await MessageRepository.updateReaction(messageId, currentUserId, cleanEmoji);
+      action = "updated";
+    }
+  } else {
+    await MessageRepository.addReaction(messageId, currentUserId, cleanEmoji);
+    action = "added";
+  }
+
+  const rawReactions = await MessageRepository.getMessageReactions(messageId);
+  const reactions = rawReactions.map(toReactionResponse);
+
+  const payload = {
+    conversationId,
+    messageId,
+    reactions,
+    userId: currentUserId,
+    emoji: cleanEmoji,
+    action,
+  };
+
+  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.REACTION_UPDATED, payload);
+
   return payload;
 }

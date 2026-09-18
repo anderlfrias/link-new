@@ -15,6 +15,13 @@ vi.mock("../../config/prisma", () => ({
     messageFile: {
       findMany: vi.fn(),
     },
+    messageReaction: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      findMany: vi.fn(),
+    },
     conversation: {
       update: vi.fn(),
     },
@@ -36,14 +43,19 @@ vi.mock("../../config/prisma", () => ({
 
 import { prisma } from "../../config/prisma";
 import {
+  addReaction,
   countExistingFiles,
   createMessage,
   existsInConversation,
+  findUserReaction,
+  getMessageReactions,
   listFiles,
   listMessages,
+  removeReaction,
   softDelete,
   softDeleteOlderThan,
   updateContent,
+  updateReaction,
 } from "./message.repository";
 
 describe("message.repository", () => {
@@ -226,6 +238,109 @@ describe("message.repository", () => {
           data: { content: "Editado", editedAt: expect.any(Date) },
         }),
       );
+    });
+  });
+
+  describe("findUserReaction", () => {
+    it("busca la reacción de un usuario por clave única (messageId, userId)", async () => {
+      vi.mocked(prisma.messageReaction.findUnique).mockResolvedValue({ id: "r-1" } as any);
+
+      const result = await findUserReaction("msg-1", "user-1");
+
+      expect(prisma.messageReaction.findUnique).toHaveBeenCalledWith({
+        where: {
+          messageId_userId: {
+            messageId: "msg-1",
+            userId: "user-1",
+          },
+        },
+      });
+      expect(result).toEqual({ id: "r-1" });
+    });
+  });
+
+  describe("addReaction", () => {
+    it("crea una reacción con datos e include de usuario", async () => {
+      vi.mocked(prisma.messageReaction.create).mockResolvedValue({ id: "r-1" } as any);
+
+      const result = await addReaction("msg-1", "user-1", "❤️");
+
+      expect(prisma.messageReaction.create).toHaveBeenCalledWith({
+        data: {
+          messageId: "msg-1",
+          userId: "user-1",
+          emoji: "❤️",
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      });
+      expect(result).toEqual({ id: "r-1" });
+    });
+  });
+
+  describe("updateReaction", () => {
+    it("actualiza el emoji de la reacción del usuario", async () => {
+      vi.mocked(prisma.messageReaction.update).mockResolvedValue({ id: "r-1", emoji: "😂" } as any);
+
+      const result = await updateReaction("msg-1", "user-1", "😂");
+
+      expect(prisma.messageReaction.update).toHaveBeenCalledWith({
+        where: {
+          messageId_userId: {
+            messageId: "msg-1",
+            userId: "user-1",
+          },
+        },
+        data: {
+          emoji: "😂",
+          createdAt: expect.any(Date),
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      });
+      expect(result).toEqual({ id: "r-1", emoji: "😂" });
+    });
+  });
+
+  describe("removeReaction", () => {
+    it("elimina la reacción por clave única (messageId, userId)", async () => {
+      vi.mocked(prisma.messageReaction.delete).mockResolvedValue({ id: "r-1" } as any);
+
+      const result = await removeReaction("msg-1", "user-1");
+
+      expect(prisma.messageReaction.delete).toHaveBeenCalledWith({
+        where: {
+          messageId_userId: {
+            messageId: "msg-1",
+            userId: "user-1",
+          },
+        },
+      });
+      expect(result).toEqual({ id: "r-1" });
+    });
+  });
+
+  describe("getMessageReactions", () => {
+    it("obtiene las reacciones de un mensaje ordenadas por fecha", async () => {
+      vi.mocked(prisma.messageReaction.findMany).mockResolvedValue([{ id: "r-1" }] as any);
+
+      const result = await getMessageReactions("msg-1");
+
+      expect(prisma.messageReaction.findMany).toHaveBeenCalledWith({
+        where: { messageId: "msg-1" },
+        select: {
+          id: true,
+          messageId: true,
+          userId: true,
+          emoji: true,
+          createdAt: true,
+          user: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      expect(result).toEqual([{ id: "r-1" }]);
     });
   });
 });

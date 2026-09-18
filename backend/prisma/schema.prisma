@@ -209,6 +209,7 @@ model User {
   uploadedFiles           StoredFile[]         @relation("StoredFileCreatedBy")
   fileUploads             FileUpload[]         @relation("FileUploadCreatedBy")
   pushSubscriptions       PushSubscription[]
+  reactions               MessageReaction[]
 
   @@map("users")
 }
@@ -360,6 +361,7 @@ model Message {
 
   /// Archivos adjuntos, a través de la tabla intermedia `MessageFile`.
   files     MessageFile[]
+  reactions MessageReaction[]
   auditLogs AuditLog[]
 
   @@index([conversationId])
@@ -439,6 +441,27 @@ model MessageFile {
   @@index([messageId])
   @@index([fileId])
   @@map("message_files")
+}
+
+/// Reacción de un usuario a un mensaje con un emoji.
+model MessageReaction {
+  id String @id @default(uuid())
+
+  messageId String  @map("message_id")
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Emoji seleccionado (ej. "👍", "❤️", "😂", "😮", "😢", "🙏").
+  emoji String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@index([userId])
+  @@map("message_reactions")
 }
 
 model AuditLog {
