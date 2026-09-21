@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { ConversationListItem } from "./ConversationListItem";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,14 @@ vi.mock("@/providers/public-settings-provider", () => ({
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
 }));
+
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: () => ({
+    session: { user: { internalUserId: "user-1" } },
+  }),
+}));
+
+import { setDraft, clearDraft, resetDraftCache } from "@/features/messages/lib/draft-store";
 
 describe("ConversationListItem", () => {
   const baseConversation: ConversationListItemType = {
@@ -59,6 +67,8 @@ describe("ConversationListItem", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    resetDraftCache();
     vi.mocked(usePathname).mockReturnValue("/conversations/other");
     vi.mocked(usePublicSettings).mockReturnValue({
       allowConversationDelete: true,
@@ -189,5 +199,75 @@ describe("ConversationListItem", () => {
 
     expect(screen.getByRole("button", { name: /Salir del grupo/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Eliminar grupo/i })).toBeInTheDocument();
+  });
+
+  it("muestra el indicador 'Borrador: [texto]' y oculta ticks cuando hay un borrador guardado", () => {
+    setDraft("user-1", "conv-1", "Mensaje pendiente de enviar");
+
+    render(
+      <ConversationListItem
+        conversation={baseConversation}
+        currentUserId="user-1"
+        pending={false}
+        menuOpen={false}
+        onOpenMenu={vi.fn()}
+        onCloseMenu={vi.fn()}
+        onTogglePin={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onRequestDeleteChat={vi.fn()}
+        onRequestDeleteGroup={vi.fn()}
+        onRequestLeaveGroup={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Borrador:")).toBeInTheDocument();
+    expect(screen.getByText("Mensaje pendiente de enviar")).toBeInTheDocument();
+    // No debe mostrar el preview del último mensaje
+    expect(screen.queryByText("Hola cómo estás?")).not.toBeInTheDocument();
+  });
+
+  it("vuelve a mostrar el preview del último mensaje cuando se elimina el borrador", () => {
+    setDraft("user-1", "conv-1", "Borrador temporal");
+
+    const { rerender } = render(
+      <ConversationListItem
+        conversation={baseConversation}
+        currentUserId="user-1"
+        pending={false}
+        menuOpen={false}
+        onOpenMenu={vi.fn()}
+        onCloseMenu={vi.fn()}
+        onTogglePin={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onRequestDeleteChat={vi.fn()}
+        onRequestDeleteGroup={vi.fn()}
+        onRequestLeaveGroup={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Borrador:")).toBeInTheDocument();
+
+    act(() => {
+      clearDraft("user-1", "conv-1");
+    });
+
+    rerender(
+      <ConversationListItem
+        conversation={baseConversation}
+        currentUserId="user-1"
+        pending={false}
+        menuOpen={false}
+        onOpenMenu={vi.fn()}
+        onCloseMenu={vi.fn()}
+        onTogglePin={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onRequestDeleteChat={vi.fn()}
+        onRequestDeleteGroup={vi.fn()}
+        onRequestLeaveGroup={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Borrador:")).not.toBeInTheDocument();
+    expect(screen.getByText("Hola cómo estás?")).toBeInTheDocument();
   });
 });

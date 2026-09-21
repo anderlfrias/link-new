@@ -8,6 +8,7 @@ import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
 import { ConversationOptionsMenu } from "@/features/conversations/components/ConversationOptionsMenu";
 import { useLongPress } from "@/features/conversations/hooks/use-long-press";
+import { useDraft } from "@/features/messages/hooks/use-draft";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import {
   getConversationAvatarUrl,
@@ -58,6 +59,7 @@ export function ConversationListItem({
   const displayName = getConversationDisplayName(conversation, currentUserId);
   const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
   const secondaryText = getLastMessagePreviewText(conversation, currentUserId);
+  const draft = useDraft(conversation.id, currentUserId);
 
   // En desktop el disparador es la flecha (hover); en mobile, mantener
   // presionado — el long-press vive en el wrapper porque el toque puede
@@ -96,10 +98,17 @@ export function ConversationListItem({
             </div>
             <div className="mt-0.5 flex items-center justify-between gap-2">
               <span className="truncate text-sm text-neutral-500 dark:text-neutral-400">
-                {secondaryText}
+                {draft ? (
+                  <>
+                    <span className="font-medium text-rose-500 dark:text-rose-400">Borrador: </span>
+                    <span className="text-neutral-700 dark:text-neutral-300">{draft}</span>
+                  </>
+                ) : (
+                  secondaryText
+                )}
               </span>
               <div className="flex shrink-0 items-center gap-1.5">
-                {conversation.lastMessageSenderId === currentUserId && (
+                {!draft && conversation.lastMessageSenderId === currentUserId && (
                   <MessageStatusTicks status={conversation.lastMessageStatus} />
                 )}
                 <UnreadBadge count={conversation.unreadCount} />

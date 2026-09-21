@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageInput } from "./MessageInput";
+import { getDraft, setDraft, resetDraftCache } from "@/features/messages/lib/draft-store";
 import type { Message } from "@/features/messages/types/message.types";
 
 const mockUseAuth = vi.fn();
@@ -90,6 +91,8 @@ describe("MessageInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    resetDraftCache();
     mockRecorderStatus = "idle";
     mockUseAuth.mockReturnValue({
       session: {
@@ -642,6 +645,111 @@ describe("MessageInput", () => {
       undefined,
       "CONTACT",
     );
+  });
+
+  describe("Borradores (drafts)", () => {
+    it("carga el borrador previamente guardado al montar el componente", () => {
+      setDraft("current-u", "conv-1", "Borrador guardado");
+
+      render(
+        <MessageInput
+          conversationId="conv-1"
+          onSend={onSend}
+          onTyping={onTyping}
+          onStopTyping={onStopTyping}
+          attachmentsState={defaultAttachmentsState as any}
+          replyTo={null}
+          onCancelReply={onCancelReply}
+          currentUserId="current-u"
+        />,
+      );
+
+      const textarea = screen.getByPlaceholderText("Escribí un mensaje") as HTMLTextAreaElement;
+      expect(textarea.value).toBe("Borrador guardado");
+    });
+
+    it("guarda el borrador en storage mientras el usuario escribe", async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MessageInput
+          conversationId="conv-1"
+          onSend={onSend}
+          onTyping={onTyping}
+          onStopTyping={onStopTyping}
+          attachmentsState={defaultAttachmentsState as any}
+          replyTo={null}
+          onCancelReply={onCancelReply}
+          currentUserId="current-u"
+        />,
+      );
+
+      const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+      await user.type(textarea, "Texto en progreso");
+
+      expect(getDraft("current-u", "conv-1")).toBe("Texto en progreso");
+    });
+
+    it("limpia el borrador guardado al enviar el mensaje exitosamente", async () => {
+      const user = userEvent.setup();
+      setDraft("current-u", "conv-1", "Por enviar");
+
+      render(
+        <MessageInput
+          conversationId="conv-1"
+          onSend={onSend}
+          onTyping={onTyping}
+          onStopTyping={onStopTyping}
+          attachmentsState={defaultAttachmentsState as any}
+          replyTo={null}
+          onCancelReply={onCancelReply}
+          currentUserId="current-u"
+        />,
+      );
+
+      const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+      await user.type(textarea, "{enter}");
+
+      expect(onSend).toHaveBeenCalledWith("Por enviar", undefined);
+      expect(getDraft("current-u", "conv-1")).toBe("");
+    });
+
+    it("restaura el borrador correspondiente al cambiar de conversationId", () => {
+      setDraft("current-u", "conv-1", "Borrador de chat 1");
+      setDraft("current-u", "conv-2", "Borrador de chat 2");
+
+      const { rerender } = render(
+        <MessageInput
+          conversationId="conv-1"
+          onSend={onSend}
+          onTyping={onTyping}
+          onStopTyping={onStopTyping}
+          attachmentsState={defaultAttachmentsState as any}
+          replyTo={null}
+          onCancelReply={onCancelReply}
+          currentUserId="current-u"
+        />,
+      );
+
+      const textarea = screen.getByPlaceholderText("Escribí un mensaje") as HTMLTextAreaElement;
+      expect(textarea.value).toBe("Borrador de chat 1");
+
+      // Cambiar a conv-2
+      rerender(
+        <MessageInput
+          conversationId="conv-2"
+          onSend={onSend}
+          onTyping={onTyping}
+          onStopTyping={onStopTyping}
+          attachmentsState={defaultAttachmentsState as any}
+          replyTo={null}
+          onCancelReply={onCancelReply}
+          currentUserId="current-u"
+        />,
+      );
+
+      expect(textarea.value).toBe("Borrador de chat 2");
+    });
   });
 });
 

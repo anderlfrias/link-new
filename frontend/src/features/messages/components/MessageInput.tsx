@@ -35,6 +35,7 @@ import { buildMessagePreview } from "@/utils/message-preview";
 import { extractFilesFromClipboard } from "@/utils/clipboard";
 import { getActiveMentionQuery, type ActiveMentionQuery } from "@/utils/mention";
 import { getAvatarUrl } from "@/utils/file-url";
+import { clearDraft, getDraft, setDraft } from "@/features/messages/lib/draft-store";
 import type { DirectoryUser } from "@/features/users/types/user.types";
 import type { ContactMessagePayload, Message } from "@/features/messages/types/message.types";
 
@@ -91,8 +92,20 @@ export function MessageInput({
   mentionCandidates,
   onShareContact,
 }: MessageInputProps) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(() => getDraft(currentUserId, conversationId));
   const [cursorPosition, setCursorPosition] = useState(0);
+
+  useEffect(() => {
+    const loadedDraft = getDraft(currentUserId, conversationId);
+    setValue(loadedDraft);
+    setCursorPosition(loadedDraft.length);
+  }, [conversationId, currentUserId]);
+
+  function updateValueAndDraft(nextValue: string) {
+    setValue(nextValue);
+    setDraft(currentUserId, conversationId, nextValue);
+  }
+
   const [mentionQuery, setMentionQuery] = useState<ActiveMentionQuery | null>(null);
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [isShareContactOpen, setIsShareContactOpen] = useState(false);
@@ -133,7 +146,7 @@ export function MessageInput({
     const beforeMention = value.slice(0, mentionQuery.startIndex);
     const afterMention = value.slice(cursorPosition);
     const nextValue = `${beforeMention}${mentionText}${afterMention}`;
-    setValue(nextValue);
+    updateValueAndDraft(nextValue);
     setMentionQuery(null);
     setMentionSelectedIndex(0);
 
@@ -166,7 +179,7 @@ export function MessageInput({
   function handleTextChange(event: ChangeEvent<HTMLTextAreaElement>) {
     const nextValue = event.target.value;
     const cursorPos = event.target.selectionStart ?? nextValue.length;
-    setValue(nextValue);
+    updateValueAndDraft(nextValue);
     setCursorPosition(cursorPos);
     const hasCandidates = Boolean(mentionCandidates && mentionCandidates.length > 0);
     const nextQuery = hasCandidates ? getActiveMentionQuery(nextValue, cursorPos) : null;
@@ -265,6 +278,7 @@ export function MessageInput({
     const readyFileIds = [...fileIds];
     setSending(true);
     setValue("");
+    clearDraft(currentUserId, conversationId);
     setMentionQuery(null);
     setCursorPosition(0);
     onStopTyping();
@@ -275,6 +289,9 @@ export function MessageInput({
       } else if (attachments.length === 0) {
         resetAttachments();
       }
+    } catch (err) {
+      updateValueAndDraft(content);
+      throw err;
     } finally {
       setSending(false);
     }
@@ -358,7 +375,8 @@ export function MessageInput({
     const textarea = textareaRef.current;
     const start = textarea?.selectionStart ?? value.length;
     const end = textarea?.selectionEnd ?? value.length;
-    setValue(value.slice(0, start) + emoji + value.slice(end));
+    const nextValue = value.slice(0, start) + emoji + value.slice(end);
+    updateValueAndDraft(nextValue);
     onTyping();
 
     const cursor = start + emoji.length;

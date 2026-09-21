@@ -8,7 +8,7 @@ Mensajería y Chat
 
 [x] Menciones y contactos: Enviar y mencionar contactos dentro de los chats usando @ y el nombre de usuario.
 
-[ ] Borradores en mensajes
+[x] Borradores en mensajes
 
 [ ] Copiar texto parcial: Poder copiar solo el texto seleccionado cuando lo hay en un mensaje. (Si no hay nada seleccionado se copia todo el chat; si hay algo seleccionado debe salir la opción “Copiar texto seleccionado” además de la opción de copiar todo el mensaje).
 
