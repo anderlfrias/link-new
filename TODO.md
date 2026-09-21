@@ -10,7 +10,7 @@ Mensajería y Chat
 
 [x] Borradores en mensajes
 
-[ ] Copiar texto parcial: Poder copiar solo el texto seleccionado cuando lo hay en un mensaje. (Si no hay nada seleccionado se copia todo el chat; si hay algo seleccionado debe salir la opción “Copiar texto seleccionado” además de la opción de copiar todo el mensaje).
+[x] Copiar texto parcial: Poder copiar solo el texto seleccionado cuando lo hay en un mensaje. (Si no hay nada seleccionado se copia todo el chat; si hay algo seleccionado debe salir la opción “Copiar texto seleccionado” además de la opción de copiar todo el mensaje).
 
 [ ] Poder seleccionar varios mensajes en el chat ya sea para copiar, eliminar o reenviar.
 

@@ -117,6 +117,7 @@ export function MessageBubble({
   const [anchorPosition, setAnchorPosition] = useState<{ x: number; y: number } | null>(null);
   const [contextImageUrl, setContextImageUrl] = useState<string | null>(null);
   const [copiedFeedback, setCopiedFeedback] = useState<string | null>(null);
+  const [selectedText, setSelectedText] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.content);
   const [editPending, setEditPending] = useState(false);
@@ -125,10 +126,12 @@ export function MessageBubble({
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const bubbleContainerRef = useRef<HTMLDivElement>(null);
 
   const { handlers: gestureHandlers, swipeOffset, isSwiping } = useMessageGestures({
     disabled: !showOptionsTrigger,
     onLongPress: () => {
+      setSelectedText(getSelectedTextInMessage());
       setAnchorPosition(null);
       setMenuOpen(true);
     },
@@ -152,6 +155,30 @@ export function MessageBubble({
     onReply(message);
   }
 
+  function getSelectedTextInMessage(): string | null {
+    if (typeof window === "undefined") return null;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return null;
+    const text = selection.toString();
+    if (!text.trim()) return null;
+
+    if (bubbleContainerRef.current) {
+      if (
+        selection.anchorNode &&
+        bubbleContainerRef.current.contains(selection.anchorNode)
+      ) {
+        return text;
+      }
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        if (bubbleContainerRef.current.contains(range.commonAncestorContainer)) {
+          return text;
+        }
+      }
+    }
+    return null;
+  }
+
   // La vía "real" en desktop: click derecho en cualquier parte de la fila
   // abre el mismo menú que el botón "⋮" (Responder/Editar/Eliminar/Copiar), en vez
   // del menú nativo del navegador. Si se hizo click derecho sobre una imagen,
@@ -171,6 +198,7 @@ export function MessageBubble({
     } else {
       setContextImageUrl(null);
     }
+    setSelectedText(getSelectedTextInMessage());
     setAnchorPosition({ x: event.clientX, y: event.clientY });
     setMenuOpen(true);
   }
@@ -202,6 +230,15 @@ export function MessageBubble({
     const ok = await copyTextToClipboard(textToCopy);
     if (ok) {
       setCopiedFeedback(message.type === "CONTACT" ? "Contacto copiado al portapapeles" : "Texto copiado al portapapeles");
+      setTimeout(() => setCopiedFeedback(null), 2000);
+    }
+  }
+
+  async function handleCopySelectedText(text: string) {
+    if (!text) return;
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopiedFeedback("Texto seleccionado copiado al portapapeles");
       setTimeout(() => setCopiedFeedback(null), 2000);
     }
   }
@@ -306,6 +343,7 @@ export function MessageBubble({
         className={cn("flex flex-col", renderAsOwn ? "items-end" : "items-start", "max-w-[75%]")}
       >
         <div
+          ref={bubbleContainerRef}
           className={cn(
             "group relative",
             isSticker
@@ -356,7 +394,13 @@ export function MessageBubble({
             )}
             <button
               type="button"
+              onMouseDown={() => {
+                const currentSelected = getSelectedTextInMessage();
+                setSelectedText(currentSelected);
+              }}
               onClick={() => {
+                const currentSelected = getSelectedTextInMessage();
+                if (currentSelected) setSelectedText(currentSelected);
                 setAnchorPosition(null);
                 setMenuOpen((prev) => !prev);
               }}
@@ -380,12 +424,14 @@ export function MessageBubble({
               canDelete={canDelete}
               canCopyText={canCopyText}
               canCopyImage={canCopyImage}
+              selectedText={selectedText}
               onSelectReaction={canReact ? (emoji) => onToggleReaction!(message.id, emoji) : undefined}
               onReply={() => onReply(message)}
               onForward={() => onForward(message)}
               onEdit={startEditing}
               onDelete={() => setDeleteModalOpen(true)}
               onCopyText={() => void handleCopyText()}
+              onCopySelectedText={(text) => void handleCopySelectedText(text)}
               onCopyImage={() => void handleCopyImage()}
               align={renderAsOwn ? "right" : "left"}
             />

@@ -274,4 +274,43 @@ describe("MessageOptionsMenu", () => {
     expect(onSelectReaction).toHaveBeenCalledWith("❤️");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders 'Copiar texto seleccionado' and 'Copiar todo el mensaje' when selectedText is present", () => {
+    const onClose = vi.fn();
+    const onCopyText = vi.fn();
+    const onCopySelectedText = vi.fn();
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        canCopyText={true}
+        selectedText="fragmento seleccionado"
+        onCopyText={onCopyText}
+        onCopySelectedText={onCopySelectedText}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="right"
+      />,
+    );
+
+    const copySelectedBtn = screen.getByRole("menuitem", { name: "Copiar texto seleccionado" });
+    const copyAllBtn = screen.getByRole("menuitem", { name: "Copiar todo el mensaje" });
+
+    expect(copySelectedBtn).toBeInTheDocument();
+    expect(copyAllBtn).toBeInTheDocument();
+
+    fireEvent.click(copySelectedBtn);
+    expect(onCopySelectedText).toHaveBeenCalledWith("fragmento seleccionado");
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(copyAllBtn);
+    expect(onCopyText).toHaveBeenCalledTimes(1);
+  });
 });

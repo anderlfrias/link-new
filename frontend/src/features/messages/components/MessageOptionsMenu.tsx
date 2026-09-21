@@ -14,11 +14,13 @@ interface MessageOptionsMenuProps {
   canDelete: boolean;
   canCopyText?: boolean;
   canCopyImage?: boolean;
+  selectedText?: string | null;
   onReply: () => void;
   onForward: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onCopyText?: () => void;
+  onCopySelectedText?: (text: string) => void;
   onCopyImage?: () => void;
   onSelectReaction?: (emoji: string) => void;
   align: "left" | "right";
@@ -39,11 +41,13 @@ export function MessageOptionsMenu({
   canDelete,
   canCopyText = false,
   canCopyImage = false,
+  selectedText = null,
   onReply,
   onForward,
   onEdit,
   onDelete,
   onCopyText,
+  onCopySelectedText,
   onCopyImage,
   onSelectReaction,
   align,
@@ -224,6 +228,20 @@ export function MessageOptionsMenu({
           Reenviar
         </button>
       )}
+      {canCopyText && Boolean(selectedText && selectedText.trim()) && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onCopySelectedText?.(selectedText!.trim());
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          <IconCopy size={16} stroke={1.75} />
+          Copiar texto seleccionado
+        </button>
+      )}
       {canCopyText && (
         <button
           type="button"
@@ -235,7 +253,11 @@ export function MessageOptionsMenu({
           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
         >
           <IconCopy size={16} stroke={1.75} />
-          {canCopyImage ? "Copiar texto" : "Copiar"}
+          {Boolean(selectedText && selectedText.trim())
+            ? "Copiar todo el mensaje"
+            : canCopyImage
+            ? "Copiar texto"
+            : "Copiar"}
         </button>
       )}
       {canCopyImage && (

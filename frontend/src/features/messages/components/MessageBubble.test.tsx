@@ -848,5 +848,108 @@ describe("MessageBubble", () => {
       "Contacto: Dr. Roberto Gómez (@rgomez) • rgomez@example.com",
     );
   });
+
+  it("muestra 'Copiar texto seleccionado' y 'Copiar todo el mensaje' cuando hay texto seleccionado", async () => {
+    const user = userEvent.setup();
+    const originalGetSelection = window.getSelection;
+
+    const message: Message = {
+      ...baseMessage,
+      content: "Este es un mensaje con texto importante para copiar",
+    };
+
+    const { container } = render(
+      <MessageBubble
+        message={message}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const bubbleNode = container.querySelector(".group.relative")!;
+
+    window.getSelection = vi.fn().mockReturnValue({
+      isCollapsed: false,
+      toString: () => "texto importante",
+      rangeCount: 1,
+      getRangeAt: () => ({
+        commonAncestorContainer: bubbleNode,
+      }),
+      anchorNode: bubbleNode,
+      focusNode: bubbleNode,
+    });
+
+    const menuTrigger = screen.getByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuTrigger);
+
+    // Deben mostrarse ambas opciones
+    const copySelectedBtn = screen.getByRole("menuitem", { name: "Copiar texto seleccionado" });
+    const copyAllBtn = screen.getByRole("menuitem", { name: "Copiar todo el mensaje" });
+    expect(copySelectedBtn).toBeInTheDocument();
+    expect(copyAllBtn).toBeInTheDocument();
+
+    // Clic en copiar texto seleccionado
+    await user.click(copySelectedBtn);
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith("texto importante");
+    expect(await screen.findByText("Texto seleccionado copiado al portapapeles")).toBeInTheDocument();
+
+    window.getSelection = originalGetSelection;
+  });
+
+  it("permite copiar todo el mensaje cuando hay texto seleccionado eligiendo 'Copiar todo el mensaje'", async () => {
+    const user = userEvent.setup();
+    const originalGetSelection = window.getSelection;
+
+    const message: Message = {
+      ...baseMessage,
+      content: "Texto completo del mensaje",
+    };
+
+    const { container } = render(
+      <MessageBubble
+        message={message}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const bubbleNode = container.querySelector(".group.relative")!;
+
+    window.getSelection = vi.fn().mockReturnValue({
+      isCollapsed: false,
+      toString: () => "completo",
+      rangeCount: 1,
+      getRangeAt: () => ({
+        commonAncestorContainer: bubbleNode,
+      }),
+      anchorNode: bubbleNode,
+      focusNode: bubbleNode,
+    });
+
+    const menuTrigger = screen.getByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuTrigger);
+
+    const copyAllBtn = screen.getByRole("menuitem", { name: "Copiar todo el mensaje" });
+    await user.click(copyAllBtn);
+
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith("Texto completo del mensaje");
+    expect(await screen.findByText("Texto copiado al portapapeles")).toBeInTheDocument();
+
+    window.getSelection = originalGetSelection;
+  });
 });
 
