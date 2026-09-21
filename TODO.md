@@ -12,7 +12,7 @@ Mensajería y Chat
 
 [x] Copiar texto parcial: Poder copiar solo el texto seleccionado cuando lo hay en un mensaje. (Si no hay nada seleccionado se copia todo el chat; si hay algo seleccionado debe salir la opción “Copiar texto seleccionado” además de la opción de copiar todo el mensaje).
 
-[ ] Poder seleccionar varios mensajes en el chat ya sea para copiar, eliminar o reenviar.
+[x] Poder seleccionar varios mensajes en el chat ya sea para copiar, eliminar o reenviar.
 
 [ ] Poder seleccionar varios chats para eliminar o salir de los grupos (o cualquier otra funcionalidad que aplique).
 

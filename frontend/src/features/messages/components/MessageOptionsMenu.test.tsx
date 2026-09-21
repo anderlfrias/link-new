@@ -313,4 +313,34 @@ describe("MessageOptionsMenu", () => {
     fireEvent.click(copyAllBtn);
     expect(onCopyText).toHaveBeenCalledTimes(1);
   });
+
+  it("renders 'Seleccionar' option and triggers onSelect callback", () => {
+    const onClose = vi.fn();
+    const onSelect = vi.fn();
+
+    render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onSelect={onSelect}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+      />,
+    );
+
+    const selectBtn = screen.getByRole("menuitem", { name: "Seleccionar" });
+    expect(selectBtn).toBeInTheDocument();
+
+    fireEvent.click(selectBtn);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });
+

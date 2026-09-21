@@ -135,4 +135,21 @@ describe("useForwardMessage", () => {
     expect(count).toBe(0);
     expect(forwardMessage).not.toHaveBeenCalled();
   });
+
+  it("forwardMany forwards multiple messages sequentially", async () => {
+    vi.mocked(forwardMessage).mockResolvedValue({} as any);
+
+    const { result } = renderHook(() => useForwardMessage());
+
+    let count = 0;
+    await act(async () => {
+      count = await result.current.forwardMany(["msg-1", "msg-2"], [{ conversationId: "conv-dest" }]);
+    });
+
+    expect(forwardMessage).toHaveBeenCalledWith("fwd-token", "conv-dest", "msg-1");
+    expect(forwardMessage).toHaveBeenCalledWith("fwd-token", "conv-dest", "msg-2");
+    expect(count).toBe(1);
+    expect(result.current.error).toBeNull();
+  });
 });
+

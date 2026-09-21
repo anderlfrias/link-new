@@ -40,6 +40,15 @@ vi.mock("@/features/messages/hooks/use-message-attachments", () => ({
   useMessageAttachments: () => mockUseMessageAttachments(),
 }));
 
+const mockCopyTextToClipboard = vi.fn().mockResolvedValue(true);
+vi.mock("@/utils/clipboard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/clipboard")>();
+  return {
+    ...actual,
+    copyTextToClipboard: (...args: any[]) => mockCopyTextToClipboard(...args),
+  };
+});
+
 vi.mock("@/providers/public-settings-provider", () => ({
   usePublicSettings: () => ({
     allowMessageEdit: true,
@@ -364,5 +373,160 @@ describe("ConversationView", () => {
     expect(screen.getByText("@csanchez")).toBeInTheDocument();
     expect(screen.queryByText("Carlos Sanchez")).not.toBeInTheDocument();
   });
+
+  it("permite entrar en modo selección desde las opciones del mensaje y copiar mensajes seleccionados", async () => {
+    const user = userEvent.setup();
+    const ownMessage: Message = {
+      ...mockMessage,
+      id: "msg-own",
+      senderId: "u-1",
+      content: "Mi mensaje para copiar",
+      createdAt: new Date().toISOString(),
+    };
+
+    mockUseMessages.mockReturnValue({
+      messages: [mockMessage, ownMessage],
+      status: "ready",
+      hasMore: false,
+      loadingMore: false,
+      loadMore: vi.fn(),
+      send: vi.fn(),
+      edit: vi.fn(),
+      remove: vi.fn(),
+      toggleReaction: vi.fn(),
+    });
+
+    render(<ConversationView conversationId="conv-1" />);
+
+    // Abrir menú de opciones del primer mensaje
+    const menuButtons = screen.getAllByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuButtons[0]);
+
+    // Elegir 'Seleccionar'
+    const selectOption = screen.getByRole("menuitem", { name: "Seleccionar" });
+    await user.click(selectOption);
+
+    // Debe activarse la barra de herramientas con 1 seleccionado
+    expect(screen.getByText("1 seleccionado")).toBeInTheDocument();
+
+    // Seleccionar el segundo mensaje
+    const checkboxes = screen.getAllByRole("button", { name: "Seleccionar mensaje" });
+    await user.click(checkboxes[0]); // Hace click en el segundo mensaje
+
+    expect(screen.getByText("2 seleccionados")).toBeInTheDocument();
+
+    // Copiar mensajes seleccionados
+    const copyBtn = screen.getByLabelText("Copiar mensajes");
+    await user.click(copyBtn);
+
+    expect(mockCopyTextToClipboard).toHaveBeenCalled();
+    // Vuelve al header normal tras copiar
+    expect(screen.queryByText(/seleccionado/)).not.toBeInTheDocument();
+  });
+
+  it("permite eliminar mensajes seleccionados desde la barra de selección", async () => {
+    const user = userEvent.setup();
+    const ownMessage: Message = {
+      ...mockMessage,
+      id: "msg-own",
+      senderId: "u-1",
+      content: "Mensaje propio a eliminar",
+      createdAt: new Date().toISOString(),
+    };
+
+    mockUseMessages.mockReturnValue({
+      messages: [ownMessage],
+      status: "ready",
+      hasMore: false,
+      loadingMore: false,
+      loadMore: vi.fn(),
+      send: vi.fn(),
+      edit: vi.fn(),
+      remove: mockRemove,
+      toggleReaction: vi.fn(),
+    });
+
+    render(<ConversationView conversationId="conv-1" />);
+
+    // Abrir menú de opciones y seleccionar
+    const menuButton = screen.getByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuButton);
+    await user.click(screen.getByRole("menuitem", { name: "Seleccionar" }));
+
+    expect(screen.getByText("1 seleccionado")).toBeInTheDocument();
+
+    // Hacer clic en eliminar
+    const deleteToolbarBtn = screen.getByLabelText("Eliminar mensajes");
+    await user.click(deleteToolbarBtn);
+
+    // Modal de confirmación debe abrirse
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const confirmBtn = screen.getByRole("button", { name: /Eliminar para todos/i });
+    await user.click(confirmBtn);
+
+    expect(mockRemove).toHaveBeenCalledWith("msg-own");
+  });
+
+  it("sale del modo selección al hacer clic en el botón cerrar [X]", async () => {
+    const user = userEvent.setup();
+    render(<ConversationView conversationId="conv-1" />);
+
+    const menuButton = screen.getByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuButton);
+    await user.click(screen.getByRole("menuitem", { name: "Seleccionar" }));
+
+    expect(screen.getByText("1 seleccionado")).toBeInTheDocument();
+
+    // Cerrar selección
+    const closeBtn = screen.getByLabelText("Cerrar selección");
+    await user.click(closeBtn);
+
+    expect(screen.queryByText("1 seleccionado")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver información de Dra. Maria/i })).toBeInTheDocument();
+  });
+
+  it("no permite seleccionar mensajes eliminados ni reenviarlos", async () => {
+    const user = userEvent.setup();
+    const deletedMessage: Message = {
+      ...mockMessage,
+      id: "msg-del",
+      content: "",
+      deletedAt: "2026-09-09T09:05:00Z",
+    };
+
+    mockUseMessages.mockReturnValue({
+      messages: [mockMessage, deletedMessage],
+      status: "ready",
+      hasMore: false,
+      loadingMore: false,
+      loadMore: vi.fn(),
+      send: vi.fn(),
+      edit: vi.fn(),
+      remove: vi.fn(),
+      toggleReaction: vi.fn(),
+    });
+
+    render(<ConversationView conversationId="conv-1" />);
+
+    // El mensaje eliminado muestra "Mensaje eliminado"
+    expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
+
+    // Solo el mensaje válido tiene botón de opciones
+    const menuButtons = screen.getAllByRole("button", { name: "Opciones del mensaje" });
+    expect(menuButtons).toHaveLength(1);
+    await user.click(menuButtons[0]);
+    await user.click(screen.getByRole("menuitem", { name: "Seleccionar" }));
+
+    // El modo selección está activo
+    expect(screen.getByText("1 seleccionado")).toBeInTheDocument();
+
+    // El eliminado no tiene botón para ser seleccionado
+    expect(screen.queryByRole("button", { name: "Seleccionar mensaje" })).not.toBeInTheDocument();
+
+    // El botón de reenviar está habilitado porque solo el mensaje válido está seleccionado
+    const forwardBtn = screen.getByLabelText("Reenviar mensajes");
+    expect(forwardBtn).toBeEnabled();
+  });
 });
+
 

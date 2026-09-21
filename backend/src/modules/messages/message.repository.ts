@@ -96,9 +96,9 @@ export function listMessages(conversationId: string, options: { beforeId?: strin
   return prisma.message.findMany({
     where: {
       conversationId,
-      deletedAt: null,
       ...(trimmedQuery
         ? {
+            deletedAt: null,
             content: {
               contains: trimmedQuery,
               mode: "insensitive",

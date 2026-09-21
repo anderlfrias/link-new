@@ -42,6 +42,10 @@ interface MessageBubbleProps {
   onToggleReaction?: (messageId: string, emoji: string) => void;
   searchQuery?: string;
   currentUserName?: string;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (messageId: string) => void;
+  onSelectFromMenu?: (messageId: string) => void;
 }
 
 function formatBubbleTime(iso: string): string {
@@ -62,6 +66,10 @@ export function MessageBubble({
   onToggleReaction,
   searchQuery,
   currentUserName,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onSelectFromMenu,
 }: MessageBubbleProps) {
   const settings = usePublicSettings();
   const isDeleted = Boolean(message.deletedAt);
@@ -129,7 +137,7 @@ export function MessageBubble({
   const bubbleContainerRef = useRef<HTMLDivElement>(null);
 
   const { handlers: gestureHandlers, swipeOffset, isSwiping } = useMessageGestures({
-    disabled: !showOptionsTrigger,
+    disabled: isSelectionMode || !showOptionsTrigger,
     onLongPress: () => {
       setSelectedText(getSelectedTextInMessage());
       setAnchorPosition(null);
@@ -318,11 +326,38 @@ export function MessageBubble({
     // burbuja en sí no cambia de tamaño ni posición, solo desliza visualmente
     // durante el swipe (ver `style` más abajo).
     <div
-      {...gestureHandlers}
-      onDoubleClick={handleRowDoubleClick}
-      onContextMenu={handleRowContextMenu}
-      className={cn("relative flex", renderAsOwn ? "justify-end" : "justify-start")}
+      {...(isSelectionMode ? {} : gestureHandlers)}
+      onDoubleClick={isSelectionMode ? undefined : handleRowDoubleClick}
+      onContextMenu={isSelectionMode ? undefined : handleRowContextMenu}
+      onClick={isSelectionMode && !isDeleted ? () => onToggleSelect?.(message.id) : undefined}
+      className={cn(
+        "relative flex items-center transition-colors duration-150",
+        renderAsOwn ? "justify-end" : "justify-start",
+        isSelectionMode && !isDeleted && "cursor-pointer select-none",
+      )}
     >
+      {/* Indicador checkbox en modo selección (solo para mensajes vivos, no eliminados) */}
+      {isSelectionMode && !isDeleted && (
+        <div className={cn("flex shrink-0 items-center justify-center py-1", renderAsOwn ? "order-last pl-3" : "pr-3")}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.(message.id);
+            }}
+            aria-label={isSelected ? "Deseleccionar mensaje" : "Seleccionar mensaje"}
+            className={cn(
+              "flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all duration-150",
+              isSelected
+                ? "border-brand-blue bg-brand-blue text-white shadow-sm scale-105"
+                : "border-neutral-400/80 bg-white/50 hover:border-brand-blue dark:border-neutral-500 dark:bg-neutral-800/50",
+            )}
+          >
+            {isSelected && <IconCheck size={13} stroke={3} />}
+          </button>
+        </div>
+      )}
+
       {/* Ícono que se revela detrás de la burbuja al arrastrarla (swipe-to-reply,
           mobile) — mismo lenguaje visual que WhatsApp: aparece a la izquierda,
           se va marcando a medida que te acercás al umbral que dispara "responder". */}
@@ -366,7 +401,7 @@ export function MessageBubble({
             <span>{copiedFeedback}</span>
           </div>
         )}
-        {showOptionsTrigger && !isEditing && (
+        {showOptionsTrigger && !isEditing && !isSelectionMode && (
           <div className={cn("absolute -top-1 flex items-center gap-0.5", renderAsOwn ? "right-full mr-1" : "left-full ml-1")}>
             {canReact && (
               <div className="relative">
@@ -433,6 +468,7 @@ export function MessageBubble({
               onCopyText={() => void handleCopyText()}
               onCopySelectedText={(text) => void handleCopySelectedText(text)}
               onCopyImage={() => void handleCopyImage()}
+              onSelect={onSelectFromMenu ? () => onSelectFromMenu(message.id) : undefined}
               align={renderAsOwn ? "right" : "left"}
             />
           </div>

@@ -14,7 +14,8 @@ import { cn } from "@/utils/cn";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface ForwardMessageModalProps {
-  message: Message;
+  message?: Message;
+  messages?: Message[];
   currentUserId: string;
   onClose: () => void;
 }
@@ -71,12 +72,19 @@ function SelectableChatRow({ name, avatar, selected, onClick, disabled }: Select
  * Con varios destinos seleccionados no tiene sentido navegar a "el" chat de
  * destino (podría haber muchos) — al reenviar con éxito el modal simplemente
  * se cierra y el usuario se queda donde estaba. */
-export function ForwardMessageModal({ message, currentUserId, onClose }: ForwardMessageModalProps) {
+export function ForwardMessageModal({ message, messages, currentUserId, onClose }: ForwardMessageModalProps) {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { conversations, status } = useConversations();
   const { users, status: usersStatus } = useUsers(true);
-  const { forward, pending, error } = useForwardMessage();
+  const { forward, forwardMany, pending, error } = useForwardMessage();
+
+  const targetMessages = useMemo(() => {
+    const list = messages && messages.length > 0 ? messages : message ? [message] : [];
+    return [...list]
+      .filter((m) => !m.deletedAt)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [messages, message]);
 
   const otherConversations = useMemo(
     () => conversations.filter((conversation) => conversation.type !== "SELF"),
@@ -117,22 +125,33 @@ export function ForwardMessageModal({ message, currentUserId, onClose }: Forward
   }
 
   async function handleSubmit() {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 || targetMessages.length === 0) return;
     const conversationIds = new Set(otherConversations.map((conversation) => conversation.id));
     const targets: ForwardTarget[] = selectedIds.map((id) => {
       if (id === SELF_ID) return "self";
       if (conversationIds.has(id)) return { conversationId: id };
       return { userId: id };
     });
-    const succeeded = await forward(message.id, targets);
+
+    const succeeded =
+      targetMessages.length === 1
+        ? await forward(targetMessages[0].id, targets)
+        : await forwardMany(
+            targetMessages.map((m) => m.id),
+            targets,
+          );
+
     if (succeeded === targets.length) onClose();
   }
+
+  const titlePrefix =
+    targetMessages.length > 1 ? `Reenviar ${targetMessages.length} mensajes` : "Reenviar mensaje";
 
   return (
     <div className="flex min-h-0 w-full flex-col">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <h2 className="truncate font-display text-lg font-semibold text-brand-ink dark:text-white">
-          Reenviar mensaje{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+          {titlePrefix}{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
         </h2>
         <button
           type="button"
@@ -220,7 +239,12 @@ export function ForwardMessageModal({ message, currentUserId, onClose }: Forward
       </div>
 
       <div className="border-t border-black/5 px-4 py-3 dark:border-white/10">
-        <Button type="button" className="w-full" disabled={selectedIds.length === 0 || pending} onClick={handleSubmit}>
+        <Button
+          type="button"
+          className="w-full"
+          disabled={selectedIds.length === 0 || targetMessages.length === 0 || pending}
+          onClick={handleSubmit}
+        >
           {pending ? (
             <IconLoader2 className="animate-spin" size={16} />
           ) : (

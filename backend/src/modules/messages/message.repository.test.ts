@@ -137,7 +137,7 @@ describe("message.repository", () => {
 
       expect(prisma.message.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { conversationId: "conv-1", deletedAt: null },
+          where: { conversationId: "conv-1" },
           take: 20,
         }),
       );
@@ -152,7 +152,7 @@ describe("message.repository", () => {
 
       expect(prisma.message.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { conversationId: "conv-1", deletedAt: null },
+          where: { conversationId: "conv-1" },
           take: 20,
           cursor: { id: "msg-cursor" },
           skip: 1,
@@ -189,7 +189,6 @@ describe("message.repository", () => {
         expect.objectContaining({
           where: {
             conversationId: "conv-1",
-            deletedAt: null,
           },
           take: 10,
         }),

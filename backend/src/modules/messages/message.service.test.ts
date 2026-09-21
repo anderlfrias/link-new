@@ -328,6 +328,27 @@ describe("message.service", () => {
       expect(result[1].id).toBe("m-2");
     });
 
+    it("incluye mensajes eliminados pero con contenido y adjuntos saneados", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const deletedMessage = buildMockMessage({
+        id: "m-deleted",
+        content: "Texto secreto",
+        deletedAt: new Date("2026-01-01T10:10:00Z"),
+        deletedById: "u-1",
+      });
+
+      vi.mocked(MessageRepository.listMessages).mockResolvedValue([deletedMessage] as any);
+
+      const result = await listMessages("u-1", "conv-1", { limit: 10 });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("m-deleted");
+      expect(result[0].deletedAt).toEqual(deletedMessage.deletedAt);
+      expect(result[0].content).toBe("");
+      expect(result[0].files).toEqual([]);
+    });
+
     it("reduce adjuntos al shape público (PublicStoredFile) sin filtrar rutas internas ni checksum (S12)", async () => {
       const mockConv = buildMockConversation();
       vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);

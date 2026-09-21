@@ -55,5 +55,50 @@ export function useForwardMessage() {
     [session],
   );
 
-  return { forward, pending, error };
+  /** Reenvía múltiples mensajes en orden a uno o varios destinos. */
+  const forwardMany = useCallback(
+    async (messageIds: string[], targets: ForwardTarget[]) => {
+      if (!session || targets.length === 0 || messageIds.length === 0) return 0;
+      setPending(true);
+      setError(null);
+
+      let succeededTargets = 0;
+      let failedTargets = 0;
+
+      for (const target of targets) {
+        try {
+          const conversationId = await resolveConversationId(target, session.token);
+          let targetHasFailures = false;
+          for (const msgId of messageIds) {
+            try {
+              await forwardMessage(session.token, conversationId, msgId);
+            } catch {
+              targetHasFailures = true;
+            }
+          }
+          if (targetHasFailures) {
+            failedTargets++;
+          } else {
+            succeededTargets++;
+          }
+        } catch {
+          failedTargets++;
+        }
+      }
+
+      setPending(false);
+      if (failedTargets > 0) {
+        setError(
+          succeededTargets > 0
+            ? `Se reenvió a ${succeededTargets} de ${targets.length} chats. ${failedTargets} tuvieron errores.`
+            : "No se pudieron reenviar los mensajes.",
+        );
+      }
+      return succeededTargets;
+    },
+    [session],
+  );
+
+  return { forward, forwardMany, pending, error };
 }
+

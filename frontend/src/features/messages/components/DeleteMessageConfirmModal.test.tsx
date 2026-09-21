@@ -77,4 +77,20 @@ describe("DeleteMessageConfirmModal", () => {
     fireEvent.click(confirmBtn);
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it("renders multiple messages title and button when count > 1", () => {
+    render(
+      <DeleteMessageConfirmModal
+        pending={false}
+        error={null}
+        count={3}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Eliminar 3 mensajes para todos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar para todos (3)" })).toBeInTheDocument();
+  });
 });
+

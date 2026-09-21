@@ -96,6 +96,7 @@ function withPreviews<
     forwardedFrom: Parameters<typeof toForwardedFromPreview>[0];
     files: (MessageFile & { file: StoredFile })[];
     reactions?: Parameters<typeof toReactionResponse>[0][];
+    deletedAt?: Date | null;
   },
 >(message: T, currentUserId?: string) {
   // Desestructurar (en vez de spread-y-reescribir) para que TS calcule bien
@@ -103,12 +104,14 @@ function withPreviews<
   // `T` genérico y "pisar" una clave después no reemplaza su tipo de forma
   // confiable en la inferencia.
   const { replyTo, forwardedFrom, files, reactions, ...rest } = message;
+  const isDeleted = Boolean(message.deletedAt);
   return {
     ...rest,
+    content: isDeleted ? "" : (rest as any).content,
     replyTo: toReplyPreview(replyTo),
-    forwardedFrom: toForwardedFromPreview(forwardedFrom),
-    files: toSerializableFiles(files, currentUserId),
-    reactions: (reactions ?? []).map(toReactionResponse),
+    forwardedFrom: isDeleted ? null : toForwardedFromPreview(forwardedFrom),
+    files: isDeleted ? [] : toSerializableFiles(files, currentUserId),
+    reactions: isDeleted ? [] : (reactions ?? []).map(toReactionResponse),
   };
 }
 

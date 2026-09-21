@@ -951,5 +951,95 @@ describe("MessageBubble", () => {
 
     window.getSelection = originalGetSelection;
   });
+
+  it("llama a onSelectFromMenu al hacer clic en 'Seleccionar' en el menú de opciones", async () => {
+    const user = userEvent.setup();
+    const onSelectFromMenu = vi.fn();
+
+    render(
+      <MessageBubble
+        message={baseMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="u-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+        onSelectFromMenu={onSelectFromMenu}
+      />,
+    );
+
+    const menuTrigger = screen.getByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuTrigger);
+
+    const selectOption = screen.getByRole("menuitem", { name: "Seleccionar" });
+    await user.click(selectOption);
+
+    expect(onSelectFromMenu).toHaveBeenCalledWith("msg-1");
+  });
+
+  it("en modo selección renderiza el checkbox y llama a onToggleSelect al hacer clic", async () => {
+    const user = userEvent.setup();
+    const onToggleSelect = vi.fn();
+
+    render(
+      <MessageBubble
+        message={baseMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="u-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+        isSelectionMode={true}
+        isSelected={false}
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+
+    const selectCheckbox = screen.getByRole("button", { name: "Seleccionar mensaje" });
+    expect(selectCheckbox).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Opciones del mensaje" })).not.toBeInTheDocument();
+
+    await user.click(selectCheckbox);
+    expect(onToggleSelect).toHaveBeenCalledWith("msg-1");
+  });
+
+  it("en modo selección NO renderiza checkbox ni permite seleccionar si el mensaje está eliminado", () => {
+    const onToggleSelect = vi.fn();
+    const deletedMessage: Message = {
+      ...baseMessage,
+      deletedAt: "2026-09-09T10:05:00Z",
+    };
+
+    render(
+      <MessageBubble
+        message={deletedMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="u-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+        isSelectionMode={true}
+        isSelected={false}
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Seleccionar mensaje" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Deseleccionar mensaje" })).not.toBeInTheDocument();
+  });
 });
+
+
 

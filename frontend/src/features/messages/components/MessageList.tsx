@@ -28,6 +28,10 @@ interface MessageListProps {
   onToggleReaction?: (messageId: string, emoji: string) => void;
   searchQuery?: string;
   searchJumpTarget?: { messageId: string; nonce: number } | null;
+  isSelectionMode?: boolean;
+  selectedMessageIds?: Set<string>;
+  onToggleSelectMessage?: (messageId: string) => void;
+  onEnterSelectionMode?: (initialMessageId: string) => void;
 }
 
 const STICK_TO_BOTTOM_THRESHOLD = 120;
@@ -62,6 +66,10 @@ export function MessageList({
   onToggleReaction,
   searchQuery,
   searchJumpTarget,
+  isSelectionMode = false,
+  selectedMessageIds,
+  onToggleSelectMessage,
+  onEnterSelectionMode,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -363,6 +371,8 @@ export function MessageList({
             !isOwn &&
             (showDateSeparator || previousMessage?.senderId !== message.senderId);
 
+          const isSelected = Boolean(selectedMessageIds?.has(message.id));
+
           return (
             <div
               key={message.id}
@@ -371,8 +381,9 @@ export function MessageList({
                 else messageElementsRef.current.delete(message.id);
               }}
               className={cn(
-                "rounded-2xl transition-colors duration-300",
+                "rounded-2xl transition-colors duration-200",
                 highlightedId === message.id && "bg-brand-blue/10 dark:bg-brand-blue/15",
+                isSelected && "bg-brand-blue/10 dark:bg-brand-blue/20",
               )}
             >
               {showDateSeparator && (
@@ -396,6 +407,10 @@ export function MessageList({
                 onJumpToMessage={jumpToMessage}
                 onToggleReaction={onToggleReaction}
                 searchQuery={searchQuery}
+                isSelectionMode={isSelectionMode}
+                isSelected={isSelected}
+                onToggleSelect={onToggleSelectMessage}
+                onSelectFromMenu={onEnterSelectionMode}
               />
             </div>
           );

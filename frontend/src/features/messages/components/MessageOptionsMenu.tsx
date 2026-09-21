@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { IconArrowForwardUp, IconCornerUpLeft, IconPencil, IconTrash, IconCopy, IconPhoto } from "@tabler/icons-react";
+import { IconArrowForwardUp, IconCornerUpLeft, IconPencil, IconTrash, IconCopy, IconPhoto, IconSquareCheck } from "@tabler/icons-react";
 import { QUICK_EMOJIS } from "./QuickReactionPicker";
 import { cn } from "@/utils/cn";
 
@@ -23,6 +23,7 @@ interface MessageOptionsMenuProps {
   onCopySelectedText?: (text: string) => void;
   onCopyImage?: () => void;
   onSelectReaction?: (emoji: string) => void;
+  onSelect?: () => void;
   align: "left" | "right";
   /** Coordenadas de pantalla del cursor si se abrió por click derecho (contextmenu).
    * Si está presente, el menú se posiciona con fixed calculando el espacio disponible en viewport. */
@@ -50,6 +51,7 @@ export function MessageOptionsMenu({
   onCopySelectedText,
   onCopyImage,
   onSelectReaction,
+  onSelect,
   align,
   anchorPosition = null,
 }: MessageOptionsMenuProps) {
@@ -152,7 +154,7 @@ export function MessageOptionsMenu({
 
   if (
     !open ||
-    (!canReply && !canForward && !canEdit && !canDelete && !canCopyText && !canCopyImage && !onSelectReaction)
+    (!canReply && !canForward && !canEdit && !canDelete && !canCopyText && !canCopyImage && !onSelectReaction && !onSelect)
   ) {
     return null;
   }
@@ -226,6 +228,20 @@ export function MessageOptionsMenu({
         >
           <IconArrowForwardUp size={16} stroke={1.75} />
           Reenviar
+        </button>
+      )}
+      {onSelect && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onSelect();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          <IconSquareCheck size={16} stroke={1.75} />
+          Seleccionar
         </button>
       )}
       {canCopyText && Boolean(selectedText && selectedText.trim()) && (

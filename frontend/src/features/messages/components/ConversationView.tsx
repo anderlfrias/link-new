@@ -1,8 +1,9 @@
 "use client";
 
 import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
-import { IconBookmark, IconLoader2, IconCloudUpload } from "@tabler/icons-react";
+import { IconBookmark, IconCheck, IconLoader2, IconCloudUpload } from "@tabler/icons-react";
 import { useAuth } from "@/providers/auth-provider";
+import { usePublicSettings } from "@/providers/public-settings-provider";
 import { useConversation } from "@/features/conversations/hooks/use-conversation";
 import { useMessages } from "@/features/messages/hooks/use-messages";
 import { useTyping } from "@/features/messages/hooks/use-typing";
@@ -10,15 +11,20 @@ import { useMessageAttachments } from "@/features/messages/hooks/use-message-att
 import { Drawer } from "@/components/ui/Drawer";
 import { Modal } from "@/components/ui/Modal";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
+import { MessageSelectionToolbar } from "@/features/messages/components/MessageSelectionToolbar";
 import { InChatSearchBar } from "@/features/messages/components/InChatSearchBar";
 import { MessageList } from "@/features/messages/components/MessageList";
 import { MessageInput } from "@/features/messages/components/MessageInput";
 import { ConversationDetailPanel } from "@/features/conversations/components/ConversationDetailPanel";
 import { ForwardMessageModal } from "@/features/messages/components/ForwardMessageModal";
+import { DeleteMessageConfirmModal } from "@/features/messages/components/DeleteMessageConfirmModal";
 import { ImageLightboxProvider } from "@/features/messages/providers/image-lightbox-provider";
 import { getConversationAvatarUrl, getConversationDisplayName } from "@/utils/conversation-display";
 import { getAvatarUrl } from "@/utils/file-url";
-import { extractFilesFromClipboard } from "@/utils/clipboard";
+import { extractFilesFromClipboard, copyTextToClipboard } from "@/utils/clipboard";
+import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
+import { formatMessagesForCopy } from "@/features/messages/utils/format-messages-copy";
+import { cn } from "@/utils/cn";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface ConversationViewProps {
@@ -27,6 +33,7 @@ interface ConversationViewProps {
 
 export function ConversationView({ conversationId }: ConversationViewProps) {
   const { session } = useAuth();
+  const settings = usePublicSettings();
   const currentUserId = session?.user.internalUserId ?? "";
   const currentUserName = session?.user.username || session?.user.fullName || "";
 
@@ -54,7 +61,15 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [replyTarget, setReplyTarget] = useState<Message | null>(null);
-  const [forwardTarget, setForwardTarget] = useState<Message | null>(null);
+  const [forwardModalMessages, setForwardModalMessages] = useState<Message[] | null>(null);
+
+  // Modo selección múltiple
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
+  const [multiCopiedFeedback, setMultiCopiedFeedback] = useState<string | null>(null);
+  const [deleteSelectedModalOpen, setDeleteSelectedModalOpen] = useState(false);
+  const [deleteSelectedPending, setDeleteSelectedPending] = useState(false);
+  const [deleteSelectedError, setDeleteSelectedError] = useState<string | null>(null);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -66,6 +81,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
     setSearchQuery("");
     setActiveMatchIndex(0);
     setSearchJumpTarget(null);
+    setIsSelectionMode(false);
+    setSelectedMessageIds(new Set());
   }, [conversationId]);
 
   useEffect(() => {
@@ -74,10 +91,98 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
         event.preventDefault();
         setIsSearchOpen((prev) => !prev);
       }
+      if (event.key === "Escape" && isSelectionMode) {
+        handleExitSelectionMode();
+      }
     }
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, []);
+  }, [isSelectionMode]);
+
+  function handleExitSelectionMode() {
+    setIsSelectionMode(false);
+    setSelectedMessageIds(new Set());
+  }
+
+  function handleEnterSelectionMode(initialMessageId: string) {
+    const target = messages.find((m) => m.id === initialMessageId);
+    if (target?.deletedAt) return;
+    setIsSelectionMode(true);
+    setSelectedMessageIds(new Set([initialMessageId]));
+  }
+
+  function handleToggleSelectMessage(messageId: string) {
+    const target = messages.find((m) => m.id === messageId);
+    if (target?.deletedAt) return;
+    setSelectedMessageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+        if (next.size === 0) {
+          setIsSelectionMode(false);
+        }
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  }
+
+  const selectedMessages = useMemo(() => {
+    if (selectedMessageIds.size === 0) return [];
+    return messages.filter((m) => selectedMessageIds.has(m.id));
+  }, [messages, selectedMessageIds]);
+
+  const canForwardSelected = useMemo(() => {
+    if (selectedMessages.length === 0) return false;
+    return selectedMessages.every((m) => !m.deletedAt);
+  }, [selectedMessages]);
+
+  const canDeleteSelected = useMemo(() => {
+    if (selectedMessages.length === 0) return false;
+    const isCreator = conversation?.createdById === currentUserId;
+    return selectedMessages.every((m) => {
+      if (m.deletedAt) return false;
+      if (isCreator) return true;
+      return (
+        m.senderId === currentUserId &&
+        Boolean(settings?.allowMessageDeleteForEveryone) &&
+        isWithinMessageTimeLimit(
+          m.createdAt,
+          settings?.messageDeleteForEveryoneTimeLimitMinutes ?? null,
+        )
+      );
+    });
+  }, [selectedMessages, conversation?.createdById, currentUserId, settings]);
+
+  async function handleCopySelectedMessages() {
+    if (selectedMessages.length === 0) return;
+    const formatted = formatMessagesForCopy(selectedMessages, currentUserId);
+    await copyTextToClipboard(formatted);
+    const feedback =
+      selectedMessages.length === 1
+        ? "Mensaje copiado al portapapeles"
+        : `${selectedMessages.length} mensajes copiados al portapapeles`;
+    setMultiCopiedFeedback(feedback);
+    setTimeout(() => setMultiCopiedFeedback(null), 2500);
+    handleExitSelectionMode();
+  }
+
+  async function handleConfirmDeleteSelected() {
+    setDeleteSelectedPending(true);
+    setDeleteSelectedError(null);
+    try {
+      for (const m of selectedMessages) {
+        await remove(m.id);
+      }
+      setDeleteSelectedModalOpen(false);
+      handleExitSelectionMode();
+    } catch (err: any) {
+      setDeleteSelectedError(err?.message || "No se pudieron eliminar los mensajes");
+    } finally {
+      setDeleteSelectedPending(false);
+    }
+  }
 
   const matchingMessages = useMemo(() => {
     const trimmed = searchQuery.trim().toLowerCase();
@@ -225,16 +330,32 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <ConversationHeader
-          title={displayName}
-          subtitle={subtitle}
-          imageUrl={avatarUrl}
-          icon={conversation.type === "SELF" ? <IconBookmark size={20} stroke={1.75} /> : undefined}
-          onOpenDetails={() => setShowDetails(true)}
-          onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
-          isSearchOpen={isSearchOpen}
-        />
-        {isSearchOpen && (
+        {isSelectionMode ? (
+          <MessageSelectionToolbar
+            selectedCount={selectedMessageIds.size}
+            canCopy={selectedMessages.some((m) => !m.deletedAt)}
+            canForward={canForwardSelected}
+            canDelete={canDeleteSelected}
+            onClose={handleExitSelectionMode}
+            onCopy={handleCopySelectedMessages}
+            onForward={() => {
+              const forwardable = selectedMessages.filter((m) => !m.deletedAt);
+              if (forwardable.length > 0) setForwardModalMessages(forwardable);
+            }}
+            onDelete={() => setDeleteSelectedModalOpen(true)}
+          />
+        ) : (
+          <ConversationHeader
+            title={displayName}
+            subtitle={subtitle}
+            imageUrl={avatarUrl}
+            icon={conversation.type === "SELF" ? <IconBookmark size={20} stroke={1.75} /> : undefined}
+            onOpenDetails={() => setShowDetails(true)}
+            onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
+            isSearchOpen={isSearchOpen}
+          />
+        )}
+        {isSearchOpen && !isSelectionMode && (
           <InChatSearchBar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -260,22 +381,28 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onEditMessage={edit}
           onDeleteMessage={remove}
           onReplyMessage={setReplyTarget}
-          onForwardMessage={setForwardTarget}
+          onForwardMessage={(msg) => setForwardModalMessages([msg])}
           onToggleReaction={toggleReaction}
           searchQuery={isSearchOpen ? searchQuery : undefined}
           searchJumpTarget={searchJumpTarget}
+          isSelectionMode={isSelectionMode}
+          selectedMessageIds={selectedMessageIds}
+          onToggleSelectMessage={handleToggleSelectMessage}
+          onEnterSelectionMode={handleEnterSelectionMode}
         />
-        <MessageInput
-          conversationId={conversationId}
-          onSend={handleSend}
-          onTyping={notifyTyping}
-          onStopTyping={notifyStopped}
-          attachmentsState={attachmentsState}
-          replyTo={replyTarget}
-          onCancelReply={() => setReplyTarget(null)}
-          currentUserId={currentUserId}
-          mentionCandidates={mentionCandidates}
-        />
+        <div className={cn(isSelectionMode && "pointer-events-none opacity-50")}>
+          <MessageInput
+            conversationId={conversationId}
+            onSend={handleSend}
+            onTyping={notifyTyping}
+            onStopTyping={notifyStopped}
+            attachmentsState={attachmentsState}
+            replyTo={replyTarget}
+            onCancelReply={() => setReplyTarget(null)}
+            currentUserId={currentUserId}
+            mentionCandidates={mentionCandidates}
+          />
+        </div>
         {isDraggingFile && (
           <div className="pointer-events-none absolute inset-0 z-20 p-10 bg-brand-ink/5 dark:bg-black/35 backdrop-blur-[2px] transition-all duration-300">
             <div className="relative w-full h-full rounded-3xl bg-white/95 dark:bg-neutral-900/95 shadow-2xl flex flex-col items-center justify-center transition-all duration-300">
@@ -321,14 +448,38 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
             />
           </Drawer>
         )}
-        {forwardTarget && (
-          <Modal onClose={() => setForwardTarget(null)} aria-label="Reenviar mensaje">
+        {forwardModalMessages && (
+          <Modal onClose={() => setForwardModalMessages(null)} aria-label="Reenviar mensaje">
             <ForwardMessageModal
-              message={forwardTarget}
+              messages={forwardModalMessages}
               currentUserId={currentUserId}
-              onClose={() => setForwardTarget(null)}
+              onClose={() => {
+                setForwardModalMessages(null);
+                if (isSelectionMode) handleExitSelectionMode();
+              }}
             />
           </Modal>
+        )}
+        {deleteSelectedModalOpen && (
+          <DeleteMessageConfirmModal
+            pending={deleteSelectedPending}
+            error={deleteSelectedError}
+            count={selectedMessages.length}
+            onConfirm={handleConfirmDeleteSelected}
+            onCancel={() => {
+              setDeleteSelectedModalOpen(false);
+              setDeleteSelectedError(null);
+            }}
+          />
+        )}
+        {multiCopiedFeedback && (
+          <div
+            role="status"
+            className="pointer-events-none fixed bottom-20 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-neutral-900/90 px-4 py-1.5 text-xs font-medium text-white shadow-xl backdrop-blur-sm dark:bg-white/95 dark:text-neutral-900"
+          >
+            <IconCheck size={14} stroke={2.5} className="text-emerald-400 dark:text-emerald-600" />
+            <span>{multiCopiedFeedback}</span>
+          </div>
         )}
       </div>
     </ImageLightboxProvider>

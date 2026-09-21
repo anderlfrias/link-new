@@ -7,6 +7,7 @@ import type { Conversation } from "@/features/conversations/types/conversation.t
 import type { DirectoryUser } from "@/features/users/types/user.types";
 
 const mockForward = vi.fn();
+const mockForwardMany = vi.fn();
 const mockUseForwardMessage = vi.fn();
 vi.mock("@/features/messages/hooks/use-forward-message", () => ({
   useForwardMessage: () => mockUseForwardMessage(),
@@ -101,8 +102,10 @@ describe("ForwardMessageModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockForward.mockResolvedValue(1);
+    mockForwardMany.mockResolvedValue(1);
     mockUseForwardMessage.mockReturnValue({
       forward: mockForward,
+      forwardMany: mockForwardMany,
       pending: false,
       error: null,
     });
@@ -211,4 +214,92 @@ describe("ForwardMessageModal", () => {
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("permite reenviar múltiples mensajes usando forwardMany", async () => {
+    const user = userEvent.setup();
+    const msg2: Message = {
+      ...baseMessage,
+      id: "msg-2",
+      content: "Segundo mensaje",
+      createdAt: "2026-09-09T10:01:00Z",
+    };
+
+    render(
+      <ForwardMessageModal
+        messages={[baseMessage, msg2]}
+        currentUserId="current-u"
+        onClose={onClose}
+      />,
+    );
+
+    expect(screen.getByText(/Reenviar 2 mensajes/i)).toBeInTheDocument();
+
+    const chatRow = screen.getByRole("button", { name: /Carlos/i });
+    await user.click(chatRow);
+
+    const submitBtn = screen.getByRole("button", { name: /Reenviar \(1\)/i });
+    await user.click(submitBtn);
+
+    expect(mockForwardMany).toHaveBeenCalledWith(
+      ["msg-1", "msg-2"],
+      [{ conversationId: "conv-2" }],
+    );
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("filtra mensajes eliminados cuando se pasa una lista mixta y solo reenvía los válidos", async () => {
+    const user = userEvent.setup();
+    const deletedMsg: Message = {
+      ...baseMessage,
+      id: "msg-deleted",
+      content: "",
+      deletedAt: "2026-09-09T10:05:00Z",
+    };
+
+    render(
+      <ForwardMessageModal
+        messages={[baseMessage, deletedMsg]}
+        currentUserId="current-u"
+        onClose={onClose}
+      />,
+    );
+
+    // Solo queda 1 mensaje activo, por lo tanto el título no debe decir "Reenviar 2 mensajes"
+    expect(screen.getByText("Reenviar mensaje")).toBeInTheDocument();
+
+    const chatRow = screen.getByRole("button", { name: /Carlos/i });
+    await user.click(chatRow);
+
+    const submitBtn = screen.getByRole("button", { name: /Reenviar \(1\)/i });
+    await user.click(submitBtn);
+
+    expect(mockForward).toHaveBeenCalledWith("msg-1", [{ conversationId: "conv-2" }]);
+    expect(mockForwardMany).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("deshabilita el botón de reenviar si el mensaje a reenviar está eliminado", async () => {
+    const user = userEvent.setup();
+    const deletedMsg: Message = {
+      ...baseMessage,
+      id: "msg-deleted",
+      deletedAt: "2026-09-09T10:05:00Z",
+    };
+
+    render(
+      <ForwardMessageModal
+        message={deletedMsg}
+        currentUserId="current-u"
+        onClose={onClose}
+      />,
+    );
+
+    const chatRow = screen.getByRole("button", { name: /Carlos/i });
+    await user.click(chatRow);
+
+    const submitBtn = screen.getByRole("button", { name: /Reenviar \(1\)/i });
+    expect(submitBtn).toBeDisabled();
+    expect(mockForward).not.toHaveBeenCalled();
+  });
 });
+
