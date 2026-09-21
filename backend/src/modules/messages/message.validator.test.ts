@@ -61,6 +61,33 @@ describe("message.validator", () => {
       ).rejects.toThrow("a sticker message must have empty content and exactly one fileId");
     });
 
+    it("acepta un mensaje de tipo CONTACT con contenido y sin adjuntos", async () => {
+      const contactPayload = JSON.stringify({ id: "u-1", name: "Ana Gomez", email: "ana@test.com" });
+      const result = await createMessageSchema.validate({
+        content: contactPayload,
+        type: "CONTACT",
+      });
+      expect(result.type).toBe("CONTACT");
+      expect(result.content).toBe(contactPayload);
+    });
+
+    it("rechaza CONTACT si tiene archivos adjuntos o contenido vacío", async () => {
+      await expect(
+        createMessageSchema.validate({
+          content: JSON.stringify({ id: "u-1" }),
+          fileIds: ["file-1"],
+          type: "CONTACT",
+        }),
+      ).rejects.toThrow("a contact message must have content and no files");
+
+      await expect(
+        createMessageSchema.validate({
+          content: "",
+          type: "CONTACT",
+        }),
+      ).rejects.toThrow();
+    });
+
     it("rechaza si no tiene ni texto ni adjuntos", async () => {
       await expect(createMessageSchema.validate({})).rejects.toThrow(
         "content or fileIds is required",

@@ -5,8 +5,17 @@ import type { StoredFile } from "@/features/files/types/file.types";
 
 /** `STICKER` siempre trae `content: ""` y exactamente un `files[]` — se
  * renderiza sin fondo de burbuja (ver MessageBubble.tsx). Un GIF, en cambio,
- * viaja como `TEXT` normal con un adjunto `image/gif` — no tiene tipo propio. */
-export type MessageType = "TEXT" | "SYSTEM" | "STICKER";
+ * viaja como `TEXT` normal con un adjunto `image/gif` — no tiene tipo propio.
+ * `CONTACT` almacena el contacto serializado en `content` y se renderiza como tarjeta. */
+export type MessageType = "TEXT" | "SYSTEM" | "STICKER" | "CONTACT";
+
+export interface ContactMessagePayload {
+  id: string;
+  name: string;
+  username?: string | null;
+  email: string;
+  avatarUrl?: string | null;
+}
 
 export interface MessageSender {
   id: string;
@@ -93,8 +102,8 @@ export interface SendMessageInput {
   content: string;
   fileIds?: string[];
   replyToId?: string;
-  /** Solo `"STICKER"` — ver `MessageType`. Omitido para todo lo demás (texto, GIF, notas de voz, adjuntos). */
-  type?: "STICKER";
+  /** `"STICKER"` o `"CONTACT"`. Omitido para todo lo demás (texto, GIF, notas de voz, adjuntos). */
+  type?: "STICKER" | "CONTACT";
 }
 
 export interface EditMessageInput {

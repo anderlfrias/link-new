@@ -45,7 +45,7 @@ export function MentionAutocompleteList({
       <ul ref={listRef} role="listbox" aria-label="Sugerencias de mención" className="divide-y divide-transparent">
         {candidates.map((candidate, idx) => {
           const isSelected = idx === selectedIndex;
-          const displayHandle = candidate.username ? `@${candidate.username}` : null;
+          const handle = candidate.username || candidate.name.replace(/\s+/g, "_");
 
           return (
             <li
@@ -65,14 +65,9 @@ export function MentionAutocompleteList({
               )}
             >
               <Avatar name={candidate.name} imageUrl={candidate.avatarUrl} size="sm" />
-              <div className="flex flex-col min-w-0 flex-1">
-                <span className="truncate leading-snug">{candidate.name}</span>
-                {displayHandle && (
-                  <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate font-normal">
-                    {displayHandle}
-                  </span>
-                )}
-              </div>
+              <span className="truncate leading-snug font-medium text-sm flex-1">
+                @{handle}
+              </span>
             </li>
           );
         })}

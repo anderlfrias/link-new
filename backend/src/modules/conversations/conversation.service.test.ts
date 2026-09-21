@@ -3,6 +3,7 @@ import {
   ConversationGroupSettings,
   ConversationType,
   GroupPermissionLevel,
+  MessageType,
 } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
@@ -228,6 +229,24 @@ describe("conversation.service", () => {
         files: [],
       });
       expect(preview).toBe("");
+    });
+
+    it("mensaje tipo CONTACT muestra '👤 Contacto: [Nombre]' o '👤 Contacto'", () => {
+      const preview = buildLastMessagePreview({
+        content: JSON.stringify({ name: "Carlos Perez" }),
+        deletedAt: null,
+        files: [],
+        type: MessageType.CONTACT,
+      });
+      expect(preview).toBe("👤 Contacto: Carlos Perez");
+
+      const previewFallback = buildLastMessagePreview({
+        content: "invalid json",
+        deletedAt: null,
+        files: [],
+        type: MessageType.CONTACT,
+      });
+      expect(previewFallback).toBe("👤 Contacto");
     });
   });
 

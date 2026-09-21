@@ -20,7 +20,7 @@ describe("MentionAutocompleteList", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renderiza la lista de candidatos con sus nombres y usuarios", () => {
+  it("renderiza la lista de candidatos mostrando solo @usuario y no el nombre completo", () => {
     render(
       <MentionAutocompleteList
         candidates={mockCandidates}
@@ -29,11 +29,13 @@ describe("MentionAutocompleteList", () => {
       />,
     );
 
-    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
     expect(screen.getByText("@anag")).toBeInTheDocument();
-    expect(screen.getByText("Carlos Perez")).toBeInTheDocument();
     expect(screen.getByText("@cperez")).toBeInTheDocument();
-    expect(screen.getByText("David sin username")).toBeInTheDocument();
+    expect(screen.getByText("@David_sin_username")).toBeInTheDocument();
+
+    expect(screen.queryByText("Ana Gomez")).not.toBeInTheDocument();
+    expect(screen.queryByText("Carlos Perez")).not.toBeInTheDocument();
+    expect(screen.queryByText("David sin username")).not.toBeInTheDocument();
   });
 
   it("marca aria-selected en el elemento seleccionado según selectedIndex", () => {

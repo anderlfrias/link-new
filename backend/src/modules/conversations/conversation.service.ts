@@ -1,4 +1,4 @@
-import { AuditAction, ConversationType, GroupPermissionLevel } from "@prisma/client";
+import { AuditAction, ConversationType, GroupPermissionLevel, MessageType } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { getIO } from "../../socket";
 import { conversationRoomName, userRoomName } from "../../socket/rooms";
@@ -56,8 +56,21 @@ export function buildLastMessagePreview(message: {
   content: string;
   deletedAt: Date | null;
   files: { id: string }[];
+  type?: MessageType;
 }): string {
   if (message.deletedAt) return "Mensaje eliminado";
+
+  if (message.type === MessageType.CONTACT) {
+    try {
+      const parsed = JSON.parse(message.content);
+      if (parsed && typeof parsed.name === "string" && parsed.name.trim()) {
+        return `👤 Contacto: ${parsed.name.trim()}`;
+      }
+    } catch {
+      // ignore
+    }
+    return "👤 Contacto";
+  }
 
   const text = message.content.trim().replace(/\s+/g, " ");
   if (text) return text;

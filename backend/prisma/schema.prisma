@@ -63,6 +63,9 @@ enum MessageType {
   /// renderiza sin fondo de burbuja (ver MessageBubble.tsx en el frontend),
   /// a diferencia de un GIF (que viaja como TEXT + adjunto normal).
   STICKER @map("sticker")
+  /// Contacto compartido — contiene los datos del contacto en formato JSON en `content`
+  /// y se renderiza con tarjeta interactiva en el frontend.
+  CONTACT @map("contact")
 
   @@map("message_type")
 }

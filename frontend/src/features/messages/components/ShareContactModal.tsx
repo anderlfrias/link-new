@@ -69,7 +69,7 @@ export function ShareContactModal({
       </div>
 
       <div className="flex-1 overflow-y-auto max-h-[50vh] divide-y divide-black/5 dark:divide-white/5">
-        {status === "loading" && (
+        {(status === "loading" || status === "idle") && (
           <div className="flex items-center justify-center p-8 text-neutral-400">
             <IconLoader2 size={24} className="animate-spin" />
           </div>
@@ -81,13 +81,13 @@ export function ShareContactModal({
           </div>
         )}
 
-        {status === "success" && filtered.length === 0 && (
+        {status === "ready" && filtered.length === 0 && (
           <div className="p-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
             No se encontraron contactos
           </div>
         )}
 
-        {status === "success" &&
+        {status === "ready" &&
           filtered.map((user) => (
             <button
               key={user.id}

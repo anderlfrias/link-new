@@ -34,12 +34,13 @@ import { formatDuration } from "@/utils/format-duration";
 import { buildMessagePreview } from "@/utils/message-preview";
 import { extractFilesFromClipboard } from "@/utils/clipboard";
 import { getActiveMentionQuery, type ActiveMentionQuery } from "@/utils/mention";
+import { getAvatarUrl } from "@/utils/file-url";
 import type { DirectoryUser } from "@/features/users/types/user.types";
-import type { Message } from "@/features/messages/types/message.types";
+import type { ContactMessagePayload, Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
   conversationId: string;
-  onSend: (content: string, fileIds?: string[], type?: "STICKER") => Promise<void> | void;
+  onSend: (content: string, fileIds?: string[], type?: "STICKER" | "CONTACT") => Promise<void> | void;
   onTyping: () => void;
   onStopTyping: () => void;
   attachmentsState: ReturnType<typeof useMessageAttachments>;
@@ -150,10 +151,14 @@ export function MessageInput({
     if (onShareContact) {
       onShareContact(user);
     } else {
-      const contactText = user.username
-        ? `👤 Contacto: ${user.name} (@${user.username}) • ${user.email}`
-        : `👤 Contacto: ${user.name} • ${user.email}`;
-      void onSend(contactText);
+      const contactPayload: ContactMessagePayload = {
+        id: user.id,
+        name: user.name,
+        username: user.username ?? null,
+        email: user.email,
+        avatarUrl: getAvatarUrl(user),
+      };
+      void onSend(JSON.stringify(contactPayload), undefined, "CONTACT");
     }
     setIsShareContactOpen(false);
   }
@@ -163,7 +168,8 @@ export function MessageInput({
     const cursorPos = event.target.selectionStart ?? nextValue.length;
     setValue(nextValue);
     setCursorPosition(cursorPos);
-    const nextQuery = getActiveMentionQuery(nextValue, cursorPos);
+    const hasCandidates = Boolean(mentionCandidates && mentionCandidates.length > 0);
+    const nextQuery = hasCandidates ? getActiveMentionQuery(nextValue, cursorPos) : null;
     setMentionQuery(nextQuery);
     setMentionSelectedIndex(0);
     onTyping();
@@ -173,7 +179,8 @@ export function MessageInput({
     const target = event.currentTarget;
     const cursorPos = target.selectionStart ?? target.value.length;
     setCursorPosition(cursorPos);
-    const nextQuery = getActiveMentionQuery(target.value, cursorPos);
+    const hasCandidates = Boolean(mentionCandidates && mentionCandidates.length > 0);
+    const nextQuery = hasCandidates ? getActiveMentionQuery(target.value, cursorPos) : null;
     setMentionQuery(nextQuery);
   }
   const {

@@ -166,6 +166,38 @@ describe("message.service", () => {
       expect(() => JSON.stringify(result)).not.toThrow();
     });
 
+    it("crea un mensaje tipo CONTACT y lo audita con messageType CONTACT", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+      const contactPayload = JSON.stringify({ id: "u-contact", name: "Contacto", email: "contacto@test.com" });
+      const createdMsg = buildMockMessage({
+        type: MessageType.CONTACT,
+        content: contactPayload,
+      });
+      vi.mocked(MessageRepository.createMessage).mockResolvedValue(createdMsg as any);
+
+      const result = await sendMessage("u-1", "conv-1", {
+        content: contactPayload,
+        type: "CONTACT" as any,
+      });
+
+      expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.CONTACT,
+          content: contactPayload,
+        }),
+      );
+      expect(AuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.SEND_MESSAGE,
+          metadata: expect.objectContaining({
+            messageType: MessageType.CONTACT,
+          }),
+        }),
+      );
+      expect(result.type).toBe(MessageType.CONTACT);
+    });
+
     it("rechaza si replyToId no existe en la conversación", async () => {
       const mockConv = buildMockConversation();
       vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);

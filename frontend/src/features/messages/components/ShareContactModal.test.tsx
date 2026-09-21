@@ -47,7 +47,7 @@ describe("ShareContactModal", () => {
     vi.clearAllMocks();
     mockUseUsers.mockReturnValue({
       users: mockUsers,
-      status: "success",
+      status: "ready",
     });
   });
 
@@ -66,6 +66,59 @@ describe("ShareContactModal", () => {
     expect(screen.getByText("Carlos Perez")).toBeInTheDocument();
     expect(screen.getByText("@cperez")).toBeInTheDocument();
     expect(screen.queryByText("Yo Mismo")).not.toBeInTheDocument();
+  });
+
+  it("muestra spinner mientras status es loading o idle", () => {
+    mockUseUsers.mockReturnValue({
+      users: [],
+      status: "loading",
+    });
+
+    const { container } = render(
+      <ShareContactModal
+        onClose={onClose}
+        onSelectContact={onSelectContact}
+        currentUserId="u-me"
+      />,
+    );
+
+    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+  });
+
+  it("muestra mensaje de error si status es error", () => {
+    mockUseUsers.mockReturnValue({
+      users: [],
+      status: "error",
+    });
+
+    render(
+      <ShareContactModal
+        onClose={onClose}
+        onSelectContact={onSelectContact}
+        currentUserId="u-me"
+      />,
+    );
+
+    expect(
+      screen.getByText("Error al cargar los contactos. Por favor intenta de nuevo."),
+    ).toBeInTheDocument();
+  });
+
+  it("muestra mensaje de vacío si no hay contactos disponibles", () => {
+    mockUseUsers.mockReturnValue({
+      users: [],
+      status: "ready",
+    });
+
+    render(
+      <ShareContactModal
+        onClose={onClose}
+        onSelectContact={onSelectContact}
+        currentUserId="u-me"
+      />,
+    );
+
+    expect(screen.getByText("No se encontraron contactos")).toBeInTheDocument();
   });
 
   it("filtra contactos por texto de búsqueda", async () => {

@@ -20,6 +20,14 @@ vi.mock("@/utils/clipboard", () => ({
   copyImageToClipboard: (...args: unknown[]) => mockCopyImageToClipboard(...args),
 }));
 
+vi.mock("@/features/conversations/hooks/use-start-conversation", () => ({
+  useStartConversation: () => ({
+    startWithUser: vi.fn(),
+    pending: false,
+    error: null,
+  }),
+}));
+
 const baseMessage: Message = {
   id: "msg-1",
   conversationId: "conv-1",
@@ -727,6 +735,118 @@ describe("MessageBubble", () => {
     expect(mentionAna.className).toContain("amber");
     // La mención a carlos no es propia
     expect(mentionCarlos.className).not.toContain("amber");
+  });
+
+  it("renderiza una tarjeta de contacto cuando el mensaje es de tipo CONTACT", () => {
+    const contactMessage: Message = {
+      ...baseMessage,
+      id: "msg-contact",
+      type: "CONTACT",
+      content: JSON.stringify({
+        id: "u-contact-99",
+        name: "Dr. Roberto Gómez",
+        username: "rgomez",
+        email: "rgomez@example.com",
+        avatarUrl: null,
+      }),
+    };
+
+    render(
+      <MessageBubble
+        message={contactMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    expect(screen.getByTestId("contact-message-card")).toBeInTheDocument();
+    expect(screen.getByText("Dr. Roberto Gómez")).toBeInTheDocument();
+    expect(screen.getByText("@rgomez")).toBeInTheDocument();
+    expect(screen.getByText("rgomez@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar mensaje a este contacto" })).toBeInTheDocument();
+  });
+
+  it("un mensaje de contacto eliminado muestra 'Mensaje eliminado' en lugar de la tarjeta", () => {
+    const deletedContactMessage: Message = {
+      ...baseMessage,
+      id: "msg-contact-del",
+      type: "CONTACT",
+      content: JSON.stringify({
+        id: "u-contact-99",
+        name: "Dr. Roberto Gómez",
+        username: "rgomez",
+        email: "rgomez@example.com",
+        avatarUrl: null,
+      }),
+      deletedAt: "2026-09-09T10:15:00Z",
+    };
+
+    render(
+      <MessageBubble
+        message={deletedContactMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    expect(screen.getByText("Mensaje eliminado")).toBeInTheDocument();
+    expect(screen.queryByTestId("contact-message-card")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dr. Roberto Gómez")).not.toBeInTheDocument();
+  });
+
+  it("formatea el contenido del contacto al copiar texto desde el menú de opciones", async () => {
+    const user = userEvent.setup();
+    const contactMessage: Message = {
+      ...baseMessage,
+      id: "msg-contact-copy",
+      type: "CONTACT",
+      content: JSON.stringify({
+        id: "u-contact-99",
+        name: "Dr. Roberto Gómez",
+        username: "rgomez",
+        email: "rgomez@example.com",
+        avatarUrl: null,
+      }),
+    };
+
+    render(
+      <MessageBubble
+        message={contactMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const menuTrigger = screen.getByRole("button", { name: "Opciones del mensaje" });
+    await user.click(menuTrigger);
+
+    const copyBtn = screen.getByRole("menuitem", { name: /^Copiar/ });
+    await user.click(copyBtn);
+
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith(
+      "Contacto: Dr. Roberto Gómez (@rgomez) • rgomez@example.com",
+    );
   });
 });
 

@@ -23,8 +23,9 @@ import { resolveFileUrl } from "@/utils/file-url";
 import { copyImageToClipboard, copyTextToClipboard } from "@/utils/clipboard";
 import { isImageMimeType } from "@/utils/file-format";
 import { FormattedMessageText } from "@/features/messages/components/FormattedMessageText";
+import { ContactMessageCard } from "@/features/messages/components/ContactMessageCard";
 import { cn } from "@/utils/cn";
-import type { Message } from "@/features/messages/types/message.types";
+import type { ContactMessagePayload, Message } from "@/features/messages/types/message.types";
 
 interface MessageBubbleProps {
   message: Message;
@@ -70,6 +71,7 @@ export function MessageBubble({
   // Un sticker ya borrado se pinta como cualquier otro "Mensaje eliminado"
   // (tombstone genérico) — el look sin burbuja es solo para uno vivo.
   const isSticker = message.type === "STICKER" && !isDeleted;
+  const isContact = message.type === "CONTACT" && !isDeleted;
 
   // `isOwn` (prop) = ¿el remitente REAL de este mensaje sos vos? Rige
   // permisos (canEdit/canDelete) y los recibos — nunca cambia por cómo se ve.
@@ -186,9 +188,20 @@ export function MessageBubble({
 
   async function handleCopyText() {
     if (!message.content) return;
-    const ok = await copyTextToClipboard(message.content);
+    let textToCopy = message.content;
+    if (message.type === "CONTACT") {
+      try {
+        const parsed = JSON.parse(message.content) as ContactMessagePayload;
+        textToCopy = parsed.username
+          ? `Contacto: ${parsed.name} (@${parsed.username}) • ${parsed.email}`
+          : `Contacto: ${parsed.name} • ${parsed.email}`;
+      } catch {
+        textToCopy = message.content;
+      }
+    }
+    const ok = await copyTextToClipboard(textToCopy);
     if (ok) {
-      setCopiedFeedback("Texto copiado al portapapeles");
+      setCopiedFeedback(message.type === "CONTACT" ? "Contacto copiado al portapapeles" : "Texto copiado al portapapeles");
       setTimeout(() => setCopiedFeedback(null), 2000);
     }
   }
@@ -298,7 +311,8 @@ export function MessageBubble({
             isSticker
               ? "max-w-36"
               : cn(
-                  "min-w-[80px] rounded-2xl px-3 py-2 shadow-sm",
+                  "rounded-2xl px-3 py-2 shadow-sm",
+                  isContact ? "min-w-[240px] sm:min-w-[280px] max-w-[320px]" : "min-w-[80px]",
                   renderAsOwn
                     ? "bg-brand-blue text-white"
                     : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
@@ -432,6 +446,13 @@ export function MessageBubble({
               {status && <MessageStatusTicks status={status} />}
             </span>
           </div>
+        ) : isContact ? (
+          <ContactMessageCard
+            rawContent={message.content}
+            isOwn={renderAsOwn}
+            currentUserId={currentUserId}
+            footer={footer}
+          />
         ) : (
           <>
             {hasAttachments && (

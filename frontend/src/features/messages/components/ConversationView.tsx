@@ -37,14 +37,15 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const attachmentsState = useMessageAttachments(conversationId);
 
   const mentionCandidates = useMemo(() => {
-    if (!conversation?.members) return [];
+    // Las menciones solo aplican a grupos — en chats individuales no aplica autocompletado
+    if (conversation?.type !== "GROUP" || !conversation?.members) return [];
     return conversation.members.map((m) => ({
       id: m.user.id,
       name: m.user.name,
       username: m.user.username,
       avatarUrl: getAvatarUrl(m.user),
     }));
-  }, [conversation?.members]);
+  }, [conversation?.type, conversation?.members]);
 
   // Arrastrar un archivo sobre un hijo (ej. una burbuja de mensaje) dispara
   // dragLeave del contenedor antes que dragEnter del hijo — un contador evita
@@ -129,7 +130,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   // El propio `send` no sabe nada de "a qué estoy respondiendo" — ese estado
   // es puramente de esta pantalla (qué está armado en el composer ahora
   // mismo), por eso se resuelve acá y no en use-messages.ts.
-  async function handleSend(content: string, fileIds?: string[], type?: "STICKER") {
+  async function handleSend(content: string, fileIds?: string[], type?: "STICKER" | "CONTACT") {
     await send(content, fileIds, replyTarget?.id, type);
     setReplyTarget(null);
   }

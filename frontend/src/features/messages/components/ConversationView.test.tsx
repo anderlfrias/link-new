@@ -307,5 +307,62 @@ describe("ConversationView", () => {
     fireEvent.keyDown(window, { key: "f", ctrlKey: true });
     expect(screen.getByPlaceholderText("Buscar en la conversación...")).toBeInTheDocument();
   });
+
+  it("no despliega sugerencias de mención al escribir @ en una conversación privada", async () => {
+    const user = userEvent.setup();
+    render(<ConversationView conversationId="conv-1" />);
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    await user.type(textarea, "Hola @");
+
+    expect(screen.queryByTestId("mention-autocomplete-list")).not.toBeInTheDocument();
+  });
+
+  it("despliega sugerencias de mención con @usuario al escribir @ en un grupo", async () => {
+    const user = userEvent.setup();
+    mockUseConversation.mockReturnValue({
+      conversation: {
+        ...mockConversation,
+        id: "group-1",
+        type: "GROUP",
+        name: "Equipo Médico",
+        members: [
+          ...mockConversation.members,
+          {
+            id: "m-3",
+            conversationId: "group-1",
+            userId: "u-3",
+            joinedAt: "2026-09-09T08:00:00Z",
+            lastReadMessageId: null,
+            lastReadAt: null,
+            lastDeliveredMessageId: null,
+            lastDeliveredAt: null,
+            isAdmin: false,
+            isPinned: false,
+            isFavorite: false,
+            user: {
+              id: "u-3",
+              name: "Carlos Sanchez",
+              username: "csanchez",
+              email: "csanchez@example.com",
+              avatarFileId: null,
+              avatarFile: null,
+              status: "ACTIVE",
+            },
+          },
+        ],
+      },
+      status: "ready",
+    });
+
+    render(<ConversationView conversationId="group-1" />);
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    await user.type(textarea, "Hola @");
+
+    expect(screen.getByTestId("mention-autocomplete-list")).toBeInTheDocument();
+    expect(screen.getByText("@csanchez")).toBeInTheDocument();
+    expect(screen.queryByText("Carlos Sanchez")).not.toBeInTheDocument();
+  });
 });
 

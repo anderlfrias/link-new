@@ -41,4 +41,24 @@ describe("message-preview", () => {
       }),
     ).toBe("");
   });
+
+  it("returns '👤 Contacto: [Nombre]' or '👤 Contacto' for CONTACT messages", () => {
+    expect(
+      buildMessagePreview({
+        deletedAt: null,
+        content: JSON.stringify({ name: "Carlos Perez" }),
+        files: [],
+        type: "CONTACT",
+      }),
+    ).toBe("👤 Contacto: Carlos Perez");
+
+    expect(
+      buildMessagePreview({
+        deletedAt: null,
+        content: "invalid",
+        files: [],
+        type: "CONTACT",
+      }),
+    ).toBe("👤 Contacto");
+  });
 });

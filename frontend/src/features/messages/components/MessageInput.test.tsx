@@ -44,7 +44,7 @@ const mockDirectoryUsers = [
 vi.mock("@/features/users/hooks/use-users", () => ({
   useUsers: () => ({
     users: mockDirectoryUsers,
-    status: "success",
+    status: "ready",
   }),
 }));
 
@@ -531,14 +531,38 @@ describe("MessageInput", () => {
     await user.type(textarea, "Hola @");
 
     expect(screen.getByTestId("mention-autocomplete-list")).toBeInTheDocument();
-    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
-    expect(screen.getByText("Carlos Perez")).toBeInTheDocument();
+    expect(screen.getByText("@anag")).toBeInTheDocument();
+    expect(screen.getByText("@cperez")).toBeInTheDocument();
+    expect(screen.queryByText("Ana Gomez")).not.toBeInTheDocument();
 
-    // Seleccionar Ana Gomez con click
-    await user.click(screen.getByText("Ana Gomez"));
+    // Seleccionar @anag con click
+    await user.click(screen.getByText("@anag"));
 
     // El textarea debe haberse actualizado con "@anag "
     expect(textarea).toHaveValue("Hola @anag ");
+    expect(screen.queryByTestId("mention-autocomplete-list")).not.toBeInTheDocument();
+  });
+
+  it("no despliega sugerencias de mención si mentionCandidates está vacío", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={onSend}
+        onTyping={onTyping}
+        onStopTyping={onStopTyping}
+        attachmentsState={defaultAttachmentsState as any}
+        replyTo={null}
+        onCancelReply={onCancelReply}
+        currentUserId="current-u"
+        mentionCandidates={[]}
+      />,
+    );
+
+    const textarea = screen.getByPlaceholderText("Escribí un mensaje");
+    await user.type(textarea, "Hola @ana");
+
     expect(screen.queryByTestId("mention-autocomplete-list")).not.toBeInTheDocument();
   });
 
@@ -606,9 +630,17 @@ describe("MessageInput", () => {
     // Seleccionar el contacto
     await user.click(screen.getByText("Contacto Ejemplo"));
 
-    // Debe llamar a onSend con el formato de contacto
+    // Debe llamar a onSend con el JSON del contacto y el tipo "CONTACT"
     expect(onSend).toHaveBeenCalledWith(
-      "👤 Contacto: Contacto Ejemplo (@ejemplo) • ejemplo@test.com",
+      JSON.stringify({
+        id: "u-contact",
+        name: "Contacto Ejemplo",
+        username: "ejemplo",
+        email: "ejemplo@test.com",
+        avatarUrl: null,
+      }),
+      undefined,
+      "CONTACT",
     );
   });
 });

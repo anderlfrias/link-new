@@ -295,11 +295,21 @@ export async function sendMessage(
     auditAction: {
       action: AuditAction.SEND_MESSAGE,
       metadata: {
-        messageType: input.type === "STICKER" ? MessageType.STICKER : MessageType.TEXT,
+        messageType:
+          input.type === "STICKER"
+            ? MessageType.STICKER
+            : input.type === "CONTACT"
+              ? MessageType.CONTACT
+              : MessageType.TEXT,
         fileCount: fileIds.length,
       },
     },
-    type: input.type === "STICKER" ? MessageType.STICKER : undefined,
+    type:
+      input.type === "STICKER"
+        ? MessageType.STICKER
+        : input.type === "CONTACT"
+          ? MessageType.CONTACT
+          : undefined,
   });
 }
 
@@ -327,6 +337,7 @@ export async function forwardMessage(
 
   return createAndDeliverMessage(currentUserId, conversationId, conversation, {
     content: source.content,
+    type: source.type,
     fileIds: source.files.map((file) => file.fileId),
     forwardedFromId: source.id,
     auditAction: {
