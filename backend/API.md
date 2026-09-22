@@ -306,7 +306,7 @@ Sin body ni query params. Devuelve un array, cada conversación con cinco campos
 - Una `PRIVATE` sin ningún mensaje todavía **no aparece acá** para ninguno de sus dos miembros (ver 4.1) — `GROUP` sí, desde que se crea.
 - `unreadCount`: mensajes de otros posteriores a tu `lastReadAt` en esa conversación.
 - `lastMessageStatus`: `"sent"` | `"delivered"` | `"read"` | `null`. **Solo tiene un valor si el último mensaje lo enviaste vos** (para pintar el check ✓/✓✓/✓✓azul junto a tu propio último mensaje en la lista); es `null` si el último mensaje es de otra persona, o si la conversación no tiene mensajes todavía. Ver sección 7 para el detalle de qué significa cada estado.
-- `lastMessagePreview`: texto del último mensaje, ya resuelto para mostrar en una lista (una sola línea, whitespace colapsado). `"Mensaje eliminado"` si fue borrado, `"📎 Archivo adjunto"` si no tiene texto pero sí adjuntos, `null` si la conversación todavía no tiene mensajes. No arma el prefijo de quién lo mandó (eso es un criterio de presentación del cliente, ej. "Vos: " o "Nombre: " en grupos) — solo el texto del mensaje en sí.
+- `lastMessagePreview`: texto del último mensaje, ya resuelto para mostrar en una lista (una sola línea, whitespace colapsado). `"Mensaje eliminado"` si fue borrado; si no tiene texto pero sí adjuntos, se segmenta según el `mimeType` del primer adjunto — `"Nota de voz"` (`audio/*`), `"GIF"` (`image/gif`), `"Imagen"` / `"N imágenes"` (`image/*`), `"Video"` / `"N videos"` (`video/*`), `"Archivo adjunto"` para el resto; `"Sticker"` si el mensaje es de tipo `STICKER`; `null` si la conversación todavía no tiene mensajes. No arma el prefijo de quién lo mandó (eso es un criterio de presentación del cliente, ej. "Vos: " o "Nombre: " en grupos) — solo el texto del mensaje en sí.
 - Enviar/editar/borrar el último mensaje de una conversación (propia o ajena) reemite `conversation:updated` a la room personal (`user:<id>`) de cada miembro, además de los eventos de `message:*` a la room de la conversación — así la lista se refresca sola aunque esa conversación no esté abierta (ver 3.1 y sección 5).
 
 ### 4.3 `GET /:id` — Detalle de una conversación
@@ -493,7 +493,7 @@ Forma de un mensaje:
 }
 ```
 
-`preview` es el mismo texto que usa `lastMessagePreview` en la lista de conversaciones (sección 4): el contenido tal cual, `"📎 Archivo adjunto"` si no tiene texto pero sí adjuntos, o `"Mensaje eliminado"` si `deletedAt` no es `null` — esto último puede pasar aunque el mensaje que lo cita nunca cambie: si el original se borra *después*, la cita simplemente empieza a mostrar "Mensaje eliminado" la próxima vez que se lea este mensaje, `replyToId` nunca se toca.
+`preview` es el mismo texto que usa `lastMessagePreview` en la lista de conversaciones (sección 4): el contenido tal cual, segmentado por tipo de adjunto (`"Nota de voz"`, `"GIF"`, `"Imagen"`, `"Video"`, `"Archivo adjunto"`, `"Sticker"`) si no tiene texto propio, o `"Mensaje eliminado"` si `deletedAt` no es `null` — esto último puede pasar aunque el mensaje que lo cita nunca cambie: si el original se borra *después*, la cita simplemente empieza a mostrar "Mensaje eliminado" la próxima vez que se lea este mensaje, `replyToId` nunca se toca.
 
 `forwardedFromId`/`forwardedFrom`: si este mensaje es un reenvío (ver 6.1.1), `forwardedFromId` es el id crudo del mensaje original y `forwardedFrom` trae quién lo mandó, resuelto en vivo:
 
@@ -584,12 +584,13 @@ Query params: `?before=<messageFileId>&limit=<1-100, default 50>` — misma pagi
     "url": "/api/v1/files/file-uuid/content?t=eyJh...",
     "createdAt": "2026-07-24T10:00:00.000Z",
     "messageId": "msg-uuid",
-    "senderId": "user-uuid"
+    "senderId": "user-uuid",
+    "messageType": "STICKER"
   }
 ]
 ```
 
-Misma forma que devuelve `POST /api/v1/files` (sección 9) más `messageId`/`senderId` para saber en qué mensaje se compartió y quién lo mandó. Solo incluye archivos de mensajes no borrados (`deletedAt: null`) — si borrás el mensaje, desaparece de acá también, aunque el `StoredFile` en sí no se borre.
+Misma forma que devuelve `POST /api/v1/files` (sección 9) más `messageId`/`senderId` para saber en qué mensaje se compartió y quién lo mandó, y `messageType` (omitido salvo `"STICKER"`) para distinguir un sticker de Giphy de una imagen/GIF cualquiera — comparten `mimeType` (Giphy sirve stickers animados como `image/gif` también), así que el cliente no puede diferenciarlos solo con eso (ver `ConversationDetailPanel.tsx` en el frontend). Solo incluye archivos de mensajes no borrados (`deletedAt: null`) — si borrás el mensaje, desaparece de acá también, aunque el `StoredFile` en sí no se borre.
 
 ### 6.5 `DELETE /:id` — Borrar
 

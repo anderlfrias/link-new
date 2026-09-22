@@ -43,7 +43,8 @@ export interface MessageReplyPreview {
   senderId: string;
   senderName: string;
   /** Mismo texto que `lastMessagePreview` de la conversación — ya resuelve
-   * "Mensaje eliminado" / "📎 Archivo adjunto" / el texto tal cual. */
+   * "Mensaje eliminado" / "Nota de voz" / "GIF" / "Archivo adjunto" / el texto
+   * tal cual (ver `MessagePreviewLabel.parseMessagePreview`). */
   preview: string;
   deletedAt: string | null;
 }
@@ -127,6 +128,10 @@ export interface ConversationFile {
   createdAt: string;
   messageId: string;
   senderId: string;
+  /** `"STICKER"` si el mensaje que lo mandó es un sticker de Giphy — ver
+   * `MessagePreviewLabel`/`ConversationDetailPanel`, distingue un sticker de
+   * una imagen o GIF cualquiera aunque comparta el mismo `mimeType`. */
+  messageType?: MessageType;
 }
 
 export interface ListConversationFilesQuery {

@@ -35,7 +35,7 @@ import {
 import { buildUploadedFileUrl } from "@/utils/file-url";
 import { downloadFile } from "@/utils/download-file";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
-import { formatFileSize, isImageMimeType } from "@/utils/file-format";
+import { formatFileSize, isAudioMimeType, isImageMimeType } from "@/utils/file-format";
 import { canPerformGroupAction } from "@/utils/group-permissions";
 import { AddMembersModal } from "@/features/conversations/components/AddMembersModal";
 import { ConversationDangerConfirmModal } from "@/features/conversations/components/ConversationDangerConfirmModal";
@@ -380,6 +380,16 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
                 const url = buildUploadedFileUrl(file.url);
 
                 if (isImageMimeType(file.mimeType)) {
+                  // Sticker y GIF comparten `mimeType` con una foto cualquiera
+                  // (Giphy sirve stickers animados como `image/gif` también) —
+                  // `messageType` es la única forma confiable de distinguir un
+                  // sticker; el GIF sí se puede reconocer solo por mimeType.
+                  const imageLabel =
+                    file.messageType === "STICKER"
+                      ? "Sticker"
+                      : file.mimeType.toLowerCase() === "image/gif"
+                        ? "GIF"
+                        : "Imagen";
                   return (
                     <button
                       key={file.id}
@@ -393,11 +403,15 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
                         <p className="truncate text-sm font-medium text-brand-ink dark:text-white">
                           {file.originalName}
                         </p>
-                        <p className="text-xs text-neutral-400">{formatFileSize(file.size)}</p>
+                        <p className="text-xs text-neutral-400">
+                          <span className="font-medium text-brand-teal-dark dark:text-brand-teal-light">{imageLabel}</span> · {formatFileSize(file.size)}
+                        </p>
                       </div>
                     </button>
                   );
                 }
+
+                const isVoice = isAudioMimeType(file.mimeType);
 
                 return (
                   <button
@@ -413,7 +427,12 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
                       <p className="truncate text-sm font-medium text-brand-ink dark:text-white">
                         {file.originalName}
                       </p>
-                      <p className="text-xs text-neutral-400">{formatFileSize(file.size)}</p>
+                      <p className="text-xs text-neutral-400">
+                        {isVoice ? (
+                          <span className="font-medium text-brand-blue dark:text-brand-blue-light">Nota de voz · </span>
+                        ) : null}
+                        {formatFileSize(file.size)}
+                      </p>
                     </div>
                   </button>
                 );

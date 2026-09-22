@@ -357,4 +357,91 @@ describe("ConversationDetailPanel", () => {
       expect(mockPush).toHaveBeenCalledWith("/");
     });
   });
+
+  describe("Archivos compartidos: segmentación por tipo", () => {
+    it("etiqueta imagen, GIF, sticker, nota de voz y deja el resto como archivo genérico", () => {
+      vi.mocked(useConversationFiles).mockReturnValue({
+        files: [
+          {
+            id: "file-img",
+            originalName: "foto.jpg",
+            mimeType: "image/jpeg",
+            extension: "jpg",
+            size: 245678,
+            url: "/uploads/foto.jpg",
+            createdAt: "2026-09-09T09:00:00Z",
+            messageId: "m-1",
+            senderId: "user-2",
+          },
+          {
+            id: "file-gif",
+            originalName: "gif-abc123.gif",
+            mimeType: "image/gif",
+            extension: "gif",
+            size: 102400,
+            url: "/uploads/gif-abc123.gif",
+            createdAt: "2026-09-09T09:01:00Z",
+            messageId: "m-2",
+            senderId: "user-2",
+          },
+          {
+            id: "file-sticker",
+            originalName: "sticker-xyz789.gif",
+            // Giphy sirve stickers animados como image/gif también — el
+            // mimeType solo no alcanza para distinguirlo de un GIF (ver
+            // ConversationDetailPanel.tsx), hace falta messageType.
+            mimeType: "image/gif",
+            extension: "gif",
+            size: 51200,
+            url: "/uploads/sticker-xyz789.gif",
+            createdAt: "2026-09-09T09:02:00Z",
+            messageId: "m-3",
+            senderId: "user-2",
+            messageType: "STICKER",
+          },
+          {
+            id: "file-voice",
+            originalName: "nota-de-voz.webm",
+            mimeType: "audio/webm",
+            extension: "webm",
+            size: 30000,
+            url: "/uploads/nota-de-voz.webm",
+            createdAt: "2026-09-09T09:03:00Z",
+            messageId: "m-4",
+            senderId: "user-2",
+          },
+          {
+            id: "file-doc",
+            originalName: "informe.pdf",
+            mimeType: "application/pdf",
+            extension: "pdf",
+            size: 512000,
+            url: "/uploads/informe.pdf",
+            createdAt: "2026-09-09T09:04:00Z",
+            messageId: "m-5",
+            senderId: "user-2",
+          },
+        ],
+        status: "ready",
+        hasMore: false,
+        loadingMore: false,
+        loadMore: vi.fn(),
+      });
+
+      render(
+        <ConversationDetailPanel
+          conversation={groupConv}
+          currentUserId="user-1"
+          onClose={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText("Imagen")).toBeInTheDocument();
+      expect(screen.getByText("GIF")).toBeInTheDocument();
+      expect(screen.getByText("Sticker")).toBeInTheDocument();
+      expect(screen.getByText("Nota de voz ·")).toBeInTheDocument();
+      expect(screen.getByText("informe.pdf")).toBeInTheDocument();
+      expect(screen.queryByText("Archivo adjunto")).not.toBeInTheDocument();
+    });
+  });
 });

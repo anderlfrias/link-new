@@ -1,6 +1,7 @@
 "use client";
 
 import { IconX } from "@tabler/icons-react";
+import { parseMessagePreview } from "@/features/conversations/components/MessagePreviewLabel";
 import { cn } from "@/utils/cn";
 
 interface QuotedMessagePreviewProps {
@@ -28,6 +29,8 @@ export function QuotedMessagePreview({
   onClick,
   onCancel,
 }: QuotedMessagePreviewProps) {
+  const parsed = parseMessagePreview(preview);
+
   const card = (
     <div
       className={cn(
@@ -54,8 +57,8 @@ export function QuotedMessagePreview({
         </span>
         <span
           className={cn(
-            "truncate text-xs",
-            isDeleted && "italic",
+            "inline-flex min-w-0 items-center truncate text-xs",
+            (isDeleted || parsed.isDeleted) && "italic",
             variant === "composer"
               ? "text-neutral-500 dark:text-neutral-400"
               : isOwnBubble
@@ -63,7 +66,17 @@ export function QuotedMessagePreview({
                 : "text-neutral-500 dark:text-neutral-400",
           )}
         >
-          {preview}
+          {parsed.Icon && (
+            <parsed.Icon
+              size={13}
+              stroke={1.75}
+              aria-hidden="true"
+              className="mr-1 inline-block shrink-0 -mt-0.5"
+            />
+          )}
+          <span className={cn("truncate", (isDeleted || parsed.isDeleted) && "italic")}>
+            {parsed.text}
+          </span>
         </span>
       </div>
       {variant === "composer" && (

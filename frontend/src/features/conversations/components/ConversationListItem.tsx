@@ -10,9 +10,11 @@ import { ConversationOptionsMenu } from "@/features/conversations/components/Con
 import { useLongPress } from "@/features/conversations/hooks/use-long-press";
 import { useDraft } from "@/features/messages/hooks/use-draft";
 import { usePublicSettings } from "@/providers/public-settings-provider";
+import { MessagePreviewLabel } from "@/features/conversations/components/MessagePreviewLabel";
 import {
   getConversationAvatarUrl,
   getConversationDisplayName,
+  getConversationPreviewParts,
   getLastMessagePreviewText,
 } from "@/utils/conversation-display";
 import { formatConversationTimestamp } from "@/utils/format-date";
@@ -66,7 +68,7 @@ export function ConversationListItem({
   const isActive = pathname === `/conversations/${conversation.id}`;
   const displayName = getConversationDisplayName(conversation, currentUserId);
   const avatarUrl = getConversationAvatarUrl(conversation, currentUserId);
-  const secondaryText = getLastMessagePreviewText(conversation, currentUserId);
+  const previewParts = getConversationPreviewParts(conversation, currentUserId);
   const draft = useDraft(conversation.id, currentUserId);
 
   // En desktop el disparador es la flecha (hover); en mobile, mantener
@@ -135,7 +137,10 @@ export function ConversationListItem({
                     <span className="text-neutral-700 dark:text-neutral-300">{draft}</span>
                   </>
                 ) : (
-                  secondaryText
+                  <MessagePreviewLabel
+                    senderPrefix={previewParts.senderPrefix}
+                    preview={previewParts.preview}
+                  />
                 )}
               </span>
               <div className="flex shrink-0 items-center gap-1.5">

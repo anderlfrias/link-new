@@ -55,6 +55,12 @@ export interface ConversationFileResponse {
   createdAt: Date;
   messageId: string;
   senderId: string;
+  /// `"STICKER"` cuando el mensaje que lo mandó es un sticker de Giphy — el
+  /// panel de "Archivos compartidos" lo necesita para no mostrar un sticker
+  /// como una imagen cualquiera (ver ConversationDetailPanel.tsx en el
+  /// frontend). `undefined` para todo lo demás, igual criterio que
+  /// `CreateMessageInput.type`.
+  messageType?: Message["type"];
 }
 
 /// Vista resumida del mensaje original, embebida en la respuesta del que
@@ -62,7 +68,8 @@ export interface ConversationFileResponse {
 /// que `sender`/`files` acá al lado). `preview` sale de `buildLastMessagePreview`
 /// (`../conversations/conversation.service.ts`) — mismo texto que ya se usa para
 /// la lista de conversaciones y el cuerpo del push, así "Mensaje eliminado" /
-/// "📎 Archivo adjunto" nunca queda inconsistente entre pantallas.
+/// "Nota de voz" / "GIF" / "Archivo adjunto" nunca queda inconsistente entre
+/// pantallas.
 export interface MessageReplyPreview {
   id: string;
   senderId: string;

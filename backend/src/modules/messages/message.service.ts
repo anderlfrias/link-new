@@ -37,7 +37,21 @@ import {
 /// `buildLastMessagePreview` (capa de servicio, ver conversation.service.ts),
 /// así que la conversión al shape público (`MessageReplyPreview`) vive acá.
 function toReplyPreview(
-  raw: { id: string; senderId: string; content: string; deletedAt: Date | null; files: { id: string }[]; sender: { name: string } } | null,
+  raw: {
+    id: string;
+    senderId: string;
+    content: string;
+    deletedAt: Date | null;
+    type?: MessageType;
+    files: {
+      id: string;
+      file?: {
+        mimeType?: string | null;
+        originalName?: string | null;
+      } | null;
+    }[];
+    sender: { name: string };
+  } | null,
 ): MessageReplyPreview | null {
   if (!raw) return null;
   return {
@@ -400,6 +414,7 @@ export async function listConversationFiles(
     ...toStoredFileResponse(entry.file, currentUserId),
     messageId: entry.message.id,
     senderId: entry.message.senderId,
+    messageType: entry.message.type,
   }));
 }
 

@@ -18,7 +18,7 @@ Mensajería y Chat
 
 Archivos Adjuntos y Multimedia
 
-[ ] Segmentar archivos adjuntos: Identificar notas de voz, imágenes, gifs, stickers, etc. (De modo que en las notificaciones y en la lista de chats sea más específico).
+[x] Segmentar archivos adjuntos: Identificar notas de voz, imágenes, gifs, stickers, etc. (De modo que en las notificaciones y en la lista de chats sea más específico).
 
 [ ] Favoritos: Agregar GIFs, Emojis y Stickers a Favoritos.
 
@@ -39,3 +39,5 @@ Sistema y Configuración
 [ ] Multi-idioma: Soporte para múltiples idiomas.
 
 [ ] Versionamiento: Versionar la aplicación.- [ ]
+
+[ ] Mandar ip a external-auth para evitar bloqueos generales.

@@ -48,14 +48,25 @@ export function aggregateReceiptStatus(receipts: MessageReceipt[]): MessageRecei
   return "sent";
 }
 
-/// Texto a mostrar en la lista de conversaciones para el último mensaje.
+export interface MessageFileForPreview {
+  id: string;
+  mimeType?: string | null;
+  originalName?: string | null;
+  file?: {
+    mimeType?: string | null;
+    originalName?: string | null;
+  } | null;
+}
+
+/// Texto a mostrar en la lista de conversaciones para el último mensaje y en notificaciones push.
 /// Mismo criterio que `MessageBubble` en el frontend: un mensaje borrado
 /// siempre muestra "Mensaje eliminado", sin importar su contenido original.
 /// El whitespace se colapsa porque el preview se renderiza en una sola línea.
+/// Identifica de forma específica notas de voz, imágenes, gifs, stickers, videos y documentos.
 export function buildLastMessagePreview(message: {
   content: string;
   deletedAt: Date | null;
-  files: { id: string }[];
+  files: MessageFileForPreview[];
   type?: MessageType;
 }): string {
   if (message.deletedAt) return "Mensaje eliminado";
@@ -64,18 +75,46 @@ export function buildLastMessagePreview(message: {
     try {
       const parsed = JSON.parse(message.content);
       if (parsed && typeof parsed.name === "string" && parsed.name.trim()) {
-        return `👤 Contacto: ${parsed.name.trim()}`;
+        return `Contacto: ${parsed.name.trim()}`;
       }
     } catch {
       // ignore
     }
-    return "👤 Contacto";
+    return "Contacto";
+  }
+
+  if (message.type === MessageType.STICKER) {
+    return "Sticker";
   }
 
   const text = message.content.trim().replace(/\s+/g, " ");
-  if (text) return text;
 
-  return message.files.length > 0 ? "📎 Archivo adjunto" : "";
+  if (message.files && message.files.length > 0) {
+    const firstFile = message.files[0];
+    const mimeType = (firstFile.file?.mimeType ?? firstFile.mimeType ?? "").toLowerCase();
+    const count = message.files.length;
+
+    if (mimeType.startsWith("audio/")) {
+      return text ? `Nota de voz: ${text}` : "Nota de voz";
+    }
+
+    if (mimeType === "image/gif") {
+      return text ? `GIF: ${text}` : "GIF";
+    }
+
+    if (mimeType.startsWith("image/")) {
+      return text || (count > 1 ? `${count} imágenes` : "Imagen");
+    }
+
+    if (mimeType.startsWith("video/")) {
+      return text || (count > 1 ? `${count} videos` : "Video");
+    }
+
+    // Demás archivos (PDFs, docs, etc.): aparecen como archivo adjunto
+    return text || "Archivo adjunto";
+  }
+
+  return text;
 }
 
 /// Exportada para que otros módulos con recursos anidados dentro de una

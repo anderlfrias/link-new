@@ -213,13 +213,13 @@ describe("conversation.service", () => {
       expect(preview).toBe("Hola mundo");
     });
 
-    it("mensaje sin texto pero con archivos adjuntos muestra '📎 Archivo adjunto'", () => {
+    it("mensaje sin texto pero con archivos adjuntos muestra 'Archivo adjunto'", () => {
       const preview = buildLastMessagePreview({
         content: "   ",
         deletedAt: null,
         files: [{ id: "file-1" }],
       });
-      expect(preview).toBe("📎 Archivo adjunto");
+      expect(preview).toBe("Archivo adjunto");
     });
 
     it("mensaje sin texto y sin archivos devuelve string vacío", () => {
@@ -231,14 +231,14 @@ describe("conversation.service", () => {
       expect(preview).toBe("");
     });
 
-    it("mensaje tipo CONTACT muestra '👤 Contacto: [Nombre]' o '👤 Contacto'", () => {
+    it("mensaje tipo CONTACT muestra 'Contacto: [Nombre]' o 'Contacto'", () => {
       const preview = buildLastMessagePreview({
         content: JSON.stringify({ name: "Carlos Perez" }),
         deletedAt: null,
         files: [],
         type: MessageType.CONTACT,
       });
-      expect(preview).toBe("👤 Contacto: Carlos Perez");
+      expect(preview).toBe("Contacto: Carlos Perez");
 
       const previewFallback = buildLastMessagePreview({
         content: "invalid json",
@@ -246,7 +246,7 @@ describe("conversation.service", () => {
         files: [],
         type: MessageType.CONTACT,
       });
-      expect(previewFallback).toBe("👤 Contacto");
+      expect(previewFallback).toBe("Contacto");
     });
   });
 
@@ -984,6 +984,171 @@ describe("conversation.service", () => {
       await markDelivered("c-1", "u-1", "m-10", new Date(), members);
 
       expect(mockEmit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("buildLastMessagePreview", () => {
+    it("devuelve 'Mensaje eliminado' cuando deletedAt está presente sin importar contenido ni archivos", () => {
+      const preview = buildLastMessagePreview({
+        deletedAt: new Date(),
+        content: "Texto secreto",
+        files: [{ id: "f-1", file: { mimeType: "image/png", originalName: "foto.png" } }],
+      });
+      expect(preview).toBe("Mensaje eliminado");
+    });
+
+    it("devuelve 'Contacto: [Nombre]' o 'Contacto' para mensajes CONTACT", () => {
+      const withName = buildLastMessagePreview({
+        deletedAt: null,
+        content: JSON.stringify({ name: "María Lopez" }),
+        files: [],
+        type: MessageType.CONTACT,
+      });
+      expect(withName).toBe("Contacto: María Lopez");
+
+      const withoutName = buildLastMessagePreview({
+        deletedAt: null,
+        content: "{}",
+        files: [],
+        type: MessageType.CONTACT,
+      });
+      expect(withoutName).toBe("Contacto");
+    });
+
+    it("devuelve 'Sticker' para mensajes STICKER", () => {
+      const sticker = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-s", file: { mimeType: "image/webp", originalName: "sticker.webp" } }],
+        type: MessageType.STICKER,
+      });
+      expect(sticker).toBe("Sticker");
+    });
+
+    it("devuelve el texto normal cuando solo hay texto", () => {
+      const text = buildLastMessagePreview({
+        deletedAt: null,
+        content: "  Hola a todos   ",
+        files: [],
+      });
+      expect(text).toBe("Hola a todos");
+    });
+
+    it("segmenta notas de voz (audio/*)", () => {
+      const voiceWithoutText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-audio", file: { mimeType: "audio/ogg", originalName: "voice.ogg" } }],
+      });
+      expect(voiceWithoutText).toBe("Nota de voz");
+
+      const voiceWithText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "Escucha esto",
+        files: [{ id: "f-audio", file: { mimeType: "audio/webm", originalName: "voice.webm" } }],
+      });
+      expect(voiceWithText).toBe("Nota de voz: Escucha esto");
+    });
+
+    it("segmenta gifs (image/gif)", () => {
+      const gifWithoutText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-gif", file: { mimeType: "image/gif", originalName: "funny.gif" } }],
+      });
+      expect(gifWithoutText).toBe("GIF");
+
+      const gifWithText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "Jajaja genial",
+        files: [{ id: "f-gif", file: { mimeType: "image/gif", originalName: "funny.gif" } }],
+      });
+      expect(gifWithText).toBe("GIF: Jajaja genial");
+    });
+
+    it("segmenta imágenes (image/* no gif)", () => {
+      const singlePhoto = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-img", file: { mimeType: "image/jpeg", originalName: "foto.jpg" } }],
+      });
+      expect(singlePhoto).toBe("Imagen");
+
+      const multiplePhotos = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [
+          { id: "f-1", file: { mimeType: "image/png", originalName: "1.png" } },
+          { id: "f-2", file: { mimeType: "image/png", originalName: "2.png" } },
+          { id: "f-3", file: { mimeType: "image/png", originalName: "3.png" } },
+        ],
+      });
+      expect(multiplePhotos).toBe("3 imágenes");
+
+      const photoWithCaption = buildLastMessagePreview({
+        deletedAt: null,
+        content: "En la playa",
+        files: [{ id: "f-img", file: { mimeType: "image/jpeg", originalName: "playa.jpg" } }],
+      });
+      expect(photoWithCaption).toBe("En la playa");
+    });
+
+    it("segmenta videos (video/*)", () => {
+      const singleVideo = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-vid", file: { mimeType: "video/mp4", originalName: "clip.mp4" } }],
+      });
+      expect(singleVideo).toBe("Video");
+
+      const multipleVideos = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [
+          { id: "v-1", file: { mimeType: "video/mp4", originalName: "1.mp4" } },
+          { id: "v-2", file: { mimeType: "video/mp4", originalName: "2.mp4" } },
+        ],
+      });
+      expect(multipleVideos).toBe("2 videos");
+
+      const videoWithCaption = buildLastMessagePreview({
+        deletedAt: null,
+        content: "Tutorial rápido",
+        files: [{ id: "v-1", file: { mimeType: "video/mp4", originalName: "tuto.mp4" } }],
+      });
+      expect(videoWithCaption).toBe("Tutorial rápido");
+    });
+
+    it("demás archivos generales aparecen como archivo adjunto", () => {
+      const singleDoc = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-pdf", file: { mimeType: "application/pdf", originalName: "balance_2026.pdf" } }],
+      });
+      expect(singleDoc).toBe("Archivo adjunto");
+
+      const docWithText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "Para firmar",
+        files: [{ id: "f-doc", file: { mimeType: "application/pdf", originalName: "contrato.pdf" } }],
+      });
+      expect(docWithText).toBe("Para firmar");
+    });
+
+    it("mantiene fallback 'Archivo adjunto' cuando no hay metadata disponible", () => {
+      const fallbackWithoutText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [{ id: "f-legacy" }],
+      });
+      expect(fallbackWithoutText).toBe("Archivo adjunto");
+
+      const fallbackWithText = buildLastMessagePreview({
+        deletedAt: null,
+        content: "Texto con adjunto legacy",
+        files: [{ id: "f-legacy" }],
+      });
+      expect(fallbackWithText).toBe("Texto con adjunto legacy");
     });
   });
 });

@@ -434,7 +434,7 @@ describe("message.service", () => {
             size: 1024n,
             createdAt: new Date(),
           },
-          message: { id: "m-1", senderId: "u-1", createdAt: new Date() },
+          message: { id: "m-1", senderId: "u-1", createdAt: new Date(), type: "TEXT" },
         },
       ];
       vi.mocked(MessageRepository.listFiles).mockResolvedValue(mockEntries as any);
@@ -446,6 +446,30 @@ describe("message.service", () => {
       expect(files[0].messageId).toBe("m-1");
       expect(files[0].senderId).toBe("u-1");
       expect(files[0].size).toBe(1024);
+      expect(files[0].messageType).toBe("TEXT");
+    });
+
+    it("propaga messageType 'STICKER' para que el cliente distinga un sticker de una imagen cualquiera", async () => {
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(buildMockConversation() as any);
+
+      const mockEntries = [
+        {
+          file: {
+            id: "f-sticker",
+            path: "uploads/sticker.gif",
+            originalName: "sticker-abc.gif",
+            mimeType: "image/gif",
+            size: 2048n,
+            createdAt: new Date(),
+          },
+          message: { id: "m-sticker", senderId: "u-1", createdAt: new Date(), type: "STICKER" },
+        },
+      ];
+      vi.mocked(MessageRepository.listFiles).mockResolvedValue(mockEntries as any);
+
+      const files = await listConversationFiles("u-1", "conv-1", { limit: 20 });
+
+      expect(files[0].messageType).toBe("STICKER");
     });
   });
 

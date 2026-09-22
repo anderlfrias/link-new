@@ -111,7 +111,17 @@ export function findLastMessagesByIds(messageIds: string[]) {
       type: true,
       content: true,
       deletedAt: true,
-      files: { select: { id: true }, take: 1 },
+      files: {
+        select: {
+          id: true,
+          file: {
+            select: {
+              mimeType: true,
+              originalName: true,
+            },
+          },
+        },
+      },
     },
   });
 }

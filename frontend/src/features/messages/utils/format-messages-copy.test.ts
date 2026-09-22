@@ -55,19 +55,38 @@ describe("format-messages-copy", () => {
           id: "mf-1",
           messageId: "msg-1",
           fileId: "f-1",
+          createdAt: "2026-09-21T10:00:00Z",
           file: {
             id: "f-1",
-            name: "documento.pdf",
-            size: 1024,
+            originalName: "documento.pdf",
             mimeType: "application/pdf",
-            uploadedById: "u-1",
+            extension: "pdf",
+            size: 1024,
+            url: "/api/v1/files/f-1/content?t=abc",
             createdAt: "2026-09-21T10:00:00Z",
             deletedAt: null,
           },
         },
       ],
     });
-    expect(formatSingleMessageContent(msg)).toBe("[Archivo: documento.pdf]");
+    expect(formatSingleMessageContent(msg)).toBe("[Archivo adjunto: documento.pdf]");
+  });
+
+  it("handles sticker, voice note and image messages", () => {
+    const stickerMsg = createMockMsg({ type: "STICKER", content: "", files: [{ id: "f", file: {} as any } as any] });
+    expect(formatSingleMessageContent(stickerMsg)).toBe("[Sticker]");
+
+    const voiceMsg = createMockMsg({
+      content: "",
+      files: [{ id: "f", file: { mimeType: "audio/webm" } as any } as any],
+    });
+    expect(formatSingleMessageContent(voiceMsg)).toBe("[Nota de voz]");
+
+    const imgMsg = createMockMsg({
+      content: "",
+      files: [{ id: "f", file: { mimeType: "image/jpeg" } as any } as any],
+    });
+    expect(formatSingleMessageContent(imgMsg)).toBe("[Imagen]");
   });
 
   it("formats multiple messages in chronological order with sender names", () => {

@@ -39,10 +39,12 @@ export interface ConversationListItem extends ConversationWithMembers {
   /// conversación todavía no tiene mensajes.
   lastMessageStatus: MessageReceiptStatus | null;
   /// Texto ya resuelto para mostrar como preview en la lista (ej. "Mensaje
-  /// eliminado" si fue borrado, "📎 Archivo adjunto" si no tiene texto pero sí
-  /// adjuntos). `null` si la conversación todavía no tiene mensajes. Se
-  /// resuelve acá y no en el cliente para no duplicar esta regla en cada
-  /// consumidor (web, futuras apps, etc.).
+  /// eliminado" si fue borrado, "Nota de voz"/"GIF"/"Imagen"/"Video"/"Archivo
+  /// adjunto" según el `mimeType` del primer adjunto si no tiene texto propio —
+  /// ver `buildLastMessagePreview` en conversation.service.ts). `null` si la
+  /// conversación todavía no tiene mensajes. Se resuelve acá y no en el
+  /// cliente para no duplicar esta regla en cada consumidor (web, futuras
+  /// apps, etc.).
   lastMessagePreview: string | null;
 }
 

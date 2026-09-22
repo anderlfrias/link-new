@@ -28,16 +28,29 @@ export function formatSingleMessageContent(message: Message): string {
     }
   }
 
+  if (message.type === "STICKER") {
+    return "[Sticker]";
+  }
+
   if (message.content.trim()) {
     return message.content;
   }
 
   if (message.files.length > 0) {
-    const fileNames = message.files
-      .filter((f) => !f.file.deletedAt)
-      .map((f) => f.file.name)
+    const activeFiles = message.files.filter((f) => !f.file.deletedAt);
+    const firstFile = activeFiles[0]?.file;
+    const mimeType = (firstFile?.mimeType || "").toLowerCase();
+
+    if (mimeType.startsWith("audio/")) return "[Nota de voz]";
+    if (mimeType === "image/gif") return "[GIF]";
+    if (mimeType.startsWith("image/")) return "[Imagen]";
+    if (mimeType.startsWith("video/")) return "[Video]";
+
+    const fileNames = activeFiles
+      .map((f) => f.file.originalName)
+      .filter(Boolean)
       .join(", ");
-    return fileNames ? `[Archivo: ${fileNames}]` : "[Archivo adjunto]";
+    return fileNames ? `[Archivo adjunto: ${fileNames}]` : "[Archivo adjunto]";
   }
 
   return "";

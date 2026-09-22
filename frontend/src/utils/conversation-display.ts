@@ -58,3 +58,33 @@ export function getLastMessagePreviewText(
 
   return conversation.lastMessagePreview;
 }
+
+export interface ConversationPreviewParts {
+  senderPrefix: string | null;
+  preview: string | null;
+}
+
+export function getConversationPreviewParts(
+  conversation: ConversationListItem,
+  currentUserId: string,
+): ConversationPreviewParts {
+  if (!conversation.lastMessagePreview) {
+    return { senderPrefix: null, preview: null };
+  }
+
+  let senderPrefix: string | null = null;
+  if (conversation.lastMessageSenderId === currentUserId) {
+    senderPrefix = "Tú: ";
+  } else if (conversation.type === "GROUP") {
+    const sender = conversation.members.find((member) => member.userId === conversation.lastMessageSenderId);
+    if (sender) {
+      senderPrefix = `${sender.user.name}: `;
+    }
+  }
+
+  return {
+    senderPrefix,
+    preview: conversation.lastMessagePreview,
+  };
+}
+

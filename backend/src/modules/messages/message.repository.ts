@@ -23,7 +23,18 @@ const withRelations = {
       senderId: true,
       content: true,
       deletedAt: true,
-      files: { select: { id: true } },
+      type: true,
+      files: {
+        select: {
+          id: true,
+          file: {
+            select: {
+              mimeType: true,
+              originalName: true,
+            },
+          },
+        },
+      },
       sender: { select: { name: true } },
     },
   },
@@ -44,7 +55,7 @@ const withRelations = {
 
 const fileWithRelations = {
   file: true,
-  message: { select: { id: true, createdAt: true, senderId: true } },
+  message: { select: { id: true, createdAt: true, senderId: true, type: true } },
 } satisfies Prisma.MessageFileInclude;
 
 export function countExistingFiles(fileIds: string[]): Promise<number> {
