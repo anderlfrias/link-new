@@ -22,7 +22,7 @@ Archivos Adjuntos y Multimedia
 
 [x] Favoritos: Agregar GIFs, Emojis y Stickers a Favoritos.
 
-[ ] Cámara integrada: Tomar fotografías directamente desde la app.
+[x] Cámara integrada: Tomar fotografías directamente desde la app.
 
 Grupos y Llamadas
 

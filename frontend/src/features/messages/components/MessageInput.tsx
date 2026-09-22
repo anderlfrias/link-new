@@ -2,6 +2,7 @@
 
 import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  IconCamera,
   IconCheck,
   IconFileText,
   IconHeadphones,
@@ -18,6 +19,7 @@ import {
 } from "@tabler/icons-react";
 import { AttachmentErrorModal } from "@/features/messages/components/AttachmentErrorModal";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
+import { CameraCaptureModal } from "@/features/messages/components/CameraCaptureModal";
 import { EmojiGifStickerPicker } from "@/features/messages/components/EmojiGifStickerPicker";
 import { MentionAutocompleteList, type MentionCandidate } from "@/features/messages/components/MentionAutocompleteList";
 import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
@@ -60,6 +62,7 @@ interface AttachmentOption {
   accept?: string;
   icon: TablerIcon;
   isContact?: boolean;
+  isCamera?: boolean;
 }
 
 /** `accept: undefined` para "Documento" — a propósito, sin filtro (el
@@ -68,6 +71,7 @@ interface AttachmentOption {
  * compresión que "Foto" — la diferencia entre opciones es solo qué filtro
  * usa el picker nativo, no el manejo posterior. */
 const ATTACHMENT_OPTIONS: AttachmentOption[] = [
+  { label: "Cámara", icon: IconCamera, isCamera: true },
   { label: "Foto", accept: "image/*", icon: IconPhoto },
   { label: "Video", accept: "video/*", icon: IconVideo },
   { label: "Audio", accept: "audio/*", icon: IconHeadphones },
@@ -109,6 +113,7 @@ export function MessageInput({
   const [mentionQuery, setMentionQuery] = useState<ActiveMentionQuery | null>(null);
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [isShareContactOpen, setIsShareContactOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [reactionsPickerOpen, setReactionsPickerOpen] = useState(false);
@@ -518,13 +523,15 @@ export function MessageInput({
             <div className="relative shrink-0" ref={attachMenuRef}>
               {attachMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
-                  {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon, isContact }) => (
+                  {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon, isContact, isCamera }) => (
                     <button
                       key={label}
                       type="button"
                       onClick={() => {
-                        if (isContact) {
-                          setAttachMenuOpen(false);
+                        setAttachMenuOpen(false);
+                        if (isCamera) {
+                          setIsCameraOpen(true);
+                        } else if (isContact) {
                           setIsShareContactOpen(true);
                         } else {
                           openPicker(accept);
@@ -634,6 +641,14 @@ export function MessageInput({
           currentUserId={currentUserId}
         />
       )}
+
+      <CameraCaptureModal
+        open={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={(file) => {
+          addFiles([file]);
+        }}
+      />
     </div>
   );
 }

@@ -751,6 +751,40 @@ describe("MessageInput", () => {
       expect(textarea.value).toBe("Borrador de chat 2");
     });
   });
+
+  it("shows 'Cámara' in attachment options and opens CameraCaptureModal on click", () => {
+    const addFiles = vi.fn();
+    const attachmentsState = {
+      ...defaultAttachmentsState,
+      addFiles,
+    };
+
+    render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={vi.fn()}
+        onTyping={vi.fn()}
+        onStopTyping={vi.fn()}
+        attachmentsState={attachmentsState as any}
+        replyTo={null}
+        onCancelReply={vi.fn()}
+        currentUserId="current-u"
+      />,
+    );
+
+    // Open attach menu
+    const attachBtn = screen.getByLabelText("Adjuntar");
+    fireEvent.click(attachBtn);
+
+    const cameraOption = screen.getByRole("button", { name: "Cámara" });
+    expect(cameraOption).toBeInTheDocument();
+
+    fireEvent.click(cameraOption);
+
+    // CameraCaptureModal opens
+    expect(screen.getByRole("dialog", { name: "Cámara" })).toBeInTheDocument();
+  });
 });
+
 
 
