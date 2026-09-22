@@ -1,9 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { EmojiPicker } from "./EmojiPicker";
 import { EMOJI_CATEGORIES } from "@/features/messages/constants/emoji-data";
+import { resetFavoritesCache } from "@/features/messages/lib/favorites-store";
 
 describe("EmojiPicker", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetFavoritesCache();
+  });
+
   it("renders category tabs and emoji grid", () => {
     render(<EmojiPicker onSelect={vi.fn()} />);
 
@@ -11,6 +17,8 @@ describe("EmojiPicker", () => {
     expect(screen.getByLabelText(EMOJI_CATEGORIES[0].label)).toBeInTheDocument();
     // First emoji of the first category is rendered
     expect(screen.getAllByText(EMOJI_CATEGORIES[0].emojis[0]).length).toBeGreaterThan(0);
+    // Favorites tab button is present
+    expect(screen.getByLabelText("Emojis favoritos")).toBeInTheDocument();
   });
 
   it("calls onSelect when an emoji is clicked", () => {
@@ -34,5 +42,32 @@ describe("EmojiPicker", () => {
 
       expect(screen.getAllByText(secondCat.emojis[0]).length).toBeGreaterThan(0);
     }
+  });
+
+  it("switches to favorites tab and renders default favorite emojis", () => {
+    render(<EmojiPicker onSelect={vi.fn()} userId="user-1" />);
+
+    const favTab = screen.getByLabelText("Emojis favoritos");
+    fireEvent.click(favTab);
+
+    expect(screen.getAllByText("👍").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("❤️").length).toBeGreaterThan(0);
+  });
+
+  it("toggles favorite mode and allows adding/removing favorites without selecting", () => {
+    const onSelect = vi.fn();
+    render(<EmojiPicker onSelect={onSelect} userId="user-1" />);
+
+    const editButton = screen.getByLabelText("Editar favoritos");
+    fireEvent.click(editButton);
+
+    expect(screen.getByText(/Tocá cualquier emoji para agregarlo o quitarlo de favoritos/i)).toBeInTheDocument();
+
+    const firstEmoji = EMOJI_CATEGORIES[0].emojis[0];
+    const emojiButtons = screen.getAllByText(firstEmoji);
+    fireEvent.click(emojiButtons[emojiButtons.length - 1]);
+
+    // Did NOT call onSelect
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

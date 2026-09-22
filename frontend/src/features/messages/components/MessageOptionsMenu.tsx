@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { IconArrowForwardUp, IconCornerUpLeft, IconPencil, IconTrash, IconCopy, IconPhoto, IconSquareCheck } from "@tabler/icons-react";
+import {
+  IconArrowForwardUp,
+  IconCornerUpLeft,
+  IconPencil,
+  IconTrash,
+  IconCopy,
+  IconPhoto,
+  IconSquareCheck,
+  IconStar,
+  IconStarOff,
+} from "@tabler/icons-react";
 import { QUICK_EMOJIS } from "./QuickReactionPicker";
 import { cn } from "@/utils/cn";
 
@@ -24,6 +34,10 @@ interface MessageOptionsMenuProps {
   onCopyImage?: () => void;
   onSelectReaction?: (emoji: string) => void;
   onSelect?: () => void;
+  onToggleFavoriteSticker?: () => void;
+  isFavoriteSticker?: boolean;
+  onToggleFavoriteGif?: () => void;
+  isFavoriteGif?: boolean;
   align: "left" | "right";
   /** Coordenadas de pantalla del cursor si se abrió por click derecho (contextmenu).
    * Si está presente, el menú se posiciona con fixed calculando el espacio disponible en viewport. */
@@ -52,6 +66,10 @@ export function MessageOptionsMenu({
   onCopyImage,
   onSelectReaction,
   onSelect,
+  onToggleFavoriteSticker,
+  isFavoriteSticker = false,
+  onToggleFavoriteGif,
+  isFavoriteGif = false,
   align,
   anchorPosition = null,
 }: MessageOptionsMenuProps) {
@@ -154,7 +172,16 @@ export function MessageOptionsMenu({
 
   if (
     !open ||
-    (!canReply && !canForward && !canEdit && !canDelete && !canCopyText && !canCopyImage && !onSelectReaction && !onSelect)
+    (!canReply &&
+      !canForward &&
+      !canEdit &&
+      !canDelete &&
+      !canCopyText &&
+      !canCopyImage &&
+      !onSelectReaction &&
+      !onSelect &&
+      !onToggleFavoriteSticker &&
+      !onToggleFavoriteGif)
   ) {
     return null;
   }
@@ -288,6 +315,52 @@ export function MessageOptionsMenu({
         >
           <IconPhoto size={16} stroke={1.75} />
           Copiar imagen
+        </button>
+      )}
+      {onToggleFavoriteSticker && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onToggleFavoriteSticker();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          {isFavoriteSticker ? (
+            <>
+              <IconStarOff size={16} stroke={1.75} className="text-amber-500" />
+              Eliminar de favoritos
+            </>
+          ) : (
+            <>
+              <IconStar size={16} stroke={1.75} className="text-amber-500" />
+              Añadir a favoritos
+            </>
+          )}
+        </button>
+      )}
+      {onToggleFavoriteGif && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onToggleFavoriteGif();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          {isFavoriteGif ? (
+            <>
+              <IconStarOff size={16} stroke={1.75} className="text-amber-500" />
+              Eliminar GIF de favoritos
+            </>
+          ) : (
+            <>
+              <IconStar size={16} stroke={1.75} className="text-amber-500" />
+              Añadir GIF a favoritos
+            </>
+          )}
         </button>
       )}
       {canEdit && (

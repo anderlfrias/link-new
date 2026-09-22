@@ -20,7 +20,7 @@ Archivos Adjuntos y Multimedia
 
 [x] Segmentar archivos adjuntos: Identificar notas de voz, imágenes, gifs, stickers, etc. (De modo que en las notificaciones y en la lista de chats sea más específico).
 
-[ ] Favoritos: Agregar GIFs, Emojis y Stickers a Favoritos.
+[x] Favoritos: Agregar GIFs, Emojis y Stickers a Favoritos.
 
 [ ] Cámara integrada: Tomar fotografías directamente desde la app.
 
@@ -41,3 +41,7 @@ Sistema y Configuración
 [ ] Versionamiento: Versionar la aplicación.- [ ]
 
 [ ] Mandar ip a external-auth para evitar bloqueos generales.
+
+Otros
+
+[ ] Al seleccionar varios para reenviar algun archivo se pierden si cambio los parametros de busqueda. Si ya estan seleccionados deben aparecer siempre.

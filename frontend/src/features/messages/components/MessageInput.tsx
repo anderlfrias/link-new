@@ -424,6 +424,11 @@ export function MessageInput({
     }
   }
 
+  async function handleSelectStoredSticker(fileId: string) {
+    setReactionsPickerOpen(false);
+    await onSend("", [fileId], "STICKER");
+  }
+
   // Igual que WhatsApp/Telegram: el botón de enviar se vuelve micrófono
   // cuando no hay nada más que mandar — apenas escribís algo o adjuntás un
   // archivo, vuelve a ser el botón de enviar.
@@ -563,10 +568,12 @@ export function MessageInput({
                   <div className="absolute bottom-full right-0 mb-2">
                     <EmojiGifStickerPicker
                       token={session.token}
+                      userId={currentUserId}
                       showGifsAndStickers={Boolean(publicSettings?.allowStickersAndGifs)}
                       busy={importingGif}
                       onSelectEmoji={insertEmoji}
                       onSelectGifSticker={handleSelectGif}
+                      onSelectStoredSticker={handleSelectStoredSticker}
                     />
                   </div>
                 )}

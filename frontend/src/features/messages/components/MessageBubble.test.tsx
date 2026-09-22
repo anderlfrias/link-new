@@ -592,6 +592,63 @@ describe("MessageBubble", () => {
     expect(await screen.findByText("Imagen copiada al portapapeles")).toBeInTheDocument();
   });
 
+  it("permite añadir y eliminar un sticker de favoritos desde el menú contextual", async () => {
+    const stickerMessage: Message = {
+      ...baseMessage,
+      type: "STICKER",
+      content: "",
+      files: [
+        {
+          id: "mf-fav-1",
+          messageId: "msg-fav-1",
+          fileId: "f-fav-1",
+          createdAt: "2026-09-09T10:00:00Z",
+          file: {
+            id: "f-fav-1",
+            url: "/uploads/stickers/fav.webp",
+            path: "stickers/fav.webp",
+            originalName: "fav.webp",
+            mimeType: "image/webp",
+            size: 1024,
+            extension: "webp",
+            provider: "LOCAL",
+            checksum: null,
+            createdById: "user-1",
+            createdAt: "2026-09-09T10:00:00Z",
+            deletedAt: null,
+          },
+        },
+      ],
+    };
+
+    render(
+      <MessageBubble
+        message={stickerMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="user-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    const img = screen.getByRole("img", { name: "Sticker" });
+    fireEvent.contextMenu(img);
+
+    const addFavBtn = screen.getByRole("menuitem", { name: "Añadir a favoritos" });
+    expect(addFavBtn).toBeInTheDocument();
+
+    fireEvent.click(addFavBtn);
+
+    // Reabrir menú
+    fireEvent.contextMenu(img);
+    expect(screen.getByRole("menuitem", { name: "Eliminar de favoritos" })).toBeInTheDocument();
+  });
+
   it("renderiza enlaces interactivos para URLs, correos y teléfonos dentro del contenido del mensaje", () => {
     const messageWithLinks: Message = {
       ...baseMessage,

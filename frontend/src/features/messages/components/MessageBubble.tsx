@@ -16,6 +16,7 @@ import { DeleteMessageConfirmModal } from "@/features/messages/components/Delete
 import { QuickReactionPicker } from "@/features/messages/components/QuickReactionPicker";
 import { MessageReactionsList } from "@/features/messages/components/MessageReactionsList";
 import { useMessageGestures } from "@/features/messages/hooks/use-message-gestures";
+import { useFavorites } from "@/features/messages/hooks/use-favorites";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 import { aggregateMessageStatus } from "@/utils/message-status";
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
@@ -80,6 +81,34 @@ export function MessageBubble({
   // (tombstone genérico) — el look sin burbuja es solo para uno vivo.
   const isSticker = message.type === "STICKER" && !isDeleted;
   const isContact = message.type === "CONTACT" && !isDeleted;
+  const gifFile = !isDeleted ? message.files.find((f) => !f.file.deletedAt && f.file.mimeType === "image/gif") : null;
+  const stickerFile = isSticker && message.files.length > 0 ? message.files[0].file : null;
+
+  const { isFavoriteSticker, toggleFavoriteSticker, isFavoriteGif, toggleFavoriteGif } = useFavorites(currentUserId);
+  const isFavSticker = stickerFile ? isFavoriteSticker(stickerFile.id) : false;
+  const isFavGif = gifFile ? isFavoriteGif(gifFile.file.id) : false;
+
+  const handleToggleFavoriteSticker = stickerFile
+    ? () => {
+        toggleFavoriteSticker({
+          id: stickerFile.id,
+          title: "Sticker",
+          previewUrl: resolveFileUrl(stickerFile),
+          fileId: stickerFile.id,
+        });
+      }
+    : undefined;
+
+  const handleToggleFavoriteGif = gifFile
+    ? () => {
+        toggleFavoriteGif({
+          id: gifFile.file.id,
+          title: gifFile.file.originalName || "GIF",
+          previewUrl: resolveFileUrl(gifFile.file),
+          originalUrl: resolveFileUrl(gifFile.file),
+        });
+      }
+    : undefined;
 
   // `isOwn` (prop) = ¿el remitente REAL de este mensaje sos vos? Rige
   // permisos (canEdit/canDelete) y los recibos — nunca cambia por cómo se ve.
@@ -118,7 +147,15 @@ export function MessageBubble({
   const imageFiles = message.files.filter((f) => !f.file.deletedAt && isImageMimeType(f.file.mimeType));
   const canCopyImage = !isDeleted && (isSticker || imageFiles.length > 0);
   const showOptionsTrigger =
-    canReply || canForward || canEdit || canDelete || canCopyText || canCopyImage || canReact;
+    canReply ||
+    canForward ||
+    canEdit ||
+    canDelete ||
+    canCopyText ||
+    canCopyImage ||
+    canReact ||
+    Boolean(handleToggleFavoriteSticker) ||
+    Boolean(handleToggleFavoriteGif);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
@@ -469,6 +506,10 @@ export function MessageBubble({
               onCopySelectedText={(text) => void handleCopySelectedText(text)}
               onCopyImage={() => void handleCopyImage()}
               onSelect={onSelectFromMenu ? () => onSelectFromMenu(message.id) : undefined}
+              onToggleFavoriteSticker={handleToggleFavoriteSticker}
+              isFavoriteSticker={isFavSticker}
+              onToggleFavoriteGif={handleToggleFavoriteGif}
+              isFavoriteGif={isFavGif}
               align={renderAsOwn ? "right" : "left"}
             />
           </div>

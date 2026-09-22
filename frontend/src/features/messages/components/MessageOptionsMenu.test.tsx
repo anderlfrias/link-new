@@ -342,5 +342,106 @@ describe("MessageOptionsMenu", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders 'Añadir a favoritos' and 'Eliminar de favoritos' for stickers", () => {
+    const onToggleFavoriteSticker = vi.fn();
+    const onClose = vi.fn();
+
+    const { rerender } = render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onToggleFavoriteSticker={onToggleFavoriteSticker}
+        isFavoriteSticker={false}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+      />,
+    );
+
+    const addBtn = screen.getByRole("menuitem", { name: "Añadir a favoritos" });
+    expect(addBtn).toBeInTheDocument();
+
+    fireEvent.click(addBtn);
+    expect(onToggleFavoriteSticker).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onToggleFavoriteSticker={onToggleFavoriteSticker}
+        isFavoriteSticker={true}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+      />,
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Eliminar de favoritos" })).toBeInTheDocument();
+  });
+
+  it("renders 'Añadir GIF a favoritos' and 'Eliminar GIF de favoritos' for GIFs", () => {
+    const onToggleFavoriteGif = vi.fn();
+    const onClose = vi.fn();
+
+    const { rerender } = render(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onToggleFavoriteGif={onToggleFavoriteGif}
+        isFavoriteGif={false}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+      />,
+    );
+
+    const addBtn = screen.getByRole("menuitem", { name: "Añadir GIF a favoritos" });
+    expect(addBtn).toBeInTheDocument();
+
+    fireEvent.click(addBtn);
+    expect(onToggleFavoriteGif).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageOptionsMenu
+        open={true}
+        onClose={onClose}
+        canReply={false}
+        canForward={false}
+        canEdit={false}
+        canDelete={false}
+        onToggleFavoriteGif={onToggleFavoriteGif}
+        isFavoriteGif={true}
+        onReply={vi.fn()}
+        onForward={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        align="left"
+      />,
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Eliminar GIF de favoritos" })).toBeInTheDocument();
+  });
 });
+
 
