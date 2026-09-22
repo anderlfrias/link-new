@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { IconLoader2, IconMessageCircle2 } from "@tabler/icons-react";
+import { useAuth } from "@/providers/auth-provider";
 import { ConversationDangerConfirmModal } from "@/features/conversations/components/ConversationDangerConfirmModal";
 import { ConversationListItem } from "@/features/conversations/components/ConversationListItem";
+import { ConversationSelectionToolbar } from "@/features/conversations/components/ConversationSelectionToolbar";
+import { BatchDangerConfirmModal } from "@/features/conversations/components/BatchDangerConfirmModal";
 import { useDeleteConversation } from "@/features/conversations/hooks/use-delete-conversation";
 import { useLeaveGroup } from "@/features/conversations/hooks/use-leave-group";
 import { useSetConversationPreference } from "@/features/conversations/hooks/use-set-conversation-preference";
+import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { getConversationDisplayName } from "@/utils/conversation-display";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
 import type {
@@ -20,6 +24,9 @@ interface ConversationListProps {
   searchQuery: string;
   activeFilter: ConversationFilter;
   currentUserId: string;
+  isSelectionMode?: boolean;
+  onExitSelectionMode?: () => void;
+  onEnterSelectionMode?: () => void;
 }
 
 type PendingAction = { conversationId: string; kind: "delete-chat" | "delete-group" | "leave-group" };
@@ -30,31 +37,64 @@ export function ConversationList({
   searchQuery,
   activeFilter,
   currentUserId,
+  isSelectionMode: isSelectionModeProp,
+  onExitSelectionMode,
+  onEnterSelectionMode,
 }: ConversationListProps) {
+  const { session } = useAuth();
   const { setPinned, setFavorite, pendingId } = useSetConversationPreference();
   const { remove: deleteConversation, pending: deletePending, error: deleteError } = useDeleteConversation();
   const { leave: leaveGroup, pending: leavePending, error: leaveError } = useLeaveGroup();
-  // Un solo menú de opciones abierto a la vez — vive acá (no en cada fila)
-  // para que abrir el de un chat cierre el de cualquier otro automáticamente.
+
+  // Modo selección: soporta control externo o interno
+  const [internalSelectionMode, setInternalSelectionMode] = useState(false);
+  const isSelectionMode = isSelectionModeProp !== undefined ? isSelectionModeProp : internalSelectionMode;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Modal batch para eliminar o salir de grupos en masa
+  const [batchAction, setBatchAction] = useState<"delete" | "leave" | null>(null);
+  const [batchPending, setBatchPending] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+
+  // Un solo menú de opciones abierto a la vez
   const [openMenuConversationId, setOpenMenuConversationId] = useState<string | null>(null);
-  // Un solo modal de confirmación reusado para las 3 acciones destructivas
-  // (ver ConversationDangerConfirmModal) — nunca hay más de una a la vez.
+  // Modal de confirmación individual existente
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   const pendingConversation = pendingAction
     ? conversations.find((conversation) => conversation.id === pendingAction.conversationId)
     : undefined;
 
-  async function confirmPendingAction() {
-    if (!pendingAction) return;
-    const ok =
-      pendingAction.kind === "leave-group"
-        ? await leaveGroup(pendingAction.conversationId)
-        : await deleteConversation(pendingAction.conversationId);
-    // No se refresca la lista a mano acá: el backend avisa por socket a la
-    // room personal de quien actuó (ver conversation.service.ts) y
-    // use-conversations.ts ya escucha esos eventos y refresca solo.
-    if (ok) setPendingAction(null);
+  function handleExitSelectionMode() {
+    setInternalSelectionMode(false);
+    onExitSelectionMode?.();
+    setSelectedIds(new Set());
+    setBatchAction(null);
+    setBatchError(null);
+  }
+
+  function handleEnterSelectionMode(initialId?: string) {
+    setInternalSelectionMode(true);
+    onEnterSelectionMode?.();
+    if (initialId) {
+      setSelectedIds(new Set([initialId]));
+    }
+  }
+
+  function handleToggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        if (next.size === 0 && isSelectionModeProp === undefined) {
+          setInternalSelectionMode(false);
+          onExitSelectionMode?.();
+        }
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }
 
   const filtered = useMemo(() => {
@@ -68,9 +108,135 @@ export function ConversationList({
       if (activeFilter === "favorites" && !conversation.isFavoritedByMe) return false;
       return true;
     });
-    // El orden ya viene de `conversations` (fijadas primero, server-side) —
-    // `.filter()` lo preserva, no hace falta reordenar acá.
   }, [conversations, searchQuery, activeFilter, currentUserId]);
+
+  function handleToggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((c) => c.id)));
+    }
+  }
+
+  // Conversaciones actualmente seleccionadas
+  const selectedConversations = useMemo(() => {
+    return conversations.filter((c) => selectedIds.has(c.id));
+  }, [conversations, selectedIds]);
+
+  const canMarkAsRead = useMemo(() => {
+    return selectedConversations.some((c) => c.unreadCount > 0);
+  }, [selectedConversations]);
+
+  const isAllPinned = useMemo(() => {
+    return selectedConversations.length > 0 && selectedConversations.every((c) => c.isPinnedByMe);
+  }, [selectedConversations]);
+
+  const isAllFavorite = useMemo(() => {
+    return selectedConversations.length > 0 && selectedConversations.every((c) => c.isFavoritedByMe);
+  }, [selectedConversations]);
+
+  const hasGroupsSelected = useMemo(() => {
+    return selectedConversations.some((c) => c.type === "GROUP");
+  }, [selectedConversations]);
+
+  // Tecla Escape para salir de modo selección
+  useEffect(() => {
+    if (!isSelectionMode) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        handleExitSelectionMode();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSelectionMode]);
+
+  async function handleBatchMarkAsRead() {
+    if (!session || selectedConversations.length === 0) return;
+    const unread = selectedConversations.filter((c) => c.unreadCount > 0);
+    if (unread.length === 0) return;
+    setBatchPending(true);
+    try {
+      await Promise.allSettled(unread.map((c) => markConversationRead(session.token, c.id)));
+      handleExitSelectionMode();
+    } finally {
+      setBatchPending(false);
+    }
+  }
+
+  function handleBatchTogglePin() {
+    if (selectedConversations.length === 0) return;
+    const nextPinState = !isAllPinned;
+    for (const c of selectedConversations) {
+      setPinned(c.id, nextPinState);
+    }
+    handleExitSelectionMode();
+  }
+
+  function handleBatchToggleFavorite() {
+    if (selectedConversations.length === 0) return;
+    const nextFavoriteState = !isAllFavorite;
+    for (const c of selectedConversations) {
+      setFavorite(c.id, nextFavoriteState);
+    }
+    handleExitSelectionMode();
+  }
+
+  async function handleConfirmBatchLeave() {
+    const groupsToLeave = selectedConversations.filter((c) => c.type === "GROUP");
+    if (groupsToLeave.length === 0) return;
+    setBatchPending(true);
+    setBatchError(null);
+    try {
+      let failed = 0;
+      for (const g of groupsToLeave) {
+        const ok = await leaveGroup(g.id);
+        if (!ok) failed++;
+      }
+      if (failed > 0) {
+        setBatchError(`No se pudo salir de ${failed} grupo(s).`);
+      } else {
+        setBatchAction(null);
+        handleExitSelectionMode();
+      }
+    } catch (err: any) {
+      setBatchError(err?.message || "Error al salir de los grupos");
+    } finally {
+      setBatchPending(false);
+    }
+  }
+
+  async function handleConfirmBatchDelete() {
+    if (selectedConversations.length === 0) return;
+    setBatchPending(true);
+    setBatchError(null);
+    try {
+      let failed = 0;
+      for (const c of selectedConversations) {
+        const ok = await deleteConversation(c.id);
+        if (!ok) failed++;
+      }
+      if (failed > 0) {
+        setBatchError(`No se pudieron eliminar ${failed} conversación(es).`);
+      } else {
+        setBatchAction(null);
+        handleExitSelectionMode();
+      }
+    } catch (err: any) {
+      setBatchError(err?.message || "Error al eliminar las conversaciones");
+    } finally {
+      setBatchPending(false);
+    }
+  }
+
+  async function confirmPendingAction() {
+    if (!pendingAction) return;
+    const ok =
+      pendingAction.kind === "leave-group"
+        ? await leaveGroup(pendingAction.conversationId)
+        : await deleteConversation(pendingAction.conversationId);
+    if (ok) setPendingAction(null);
+  }
 
   if (status === "loading" || status === "idle") {
     return (
@@ -88,7 +254,7 @@ export function ConversationList({
     );
   }
 
-  if (filtered.length === 0) {
+  if (filtered.length === 0 && !isSelectionMode) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         <IconMessageCircle2 size={32} className="text-neutral-300 dark:text-neutral-600" />
@@ -100,23 +266,52 @@ export function ConversationList({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      {filtered.map((conversation) => (
-        <ConversationListItem
-          key={conversation.id}
-          conversation={conversation}
-          currentUserId={currentUserId}
-          pending={pendingId === conversation.id}
-          menuOpen={openMenuConversationId === conversation.id}
-          onOpenMenu={() => setOpenMenuConversationId(conversation.id)}
-          onCloseMenu={() => setOpenMenuConversationId((prev) => (prev === conversation.id ? null : prev))}
-          onTogglePin={setPinned}
-          onToggleFavorite={setFavorite}
-          onRequestDeleteChat={(id) => setPendingAction({ conversationId: id, kind: "delete-chat" })}
-          onRequestDeleteGroup={(id) => setPendingAction({ conversationId: id, kind: "delete-group" })}
-          onRequestLeaveGroup={(id) => setPendingAction({ conversationId: id, kind: "leave-group" })}
+    <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+      {isSelectionMode && (
+        <ConversationSelectionToolbar
+          selectedCount={selectedIds.size}
+          totalCount={filtered.length}
+          allSelected={filtered.length > 0 && selectedIds.size === filtered.length}
+          onToggleSelectAll={handleToggleSelectAll}
+          onClose={handleExitSelectionMode}
+          canMarkAsRead={canMarkAsRead}
+          onMarkAsRead={handleBatchMarkAsRead}
+          canPin={selectedConversations.length > 0}
+          isAllPinned={isAllPinned}
+          onTogglePin={handleBatchTogglePin}
+          canFavorite={selectedConversations.length > 0}
+          isAllFavorite={isAllFavorite}
+          onToggleFavorite={handleBatchToggleFavorite}
+          hasGroupsSelected={hasGroupsSelected}
+          onLeaveGroups={() => setBatchAction("leave")}
+          canDelete={selectedConversations.length > 0}
+          onDelete={() => setBatchAction("delete")}
+          pending={batchPending}
         />
-      ))}
+      )}
+
+      <div className="flex-1 overflow-y-auto">
+        {filtered.map((conversation) => (
+          <ConversationListItem
+            key={conversation.id}
+            conversation={conversation}
+            currentUserId={currentUserId}
+            pending={pendingId === conversation.id}
+            menuOpen={openMenuConversationId === conversation.id}
+            onOpenMenu={() => setOpenMenuConversationId(conversation.id)}
+            onCloseMenu={() => setOpenMenuConversationId((prev) => (prev === conversation.id ? null : prev))}
+            onTogglePin={setPinned}
+            onToggleFavorite={setFavorite}
+            onRequestDeleteChat={(id) => setPendingAction({ conversationId: id, kind: "delete-chat" })}
+            onRequestDeleteGroup={(id) => setPendingAction({ conversationId: id, kind: "delete-group" })}
+            onRequestLeaveGroup={(id) => setPendingAction({ conversationId: id, kind: "leave-group" })}
+            isSelectionMode={isSelectionMode}
+            isSelected={selectedIds.has(conversation.id)}
+            onToggleSelect={handleToggleSelect}
+            onEnterSelectionMode={handleEnterSelectionMode}
+          />
+        ))}
+      </div>
 
       {pendingAction && (
         <ConversationDangerConfirmModal
@@ -147,6 +342,26 @@ export function ConversationList({
           error={pendingAction.kind === "leave-group" ? leaveError : deleteError}
           onConfirm={() => void confirmPendingAction()}
           onCancel={() => setPendingAction(null)}
+        />
+      )}
+
+      {batchAction && (
+        <BatchDangerConfirmModal
+          kind={batchAction}
+          selectedConversations={
+            batchAction === "leave"
+              ? selectedConversations.filter((c) => c.type === "GROUP")
+              : selectedConversations
+          }
+          pending={batchPending}
+          error={batchError}
+          onConfirm={() =>
+            batchAction === "leave" ? void handleConfirmBatchLeave() : void handleConfirmBatchDelete()
+          }
+          onCancel={() => {
+            setBatchAction(null);
+            setBatchError(null);
+          }}
         />
       )}
     </div>

@@ -179,4 +179,22 @@ describe("DesktopSidebar", () => {
 
     expect(mockOpenSelfChat).toHaveBeenCalledTimes(1);
   });
+
+  it("toggles selection mode when clicking 'Seleccionar chats' button", async () => {
+    const user = userEvent.setup();
+    render(
+      <DesktopSidebar
+        conversations={[]}
+        status="ready"
+        currentUserId="user-1"
+      />,
+    );
+
+    const selectBtn = screen.getByRole("button", { name: "Seleccionar chats" });
+    expect(selectBtn).toBeInTheDocument();
+
+    await user.click(selectBtn);
+    expect(screen.getByRole("button", { name: "Cerrar selección" })).toBeInTheDocument();
+  });
 });
+

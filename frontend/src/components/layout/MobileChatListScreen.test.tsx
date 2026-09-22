@@ -159,4 +159,22 @@ describe("MobileChatListScreen", () => {
     await user.click(screen.getByRole("button", { name: "Mensajes guardados" }));
     expect(mockOpenSelfChat).toHaveBeenCalledTimes(1);
   });
+
+  it("alterna modo de selección al presionar el botón de selección de chats", async () => {
+    const user = userEvent.setup();
+    render(
+      <MobileChatListScreen
+        conversations={[]}
+        status="ready"
+        currentUserId="user-1"
+      />,
+    );
+
+    const selectBtn = screen.getByRole("button", { name: "Seleccionar chats" });
+    expect(selectBtn).toBeInTheDocument();
+
+    await user.click(selectBtn);
+    expect(screen.getByRole("button", { name: "Cerrar selección" })).toBeInTheDocument();
+  });
 });
+

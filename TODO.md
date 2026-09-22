@@ -14,7 +14,7 @@ Mensajería y Chat
 
 [x] Poder seleccionar varios mensajes en el chat ya sea para copiar, eliminar o reenviar.
 
-[ ] Poder seleccionar varios chats para eliminar o salir de los grupos (o cualquier otra funcionalidad que aplique).
+[x] Poder seleccionar varios chats para eliminar o salir de los grupos (o cualquier otra funcionalidad que aplique).
 
 Archivos Adjuntos y Multimedia
 

@@ -28,6 +28,21 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
 }));
 
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: () => ({
+    session: { token: "test-token", user: { internalUserId: "user-1" } },
+  }),
+}));
+
+const mockMarkConversationRead = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/features/conversations/api/conversations.api", async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    markConversationRead: (...args: any[]) => mockMarkConversationRead(...args),
+  };
+});
+
 describe("ConversationList", () => {
   const mockDeleteFn = vi.fn();
   const mockLeaveFn = vi.fn();
@@ -256,4 +271,127 @@ describe("ConversationList", () => {
       expect(mockDeleteFn).toHaveBeenCalledWith("c1");
     });
   });
+
+  it("renderiza la barra de selección cuando isSelectionMode es true y permite seleccionar todos", async () => {
+    const onExitSelectionMode = vi.fn();
+
+    render(
+      <ConversationList
+        conversations={convs}
+        status="ready"
+        searchQuery=""
+        activeFilter="all"
+        currentUserId="user-1"
+        isSelectionMode={true}
+        onExitSelectionMode={onExitSelectionMode}
+      />,
+    );
+
+    // Debe mostrar la barra de herramientas de selección
+    expect(screen.getByRole("toolbar", { name: "Acciones de conversaciones seleccionadas" })).toBeInTheDocument();
+    expect(screen.getByText("0 seleccionadas")).toBeInTheDocument();
+
+    // Clic en 'Seleccionar todos'
+    const selectAllBtn = screen.getByRole("button", { name: "Seleccionar todos" });
+    fireEvent.click(selectAllBtn);
+
+    expect(screen.getByText("2 seleccionadas")).toBeInTheDocument();
+
+    // Clic en 'Cerrar selección'
+    const closeBtn = screen.getByRole("button", { name: "Cerrar selección" });
+    fireEvent.click(closeBtn);
+
+    expect(onExitSelectionMode).toHaveBeenCalledTimes(1);
+  });
+
+  it("ejecuta eliminación en lote de conversaciones seleccionadas", async () => {
+    mockDeleteFn.mockResolvedValue(true);
+
+    render(
+      <ConversationList
+        conversations={convs}
+        status="ready"
+        searchQuery=""
+        activeFilter="all"
+        currentUserId="user-1"
+        isSelectionMode={true}
+      />,
+    );
+
+    // Seleccionar todos
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos" }));
+
+    // Clic en Eliminar de la barra de selección
+    const deleteBatchBtn = screen.getByRole("button", { name: "Eliminar chats seleccionados" });
+    fireEvent.click(deleteBatchBtn);
+
+    // Debe abrir el modal batch
+    expect(screen.getByRole("heading", { name: "¿Eliminar 2 conversaciones?" })).toBeInTheDocument();
+
+    // Confirmar en el modal
+    const confirmBtn = screen.getByRole("button", { name: "Eliminar 2 conversaciones" });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockDeleteFn).toHaveBeenCalledWith("c1");
+      expect(mockDeleteFn).toHaveBeenCalledWith("c2");
+    });
+  });
+
+  it("ejecuta salida de grupos en lote para grupos seleccionados", async () => {
+    mockLeaveFn.mockResolvedValue(true);
+
+    render(
+      <ConversationList
+        conversations={convs}
+        status="ready"
+        searchQuery=""
+        activeFilter="all"
+        currentUserId="user-1"
+        isSelectionMode={true}
+      />,
+    );
+
+    // Seleccionar todos (incluye el grupo c2)
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos" }));
+
+    // Clic en Salir de grupos
+    const leaveBatchBtn = screen.getByRole("button", { name: "Salir de los grupos seleccionados" });
+    fireEvent.click(leaveBatchBtn);
+
+    // Debe abrir el modal batch para salir de grupo
+    expect(screen.getByRole("heading", { name: "Salir del grupo" })).toBeInTheDocument();
+
+    const confirmBtn = screen.getByRole("button", { name: "Salir del grupo" });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockLeaveFn).toHaveBeenCalledWith("c2");
+    });
+  });
+
+  it("ejecuta marcar como leídos en lote para conversaciones con mensajes no leídos", async () => {
+    render(
+      <ConversationList
+        conversations={convs}
+        status="ready"
+        searchQuery=""
+        activeFilter="all"
+        currentUserId="user-1"
+        isSelectionMode={true}
+      />,
+    );
+
+    // Seleccionar todos (c1 tiene unreadCount = 2)
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos" }));
+
+    const markReadBtn = screen.getByRole("button", { name: "Marcar como leídos" });
+    expect(markReadBtn).toBeInTheDocument();
+    fireEvent.click(markReadBtn);
+
+    await waitFor(() => {
+      expect(mockMarkConversationRead).toHaveBeenCalledWith("test-token", "c1");
+    });
+  });
 });
+

@@ -270,4 +270,62 @@ describe("ConversationListItem", () => {
     expect(screen.queryByText("Borrador:")).not.toBeInTheDocument();
     expect(screen.getByText("Hola cómo estás?")).toBeInTheDocument();
   });
+
+  it("en modo selección muestra checkbox y llama a onToggleSelect al hacer clic", () => {
+    const onToggleSelect = vi.fn();
+
+    render(
+      <ConversationListItem
+        conversation={baseConversation}
+        currentUserId="user-1"
+        pending={false}
+        menuOpen={false}
+        onOpenMenu={vi.fn()}
+        onCloseMenu={vi.fn()}
+        onTogglePin={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onRequestDeleteChat={vi.fn()}
+        onRequestDeleteGroup={vi.fn()}
+        onRequestLeaveGroup={vi.fn()}
+        isSelectionMode={true}
+        isSelected={false}
+        onToggleSelect={onToggleSelect}
+      />,
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: "Seleccionar Juan Perez" });
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(checkbox);
+    expect(onToggleSelect).toHaveBeenCalledWith("conv-1");
+  });
+
+  it("llama a onEnterSelectionMode desde el menú de opciones", () => {
+    const onEnterSelectionMode = vi.fn();
+
+    render(
+      <ConversationListItem
+        conversation={baseConversation}
+        currentUserId="user-1"
+        pending={false}
+        menuOpen={true}
+        onOpenMenu={vi.fn()}
+        onCloseMenu={vi.fn()}
+        onTogglePin={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onRequestDeleteChat={vi.fn()}
+        onRequestDeleteGroup={vi.fn()}
+        onRequestLeaveGroup={vi.fn()}
+        onEnterSelectionMode={onEnterSelectionMode}
+      />,
+    );
+
+    const selectBtn = screen.getByRole("button", { name: "Seleccionar" });
+    expect(selectBtn).toBeInTheDocument();
+
+    fireEvent.click(selectBtn);
+    expect(onEnterSelectionMode).toHaveBeenCalledWith("conv-1");
+  });
 });
+

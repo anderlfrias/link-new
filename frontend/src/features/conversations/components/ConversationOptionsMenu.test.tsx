@@ -141,4 +141,28 @@ describe("ConversationOptionsMenu", () => {
     expect(onDeleteGroup).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders 'Seleccionar' and calls onSelect when provided", () => {
+    const onClose = vi.fn();
+    const onSelect = vi.fn();
+
+    render(
+      <ConversationOptionsMenu
+        open={true}
+        onClose={onClose}
+        isPinned={false}
+        isFavorite={false}
+        onTogglePin={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onSelect={onSelect}
+      />,
+    );
+
+    const selectBtn = screen.getByRole("button", { name: /Seleccionar/i });
+    expect(selectBtn).toBeInTheDocument();
+
+    fireEvent.click(selectBtn);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

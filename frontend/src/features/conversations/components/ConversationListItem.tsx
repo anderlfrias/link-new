@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconBookmark, IconChevronDown, IconPin } from "@tabler/icons-react";
+import { IconBookmark, IconCheck, IconChevronDown, IconPin } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { UnreadBadge } from "@/components/ui/Badge";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
@@ -31,6 +31,10 @@ interface ConversationListItemProps {
   onRequestDeleteChat: (conversationId: string) => void;
   onRequestDeleteGroup: (conversationId: string) => void;
   onRequestLeaveGroup: (conversationId: string) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (conversationId: string) => void;
+  onEnterSelectionMode?: (conversationId: string) => void;
 }
 
 export function ConversationListItem({
@@ -45,6 +49,10 @@ export function ConversationListItem({
   onRequestDeleteChat,
   onRequestDeleteGroup,
   onRequestLeaveGroup,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onEnterSelectionMode,
 }: ConversationListItemProps) {
   const publicSettings = usePublicSettings();
   const isGroup = conversation.type === "GROUP";
@@ -71,15 +79,38 @@ export function ConversationListItem({
       <div {...longPress}>
         <Link
           href={`/conversations/${conversation.id}`}
+          onClick={(event) => {
+            if (isSelectionMode) {
+              event.preventDefault();
+              onToggleSelect?.(conversation.id);
+            }
+          }}
           onContextMenu={(event) => {
             event.preventDefault();
             onOpenMenu();
           }}
           className={cn(
             "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-black/3 dark:hover:bg-white/5",
-            isActive && "bg-black/4 dark:bg-white/10",
+            isActive && !isSelectionMode && "bg-black/4 dark:bg-white/10",
+            isSelectionMode && "cursor-pointer select-none",
+            isSelected && "bg-brand-blue/10 dark:bg-brand-blue/20 hover:bg-brand-blue/15 dark:hover:bg-brand-blue/25",
           )}
         >
+          {isSelectionMode && (
+            <div
+              role="checkbox"
+              aria-checked={isSelected}
+              aria-label={isSelected ? `Deseleccionar ${displayName}` : `Seleccionar ${displayName}`}
+              className={cn(
+                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all",
+                isSelected
+                  ? "border-brand-blue bg-brand-blue text-white"
+                  : "border-neutral-300 bg-white/50 dark:border-neutral-600 dark:bg-neutral-800/50",
+              )}
+            >
+              {isSelected && <IconCheck size={13} stroke={3} />}
+            </div>
+          )}
           <Avatar
             name={displayName}
             imageUrl={avatarUrl}
@@ -112,28 +143,23 @@ export function ConversationListItem({
                   <MessageStatusTicks status={conversation.lastMessageStatus} />
                 )}
                 <UnreadBadge count={conversation.unreadCount} />
-                {/* Flecha "▾" — mismo lugar que WhatsApp: al lado de los
-                    ticks/badge, solo visible en hover (desktop) con
-                    transición. En mobile no se renderiza — ahí la
-                    interacción es el long-press de arriba. */}
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    // Este botón vive adentro del <Link> de la fila para
-                    // poder alinearse en flujo normal junto a los ticks/badge
-                    // (mismo lugar que WhatsApp) — sin esto, el click
-                    // navegaría a la conversación además de abrir el menú.
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (menuOpen) onCloseMenu();
-                    else onOpenMenu();
-                  }}
-                  disabled={pending}
-                  aria-label={`Opciones de ${displayName}`}
-                  className="hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 disabled:opacity-60 dark:text-neutral-400 dark:hover:bg-white/10 md:flex"
-                >
-                  <IconChevronDown size={14} stroke={2} />
-                </button>
+                {/* Flecha "▾" — solo visible si no estamos en modo selección */}
+                {!isSelectionMode && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (menuOpen) onCloseMenu();
+                      else onOpenMenu();
+                    }}
+                    disabled={pending}
+                    aria-label={`Opciones de ${displayName}`}
+                    className="hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 disabled:opacity-60 dark:text-neutral-400 dark:hover:bg-white/10 md:flex"
+                  >
+                    <IconChevronDown size={14} stroke={2} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -147,6 +173,7 @@ export function ConversationListItem({
         isFavorite={conversation.isFavoritedByMe}
         onTogglePin={() => onTogglePin(conversation.id, !conversation.isPinnedByMe)}
         onToggleFavorite={() => onToggleFavorite(conversation.id, !conversation.isFavoritedByMe)}
+        onSelect={onEnterSelectionMode ? () => onEnterSelectionMode(conversation.id) : undefined}
         onDeleteChat={canDeleteChat ? () => onRequestDeleteChat(conversation.id) : undefined}
         onDeleteGroup={canDeleteGroup ? () => onRequestDeleteGroup(conversation.id) : undefined}
         onLeaveGroup={isGroup ? () => onRequestLeaveGroup(conversation.id) : undefined}

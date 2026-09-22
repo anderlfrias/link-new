@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { IconDoorExit, IconPin, IconPinnedOff, IconStar, IconStarFilled, IconTrash } from "@tabler/icons-react";
+import { IconCheckbox, IconDoorExit, IconPin, IconPinnedOff, IconStar, IconStarFilled, IconTrash } from "@tabler/icons-react";
 
 interface ConversationOptionsMenuProps {
   open: boolean;
@@ -10,6 +10,7 @@ interface ConversationOptionsMenuProps {
   isFavorite: boolean;
   onTogglePin: () => void;
   onToggleFavorite: () => void;
+  onSelect?: () => void;
   /** PRIVATE únicamente — "Eliminar chat" (se oculta solo para quien lo borra). Ausente = no
    * mostrar la opción (ej. `allowConversationDelete` en `false`, o es una conversación GROUP). */
   onDeleteChat?: () => void;
@@ -30,6 +31,7 @@ export function ConversationOptionsMenu({
   isFavorite,
   onTogglePin,
   onToggleFavorite,
+  onSelect,
   onDeleteChat,
   onDeleteGroup,
   onLeaveGroup,
@@ -54,6 +56,19 @@ export function ConversationOptionsMenu({
       ref={containerRef}
       className="absolute right-2 top-full z-20 mt-1 w-52 overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900"
     >
+      {onSelect && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onSelect();
+          }}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+        >
+          <IconCheckbox size={16} stroke={1.75} />
+          Seleccionar
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {
