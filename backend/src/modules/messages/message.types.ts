@@ -1,21 +1,25 @@
 import { Message, MessageFile, StoredFile, User } from "@prisma/client";
 import { MessageReceipt } from "../conversations/conversation.types";
 
+export interface CreatePollInput {
+  question: string;
+  options: string[];
+  allowMultiple?: boolean;
+}
+
 export interface CreateMessageInput {
-  content: string;
+  content?: string;
   /// Ids de `StoredFile` ya existentes a adjuntar. Este módulo no sube
   /// archivos (ver `../files`), solo referencia los ya subidos ahí.
   fileIds?: string[];
   /// Mensaje al que este responde (tipo WhatsApp/Telegram) — debe pertenecer
   /// a la misma conversación, se valida en `sendMessage` (message.service.ts).
   replyToId?: string;
-  /// Omitido (o ausente) = `TEXT`, el caso normal. `"STICKER"` es el único
-  /// valor que un cliente puede pedir explícitamente (nunca `"SYSTEM"` — eso
-  /// lo genera el propio backend, ver conversation.service.ts) — exige
-  /// `content` vacío y exactamente un `fileId` (ver createMessageSchema,
-  /// message.validator.ts, y el sticker importado antes vía
-  /// `POST /api/v1/giphy/import`, ../giphy/README.md).
-  type?: "STICKER";
+  /// Omitido (o ausente) = `TEXT`, el caso normal. `"STICKER"` exige
+  /// `content` vacío y exactamente un `fileId`. `"CONTACT"` contiene JSON en
+  /// `content`. `"POLL"` representa una encuesta en grupo con opciones interactivas.
+  type?: "STICKER" | "CONTACT" | "POLL";
+  poll?: CreatePollInput;
 }
 
 /// Reenviar un mensaje puntual (de cualquier conversación donde seas
@@ -127,12 +131,44 @@ export interface ToggleReactionInput {
   emoji: string;
 }
 
+export interface VotePollInput {
+  optionId: string;
+}
+
+export interface PollVoteResponse {
+  id: string;
+  optionId: string;
+  userId: string;
+  userName?: string;
+  createdAt: Date;
+}
+
+export interface PollOptionResponse {
+  id: string;
+  pollId: string;
+  text: string;
+  order: number;
+  votes: PollVoteResponse[];
+  voteCount: number;
+}
+
+export interface PollResponse {
+  id: string;
+  messageId: string;
+  question: string;
+  allowMultiple: boolean;
+  options: PollOptionResponse[];
+  totalVotes: number;
+  createdAt: Date;
+}
+
 export type MessageWithRelations = Message & {
   sender: Pick<User, "id" | "name" | "email" | "avatarFileId">;
   files: (MessageFile & { file: SerializableStoredFile })[];
   replyTo: MessageReplyPreview | null;
   forwardedFrom: ForwardedFromPreview | null;
   reactions: MessageReactionResponse[];
+  poll?: PollResponse | null;
 };
 
 /// Forma pública de un mensaje: la relación con sus destinatarios (todo

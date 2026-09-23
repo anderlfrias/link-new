@@ -6,8 +6,9 @@ import type { StoredFile } from "@/features/files/types/file.types";
 /** `STICKER` siempre trae `content: ""` y exactamente un `files[]` — se
  * renderiza sin fondo de burbuja (ver MessageBubble.tsx). Un GIF, en cambio,
  * viaja como `TEXT` normal con un adjunto `image/gif` — no tiene tipo propio.
- * `CONTACT` almacena el contacto serializado en `content` y se renderiza como tarjeta. */
-export type MessageType = "TEXT" | "SYSTEM" | "STICKER" | "CONTACT";
+ * `CONTACT` almacena el contacto serializado en `content` y se renderiza como tarjeta.
+ * `POLL` representa una encuesta interactiva dentro de grupos. */
+export type MessageType = "TEXT" | "SYSTEM" | "STICKER" | "CONTACT" | "POLL";
 
 export interface ContactMessagePayload {
   id: string;
@@ -79,6 +80,48 @@ export interface MessageReactionUpdatedEvent {
   action: "added" | "removed";
 }
 
+export interface PollVote {
+  id: string;
+  optionId: string;
+  userId: string;
+  userName?: string;
+  createdAt: string;
+}
+
+export interface PollOption {
+  id: string;
+  pollId: string;
+  text: string;
+  order: number;
+  votes: PollVote[];
+  voteCount: number;
+}
+
+export interface Poll {
+  id: string;
+  messageId: string;
+  question: string;
+  allowMultiple: boolean;
+  options: PollOption[];
+  totalVotes: number;
+  createdAt: string;
+}
+
+export interface CreatePollPayload {
+  question: string;
+  options: string[];
+  allowMultiple?: boolean;
+}
+
+export interface PollVotedEvent {
+  conversationId: string;
+  messageId: string;
+  poll: Poll;
+  userId: string;
+  optionId: string;
+  action: "added" | "removed";
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -97,14 +140,16 @@ export interface Message {
   forwardedFrom: ForwardedFromPreview | null;
   receipts: MessageReceipt[];
   reactions?: MessageReaction[];
+  poll?: Poll | null;
 }
 
 export interface SendMessageInput {
-  content: string;
+  content?: string;
   fileIds?: string[];
   replyToId?: string;
-  /** `"STICKER"` o `"CONTACT"`. Omitido para todo lo demás (texto, GIF, notas de voz, adjuntos). */
-  type?: "STICKER" | "CONTACT";
+  /** `"STICKER"`, `"CONTACT"` o `"POLL"`. Omitido para todo lo demás (texto, GIF, notas de voz, adjuntos). */
+  type?: "STICKER" | "CONTACT" | "POLL";
+  poll?: CreatePollPayload;
 }
 
 export interface EditMessageInput {

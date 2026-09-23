@@ -9,10 +9,16 @@ import {
   listMessages,
   sendMessage as sendMessageRequest,
   toggleReaction as toggleReactionRequest,
+  votePoll as votePollRequest,
 } from "@/features/messages/api/messages.api";
 import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { SOCKET_EVENTS } from "@/constants/socket-events";
-import type { Message, MessageReactionUpdatedEvent } from "@/features/messages/types/message.types";
+import type {
+  CreatePollPayload,
+  Message,
+  MessageReactionUpdatedEvent,
+  PollVotedEvent,
+} from "@/features/messages/types/message.types";
 import type { MessageReceiptStatus } from "@/features/conversations/types/conversation.types";
 
 export type MessagesStatus = "idle" | "loading" | "ready" | "error";
@@ -164,16 +170,25 @@ export function useMessages(conversationId: string) {
       );
     }
 
+    function handlePollVoted(payload: PollVotedEvent) {
+      if (payload.conversationId !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((m) => (m.id === payload.messageId ? { ...m, poll: payload.poll } : m)),
+      );
+    }
+
     socket.on(SOCKET_EVENTS.message.created, handleCreated);
     socket.on(SOCKET_EVENTS.message.updated, handleUpdated);
     socket.on(SOCKET_EVENTS.message.deleted, handleDeleted);
     socket.on(SOCKET_EVENTS.message.reactionUpdated, handleReactionUpdated);
+    socket.on(SOCKET_EVENTS.message.pollVoted, handlePollVoted);
     socket.on(SOCKET_EVENTS.conversation.receiptUpdated, handleReceiptUpdated);
     return () => {
       socket.off(SOCKET_EVENTS.message.created, handleCreated);
       socket.off(SOCKET_EVENTS.message.updated, handleUpdated);
       socket.off(SOCKET_EVENTS.message.deleted, handleDeleted);
       socket.off(SOCKET_EVENTS.message.reactionUpdated, handleReactionUpdated);
+      socket.off(SOCKET_EVENTS.message.pollVoted, handlePollVoted);
       socket.off(SOCKET_EVENTS.conversation.receiptUpdated, handleReceiptUpdated);
     };
   }, [socket, conversationId, token]);
@@ -198,9 +213,15 @@ export function useMessages(conversationId: string) {
   }, [token, conversationId, messages, loadingMore, hasMore]);
 
   const send = useCallback(
-    async (content: string, fileIds?: string[], replyToId?: string, type?: "STICKER" | "CONTACT") => {
+    async (
+      content?: string,
+      fileIds?: string[],
+      replyToId?: string,
+      type?: "STICKER" | "CONTACT" | "POLL",
+      poll?: CreatePollPayload,
+    ) => {
       if (!token) return;
-      const message = await sendMessageRequest(token, conversationId, { content, fileIds, replyToId, type });
+      const message = await sendMessageRequest(token, conversationId, { content, fileIds, replyToId, type, poll });
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
     },
     [token, conversationId],
@@ -271,5 +292,70 @@ export function useMessages(conversationId: string) {
     [token, conversationId, session?.user?.internalUserId, session?.user?.fullName],
   );
 
-  return { messages, status, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction };
+  const votePoll = useCallback(
+    async (messageId: string, optionId: string) => {
+      if (!token) return;
+      const currentUserId = session?.user?.internalUserId;
+      const currentUserName = session?.user?.fullName;
+
+      // Optimistic update
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId || !m.poll) return m;
+          const poll = m.poll;
+          const isVoted = poll.options.some((opt) =>
+            opt.id === optionId && opt.votes.some((v) => v.userId === currentUserId),
+          );
+
+          const updatedOptions = poll.options.map((opt) => {
+            const hasUserVotedThis = opt.votes.some((v) => v.userId === currentUserId);
+            if (opt.id === optionId) {
+              if (isVoted) {
+                const votes = opt.votes.filter((v) => v.userId !== currentUserId);
+                return { ...opt, votes, voteCount: votes.length };
+              } else {
+                const newVote = {
+                  id: `temp-${Date.now()}`,
+                  optionId,
+                  userId: currentUserId ?? "",
+                  userName: currentUserName,
+                  createdAt: new Date().toISOString(),
+                };
+                const votes = [...opt.votes, newVote];
+                return { ...opt, votes, voteCount: votes.length };
+              }
+            } else {
+              if (!poll.allowMultiple && !isVoted && hasUserVotedThis) {
+                const votes = opt.votes.filter((v) => v.userId !== currentUserId);
+                return { ...opt, votes, voteCount: votes.length };
+              }
+              return opt;
+            }
+          });
+
+          const totalVotes = updatedOptions.reduce((acc, opt) => acc + opt.voteCount, 0);
+          return {
+            ...m,
+            poll: {
+              ...poll,
+              options: updatedOptions,
+              totalVotes,
+            },
+          };
+        }),
+      );
+
+      try {
+        const result = await votePollRequest(token, conversationId, messageId, optionId);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, poll: result.poll } : m)),
+        );
+      } catch (error) {
+        console.error("Error al votar en encuesta:", error);
+      }
+    },
+    [token, conversationId, session?.user?.internalUserId, session?.user?.fullName],
+  );
+
+  return { messages, status, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction, votePoll };
 }

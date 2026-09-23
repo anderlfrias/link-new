@@ -784,7 +784,67 @@ describe("MessageInput", () => {
     // CameraCaptureModal opens
     expect(screen.getByRole("dialog", { name: "Cámara" })).toBeInTheDocument();
   });
+
+  it("muestra la opción 'Encuesta' en el menú de adjuntos solo cuando isGroup es true", () => {
+    const { unmount } = render(
+      <MessageInput
+        conversationId="conv-1"
+        onSend={vi.fn()}
+        onTyping={vi.fn()}
+        onStopTyping={vi.fn()}
+        attachmentsState={defaultAttachmentsState}
+        replyTo={null}
+        onCancelReply={vi.fn()}
+        currentUserId="current-u"
+        isGroup={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Adjuntar"));
+    expect(screen.queryByRole("button", { name: "Encuesta" })).not.toBeInTheDocument();
+
+    unmount();
+
+    render(
+      <MessageInput
+        conversationId="conv-group"
+        onSend={vi.fn()}
+        onTyping={vi.fn()}
+        onStopTyping={vi.fn()}
+        attachmentsState={defaultAttachmentsState}
+        replyTo={null}
+        onCancelReply={vi.fn()}
+        currentUserId="current-u"
+        isGroup={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Adjuntar"));
+    expect(screen.getByRole("button", { name: "Encuesta" })).toBeInTheDocument();
+  });
+
+  it("abre el modal de crear encuesta al seleccionar 'Encuesta' en un grupo", () => {
+    render(
+      <MessageInput
+        conversationId="conv-group"
+        onSend={vi.fn()}
+        onTyping={vi.fn()}
+        onStopTyping={vi.fn()}
+        attachmentsState={defaultAttachmentsState}
+        replyTo={null}
+        onCancelReply={vi.fn()}
+        currentUserId="current-u"
+        isGroup={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Adjuntar"));
+    fireEvent.click(screen.getByRole("button", { name: "Encuesta" }));
+
+    expect(screen.getByRole("heading", { name: "Crear encuesta" })).toBeInTheDocument();
+  });
 });
+
 
 
 

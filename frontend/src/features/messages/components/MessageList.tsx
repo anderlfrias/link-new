@@ -26,6 +26,7 @@ interface MessageListProps {
   onReplyMessage: (message: Message) => void;
   onForwardMessage: (message: Message) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  onVotePoll?: (messageId: string, optionId: string) => Promise<void> | void;
   searchQuery?: string;
   searchJumpTarget?: { messageId: string; nonce: number } | null;
   isSelectionMode?: boolean;
@@ -64,6 +65,7 @@ export function MessageList({
   onReplyMessage,
   onForwardMessage,
   onToggleReaction,
+  onVotePoll,
   searchQuery,
   searchJumpTarget,
   isSelectionMode = false,
@@ -406,6 +408,7 @@ export function MessageList({
                 onForward={onForwardMessage}
                 onJumpToMessage={jumpToMessage}
                 onToggleReaction={onToggleReaction}
+                onVotePoll={onVotePoll}
                 searchQuery={searchQuery}
                 isSelectionMode={isSelectionMode}
                 isSelected={isSelected}

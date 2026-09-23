@@ -111,6 +111,25 @@ describe("MessagePreviewLabel & parseMessagePreview", () => {
     expect(screen.getByText("Imagen")).toBeInTheDocument();
   });
 
+  it("parsea encuestas con ícono de gráfico de barras", () => {
+    const parsed = parseMessagePreview("Encuesta: ¿Cuál es su turno preferido?");
+    expect(parsed.Icon).not.toBeNull();
+    expect(parsed.text).toBe("Encuesta: ¿Cuál es su turno preferido?");
+
+    render(<MessagePreviewLabel preview="Encuesta: ¿Cuál es su turno preferido?" />);
+    expect(screen.getByText("Encuesta: ¿Cuál es su turno preferido?")).toBeInTheDocument();
+  });
+
+  it("parsea encuestas con emoji previo y limpia el emoji asignando ícono de gráfico", () => {
+    const parsed = parseMessagePreview("📊 Encuesta: ¿Almorzamos juntos?");
+    expect(parsed.Icon).not.toBeNull();
+    expect(parsed.text).toBe("Encuesta: ¿Almorzamos juntos?");
+
+    render(<MessagePreviewLabel preview="📊 Encuesta: ¿Almorzamos juntos?" />);
+    expect(screen.getByText("Encuesta: ¿Almorzamos juntos?")).toBeInTheDocument();
+    expect(screen.queryByText("📊")).not.toBeInTheDocument();
+  });
+
   it("renderiza texto común sin íconos especiales", () => {
     const parsed = parseMessagePreview("Hola a todos");
     expect(parsed.Icon).toBeNull();

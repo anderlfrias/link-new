@@ -51,6 +51,24 @@ const withRelations = {
       sender: { select: { name: true } },
     },
   },
+  poll: {
+    include: {
+      options: {
+        orderBy: { order: "asc" },
+        include: {
+          votes: {
+            select: {
+              id: true,
+              optionId: true,
+              userId: true,
+              createdAt: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 const fileWithRelations = {
@@ -75,6 +93,11 @@ export function createMessage(data: {
   fileIds?: string[];
   replyToId?: string;
   forwardedFromId?: string;
+  poll?: {
+    question: string;
+    options: string[];
+    allowMultiple?: boolean;
+  };
 }) {
   return prisma.$transaction(async (tx) => {
     const message = await tx.message.create({
@@ -86,6 +109,20 @@ export function createMessage(data: {
         files: data.fileIds?.length ? { create: data.fileIds.map((fileId) => ({ fileId })) } : undefined,
         replyToId: data.replyToId,
         forwardedFromId: data.forwardedFromId,
+        poll: data.poll
+          ? {
+              create: {
+                question: data.poll.question,
+                allowMultiple: data.poll.allowMultiple ?? false,
+                options: {
+                  create: data.poll.options.map((text, idx) => ({
+                    text,
+                    order: idx,
+                  })),
+                },
+              },
+            }
+          : undefined,
       },
       include: withRelations,
     });
@@ -244,5 +281,93 @@ export function getMessageReactions(messageId: string) {
       user: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "asc" },
+  });
+}
+
+export function findPollByMessageId(messageId: string) {
+  return prisma.poll.findUnique({
+    where: { messageId },
+    include: {
+      options: {
+        orderBy: { order: "asc" },
+        include: {
+          votes: {
+            select: {
+              id: true,
+              optionId: true,
+              userId: true,
+              createdAt: true,
+              user: { select: { id: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export function findPollOption(optionId: string) {
+  return prisma.pollOption.findUnique({
+    where: { id: optionId },
+    include: { poll: true },
+  });
+}
+
+export function togglePollVote(pollId: string, optionId: string, userId: string, allowMultiple: boolean) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.pollVote.findUnique({
+      where: { optionId_userId: { optionId, userId } },
+    });
+
+    let action: "added" | "removed" = "added";
+    if (existing) {
+      await tx.pollVote.delete({
+        where: { id: existing.id },
+      });
+      action = "removed";
+    } else {
+      if (!allowMultiple) {
+        const pollOptions = await tx.pollOption.findMany({
+          where: { pollId },
+          select: { id: true },
+        });
+        const optionIds = pollOptions.map((o) => o.id);
+        await tx.pollVote.deleteMany({
+          where: {
+            userId,
+            optionId: { in: optionIds },
+          },
+        });
+      }
+      await tx.pollVote.create({
+        data: {
+          optionId,
+          userId,
+        },
+      });
+      action = "added";
+    }
+
+    const updatedPoll = await tx.poll.findUniqueOrThrow({
+      where: { id: pollId },
+      include: {
+        options: {
+          orderBy: { order: "asc" },
+          include: {
+            votes: {
+              select: {
+                id: true,
+                optionId: true,
+                userId: true,
+                createdAt: true,
+                user: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return { updatedPoll, action };
   });
 }

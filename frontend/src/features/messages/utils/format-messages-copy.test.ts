@@ -89,6 +89,30 @@ describe("format-messages-copy", () => {
     expect(formatSingleMessageContent(imgMsg)).toBe("[Imagen]");
   });
 
+  it("formats poll message properly with options and vote counts", () => {
+    const pollMsg = createMockMsg({
+      type: "POLL",
+      content: "¿Adónde vamos?",
+      poll: {
+        id: "poll-1",
+        messageId: "msg-1",
+        question: "¿Adónde vamos?",
+        allowMultiple: false,
+        totalVotes: 3,
+        createdAt: "2026-09-21T10:30:00Z",
+        options: [
+          { id: "opt-1", pollId: "poll-1", text: "Playa", order: 0, votes: [], voteCount: 2 },
+          { id: "opt-2", pollId: "poll-1", text: "Montaña", order: 1, votes: [], voteCount: 1 },
+        ],
+      },
+    });
+
+    const formatted = formatSingleMessageContent(pollMsg);
+    expect(formatted).toContain("📊 Encuesta: ¿Adónde vamos?");
+    expect(formatted).toContain("• Playa (2)");
+    expect(formatted).toContain("• Montaña (1)");
+  });
+
   it("formats multiple messages in chronological order with sender names", () => {
     const msg1 = createMockMsg({
       id: "msg-1",

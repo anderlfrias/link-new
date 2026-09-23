@@ -9,10 +9,11 @@ vi.mock("./message.service", () => ({
   editMessage: vi.fn(),
   deleteMessage: vi.fn(),
   toggleReaction: vi.fn(),
+  votePoll: vi.fn(),
 }));
 
 import * as MessageService from "./message.service";
-import { create, forward, list, listFiles, remove, toggleReaction, update } from "./message.controller";
+import { create, forward, list, listFiles, remove, toggleReaction, update, votePoll } from "./message.controller";
 
 describe("message.controller", () => {
   const mockUser = {
@@ -227,6 +228,51 @@ describe("message.controller", () => {
       vi.mocked(MessageService.toggleReaction).mockRejectedValue(err);
 
       await toggleReaction(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(err);
+    });
+  });
+
+  describe("votePoll", () => {
+    it("llama a MessageService.votePoll y responde con el resultado", async () => {
+      const req = createMockRequest({
+        user: mockUser as any,
+        params: { conversationId: "conv-1", id: "msg-1" },
+        body: { optionId: "opt-1" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const mockResult = {
+        conversationId: "conv-1",
+        messageId: "msg-1",
+        poll: { id: "poll-1" },
+        userId: "u-internal-1",
+        optionId: "opt-1",
+        action: "added",
+      };
+      vi.mocked(MessageService.votePoll).mockResolvedValue(mockResult as any);
+
+      await votePoll(req, res, next);
+
+      expect(MessageService.votePoll).toHaveBeenCalledWith("u-internal-1", "conv-1", "msg-1", "opt-1");
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("pasa error a next si votePoll rechaza", async () => {
+      const req = createMockRequest({
+        user: mockUser as any,
+        params: { conversationId: "conv-1", id: "msg-1" },
+        body: { optionId: "opt-1" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      const err = new Error("Vote failed");
+      vi.mocked(MessageService.votePoll).mockRejectedValue(err);
+
+      await votePoll(req, res, next);
 
       expect(next).toHaveBeenCalledWith(err);
     });

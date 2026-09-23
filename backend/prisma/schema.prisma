@@ -66,6 +66,8 @@ enum MessageType {
   /// Contacto compartido — contiene los datos del contacto en formato JSON en `content`
   /// y se renderiza con tarjeta interactiva en el frontend.
   CONTACT @map("contact")
+  /// Encuesta dentro de un chat grupal con opciones interactivas y votación en tiempo real.
+  POLL    @map("poll")
 
   @@map("message_type")
 }
@@ -213,6 +215,7 @@ model User {
   fileUploads             FileUpload[]         @relation("FileUploadCreatedBy")
   pushSubscriptions       PushSubscription[]
   reactions               MessageReaction[]
+  pollVotes               PollVote[]
 
   @@map("users")
 }
@@ -365,6 +368,7 @@ model Message {
   /// Archivos adjuntos, a través de la tabla intermedia `MessageFile`.
   files     MessageFile[]
   reactions MessageReaction[]
+  poll      Poll?
   auditLogs AuditLog[]
 
   @@index([conversationId])
@@ -465,6 +469,47 @@ model MessageReaction {
   @@index([messageId])
   @@index([userId])
   @@map("message_reactions")
+}
+
+/// Encuesta asociada a un mensaje grupal.
+model Poll {
+  id            String       @id @default(uuid())
+  messageId     String       @unique @map("message_id")
+  message       Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  question      String
+  allowMultiple Boolean      @default(false) @map("allow_multiple")
+  options       PollOption[]
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@map("polls")
+}
+
+/// Opción de respuesta en una encuesta.
+model PollOption {
+  id        String     @id @default(uuid())
+  pollId    String     @map("poll_id")
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text      String
+  order     Int        @default(0)
+  votes     PollVote[]
+
+  @@index([pollId])
+  @@map("poll_options")
+}
+
+/// Voto de un usuario en una opción de encuesta.
+model PollVote {
+  id        String     @id @default(uuid())
+  optionId  String     @map("option_id")
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId    String     @map("user_id")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@unique([optionId, userId])
+  @@index([optionId])
+  @@index([userId])
+  @@map("poll_votes")
 }
 
 model AuditLog {

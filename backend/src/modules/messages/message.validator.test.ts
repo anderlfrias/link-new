@@ -4,6 +4,7 @@ import {
   forwardMessageSchema,
   toggleReactionSchema,
   updateMessageSchema,
+  votePollSchema,
 } from "./message.validator";
 
 describe("message.validator", () => {
@@ -144,6 +145,97 @@ describe("message.validator", () => {
 
     it("rechaza si el emoji excede 32 caracteres", async () => {
       await expect(toggleReactionSchema.validate({ emoji: "👍".repeat(33) })).rejects.toThrow();
+    });
+  });
+
+  describe("poll in createMessageSchema", () => {
+    it("acepta un mensaje POLL válido con pregunta y opciones", async () => {
+      const result = await createMessageSchema.validate({
+        type: "POLL",
+        poll: {
+          question: "¿A qué hora almorzamos?",
+          options: ["12:00", "13:00", "14:00"],
+          allowMultiple: true,
+        },
+      });
+      expect(result.type).toBe("POLL");
+      expect(result.poll?.question).toBe("¿A qué hora almorzamos?");
+      expect(result.poll?.options).toEqual(["12:00", "13:00", "14:00"]);
+      expect(result.poll?.allowMultiple).toBe(true);
+    });
+
+    it("rechaza POLL si tiene menos de 2 opciones", async () => {
+      await expect(
+        createMessageSchema.validate({
+          type: "POLL",
+          poll: {
+            question: "¿Venís?",
+            options: ["Sí"],
+          },
+        }),
+      ).rejects.toThrow("al menos 2 opciones");
+    });
+
+    it("rechaza POLL si tiene más de 12 opciones", async () => {
+      const options = Array.from({ length: 13 }, (_, i) => `Opción ${i + 1}`);
+      await expect(
+        createMessageSchema.validate({
+          type: "POLL",
+          poll: {
+            question: "Muchas opciones",
+            options,
+          },
+        }),
+      ).rejects.toThrow("máximo 12 opciones");
+    });
+
+    it("rechaza POLL con opciones duplicadas", async () => {
+      await expect(
+        createMessageSchema.validate({
+          type: "POLL",
+          poll: {
+            question: "¿Repetidas?",
+            options: ["Opción A", "opción a"],
+          },
+        }),
+      ).rejects.toThrow("Las opciones deben ser distintas");
+    });
+
+    it("rechaza POLL con pregunta vacía", async () => {
+      await expect(
+        createMessageSchema.validate({
+          type: "POLL",
+          poll: {
+            question: "   ",
+            options: ["A", "B"],
+          },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("rechaza POLL si contiene archivos adjuntos", async () => {
+      await expect(
+        createMessageSchema.validate({
+          type: "POLL",
+          fileIds: ["file-1"],
+          poll: {
+            question: "¿Con archivo?",
+            options: ["A", "B"],
+          },
+        }),
+      ).rejects.toThrow("a poll message must have poll payload and no files");
+    });
+  });
+
+  describe("votePollSchema", () => {
+    it("acepta optionId válido", async () => {
+      const result = await votePollSchema.validate({ optionId: "opt-123" });
+      expect(result.optionId).toBe("opt-123");
+    });
+
+    it("rechaza si falta optionId o es vacío", async () => {
+      await expect(votePollSchema.validate({})).rejects.toThrow();
+      await expect(votePollSchema.validate({ optionId: "   " })).rejects.toThrow();
     });
   });
 });

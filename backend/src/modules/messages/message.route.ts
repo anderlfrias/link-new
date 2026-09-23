@@ -8,6 +8,7 @@ import {
   forwardMessageSchema,
   toggleReactionSchema,
   updateMessageSchema,
+  votePollSchema,
 } from "./message.validator";
 
 // mergeParams: este router se monta bajo /v1/conversations/:conversationId/messages
@@ -25,5 +26,6 @@ router.get("/files", MessageController.listFiles);
 router.patch("/:id", validateBody(updateMessageSchema), MessageController.update);
 router.delete("/:id", MessageController.remove);
 router.post("/:id/reactions", validateBody(toggleReactionSchema), MessageController.toggleReaction);
+router.post("/:id/poll/vote", validateBody(votePollSchema), MessageController.votePoll);
 
 export default router;

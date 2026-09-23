@@ -6,6 +6,7 @@ import type {
   ListMessagesQuery,
   Message,
   MessageReaction,
+  Poll,
   SendMessageInput,
 } from "@/features/messages/types/message.types";
 
@@ -94,3 +95,24 @@ export function toggleReaction(
     body: { emoji },
   });
 }
+
+export function votePoll(
+  token: string,
+  conversationId: string,
+  messageId: string,
+  optionId: string,
+): Promise<{
+  conversationId: string;
+  messageId: string;
+  poll: Poll;
+  userId: string;
+  optionId: string;
+  action: "added" | "removed";
+}> {
+  return apiRequest(`${basePath(conversationId)}/${messageId}/poll/vote`, {
+    method: "POST",
+    token,
+    body: { optionId },
+  });
+}
+

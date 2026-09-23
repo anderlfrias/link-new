@@ -20,6 +20,7 @@ import { MESSAGE_EVENTS } from "./message.socket";
 import {
   ConversationFileResponse,
   CreateMessageInput,
+  CreatePollInput,
   ForwardedFromPreview,
   ListConversationFilesOptions,
   ListMessagesOptions,
@@ -27,6 +28,9 @@ import {
   MessageReactionResponse,
   MessageWithReceipts,
   MessageWithRelations,
+  PollOptionResponse,
+  PollResponse,
+  PollVoteResponse,
   SerializableStoredFile,
   UpdateMessageInput,
 } from "./message.types";
@@ -104,20 +108,52 @@ function toReactionResponse(raw: {
   };
 }
 
+function toPollResponse(raw: any): PollResponse | null {
+  if (!raw) return null;
+  const options: PollOptionResponse[] = (raw.options ?? []).map((opt: any) => {
+    const votes: PollVoteResponse[] = (opt.votes ?? []).map((vote: any) => ({
+      id: vote.id,
+      optionId: vote.optionId,
+      userId: vote.userId,
+      userName: vote.user?.name,
+      createdAt: vote.createdAt,
+    }));
+    return {
+      id: opt.id,
+      pollId: opt.pollId,
+      text: opt.text,
+      order: opt.order,
+      votes,
+      voteCount: votes.length,
+    };
+  });
+  const totalVotes = options.reduce((sum, opt) => sum + opt.voteCount, 0);
+  return {
+    id: raw.id,
+    messageId: raw.messageId,
+    question: raw.question,
+    allowMultiple: raw.allowMultiple,
+    options,
+    totalVotes,
+    createdAt: raw.createdAt,
+  };
+}
+
 function withPreviews<
   T extends {
     replyTo: Parameters<typeof toReplyPreview>[0];
     forwardedFrom: Parameters<typeof toForwardedFromPreview>[0];
     files: (MessageFile & { file: StoredFile })[];
     reactions?: Parameters<typeof toReactionResponse>[0][];
+    poll?: any;
     deletedAt?: Date | null;
   },
 >(message: T, currentUserId?: string) {
   // Desestructurar (en vez de spread-y-reescribir) para que TS calcule bien
-  // el tipo de `rest` sin `replyTo`/`forwardedFrom`/`files`/`reactions` — spreadear un
+  // el tipo de `rest` sin `replyTo`/`forwardedFrom`/`files`/`reactions`/`poll` — spreadear un
   // `T` genérico y "pisar" una clave después no reemplaza su tipo de forma
   // confiable en la inferencia.
-  const { replyTo, forwardedFrom, files, reactions, ...rest } = message;
+  const { replyTo, forwardedFrom, files, reactions, poll, ...rest } = message as any;
   const isDeleted = Boolean(message.deletedAt);
   return {
     ...rest,
@@ -126,6 +162,7 @@ function withPreviews<
     forwardedFrom: isDeleted ? null : toForwardedFromPreview(forwardedFrom),
     files: isDeleted ? [] : toSerializableFiles(files, currentUserId),
     reactions: isDeleted ? [] : (reactions ?? []).map(toReactionResponse),
+    poll: isDeleted ? null : toPollResponse(poll),
   };
 }
 
@@ -187,6 +224,7 @@ interface CreateAndDeliverParams {
   forwardedFromId?: string;
   auditAction: DeliverAuditParam;
   type?: MessageType;
+  poll?: CreatePollInput;
 }
 
 /// Núcleo compartido por `sendMessage` y `forwardMessage`: crear la fila,
@@ -208,6 +246,7 @@ async function createAndDeliverMessage(
     fileIds: params.fileIds,
     replyToId: params.replyToId,
     forwardedFromId: params.forwardedFromId,
+    poll: params.poll,
   });
 
   if (params.auditAction.action === AuditAction.SEND_MESSAGE) {
@@ -305,10 +344,23 @@ export async function sendMessage(
     throw new BadRequestError("El mensaje al que querés responder ya no existe en esta conversación.");
   }
 
+  if (input.type === "POLL") {
+    if (conversation.type !== ConversationType.GROUP) {
+      throw new BadRequestError("Las encuestas solo están permitidas en chats grupales");
+    }
+    if (!input.poll) {
+      throw new BadRequestError("Datos de encuesta requeridos");
+    }
+  }
+
+  const resolvedContent =
+    input.type === "POLL" && input.poll ? input.poll.question.trim() : (input.content?.trim() ?? "");
+
   return createAndDeliverMessage(currentUserId, conversationId, conversation, {
-    content: input.content.trim(),
+    content: resolvedContent,
     fileIds,
     replyToId: input.replyToId,
+    poll: input.poll,
     auditAction: {
       action: AuditAction.SEND_MESSAGE,
       metadata: {
@@ -317,7 +369,9 @@ export async function sendMessage(
             ? MessageType.STICKER
             : input.type === "CONTACT"
               ? MessageType.CONTACT
-              : MessageType.TEXT,
+              : input.type === "POLL"
+                ? MessageType.POLL
+                : MessageType.TEXT,
         fileCount: fileIds.length,
       },
     },
@@ -326,7 +380,9 @@ export async function sendMessage(
         ? MessageType.STICKER
         : input.type === "CONTACT"
           ? MessageType.CONTACT
-          : undefined,
+          : input.type === "POLL"
+            ? MessageType.POLL
+            : undefined,
   });
 }
 
@@ -548,6 +604,55 @@ export async function toggleReaction(
   };
 
   getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.REACTION_UPDATED, payload);
+
+  return payload;
+}
+
+export async function votePoll(
+  currentUserId: string,
+  conversationId: string,
+  messageId: string,
+  optionId: string,
+) {
+  if (!optionId || typeof optionId !== "string" || !optionId.trim()) {
+    throw new BadRequestError("Opción de encuesta inválida");
+  }
+
+  await assertMembership(conversationId, currentUserId);
+
+  const message = await MessageRepository.findById(messageId);
+  if (!message || message.conversationId !== conversationId) {
+    throw new NotFoundError("Message not found");
+  }
+  if (message.type !== MessageType.POLL || !message.poll) {
+    throw new BadRequestError("El mensaje no es una encuesta válida");
+  }
+
+  const cleanOptionId = optionId.trim();
+  const option = message.poll.options.find((opt) => opt.id === cleanOptionId);
+  if (!option) {
+    throw new NotFoundError("Opción de encuesta no encontrada");
+  }
+
+  const { updatedPoll, action } = await MessageRepository.togglePollVote(
+    message.poll.id,
+    cleanOptionId,
+    currentUserId,
+    message.poll.allowMultiple,
+  );
+
+  const pollResponse = toPollResponse(updatedPoll);
+
+  const payload = {
+    conversationId,
+    messageId,
+    poll: pollResponse,
+    userId: currentUserId,
+    optionId: cleanOptionId,
+    action,
+  };
+
+  getIO().to(conversationRoomName(conversationId)).emit(MESSAGE_EVENTS.POLL_VOTED, payload);
 
   return payload;
 }

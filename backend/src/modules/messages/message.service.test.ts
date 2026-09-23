@@ -59,6 +59,7 @@ import {
   listMessages,
   sendMessage,
   toggleReaction,
+  votePoll,
 } from "./message.service";
 
 function buildMockConversation(overrides: any = {}) {
@@ -811,6 +812,179 @@ describe("message.service", () => {
       vi.mocked(MessageRepository.findById).mockResolvedValue(null);
 
       await expect(toggleReaction("u-1", "conv-1", "msg-nonexistent", "👍")).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("sendMessage con POLL", () => {
+    it("crea exitosamente una encuesta en una conversación GROUP", async () => {
+      const mockConv = buildMockConversation({ type: ConversationType.GROUP });
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+      vi.mocked(getConnectedUserIds).mockResolvedValue(["u-1", "u-2"]);
+
+      const mockPoll = {
+        id: "poll-1",
+        messageId: "msg-poll-1",
+        question: "¿Qué día nos reunimos?",
+        allowMultiple: false,
+        options: [
+          { id: "opt-1", pollId: "poll-1", text: "Lunes", order: 0, votes: [] },
+          { id: "opt-2", pollId: "poll-1", text: "Martes", order: 1, votes: [] },
+        ],
+        createdAt: new Date(),
+      };
+
+      const mockCreated = buildMockMessage({
+        id: "msg-poll-1",
+        type: MessageType.POLL,
+        content: "¿Qué día nos reunimos?",
+        poll: mockPoll,
+      });
+
+      vi.mocked(MessageRepository.createMessage).mockResolvedValue(mockCreated as any);
+
+      const result = await sendMessage("u-1", "conv-1", {
+        type: "POLL",
+        poll: {
+          question: "¿Qué día nos reunimos?",
+          options: ["Lunes", "Martes"],
+          allowMultiple: false,
+        },
+      });
+
+      expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.POLL,
+          content: "¿Qué día nos reunimos?",
+          poll: {
+            question: "¿Qué día nos reunimos?",
+            options: ["Lunes", "Martes"],
+            allowMultiple: false,
+          },
+        }),
+      );
+      expect(result.poll?.question).toBe("¿Qué día nos reunimos?");
+      expect(result.poll?.options).toHaveLength(2);
+      expect(mockEmit).toHaveBeenCalledWith(MESSAGE_EVENTS.CREATED, expect.objectContaining({ id: "msg-poll-1" }));
+    });
+
+    it("rechaza la creación de una encuesta si la conversación es PRIVATE", async () => {
+      const mockConv = buildMockConversation({ type: ConversationType.PRIVATE });
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      await expect(
+        sendMessage("u-1", "conv-1", {
+          type: "POLL",
+          poll: {
+            question: "¿Pregunta en privado?",
+            options: ["A", "B"],
+          },
+        }),
+      ).rejects.toThrow("Las encuestas solo están permitidas en chats grupales");
+    });
+
+    it("rechaza la creación de una encuesta si la conversación es SELF", async () => {
+      const mockConv = buildMockConversation({ type: ConversationType.SELF });
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      await expect(
+        sendMessage("u-1", "conv-1", {
+          type: "POLL",
+          poll: {
+            question: "¿Pregunta en self?",
+            options: ["A", "B"],
+          },
+        }),
+      ).rejects.toThrow("Las encuestas solo están permitidas en chats grupales");
+    });
+  });
+
+  describe("votePoll", () => {
+    it("vota exitosamente en una encuesta y emite POLL_VOTED", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsg = buildMockMessage({
+        id: "msg-poll-1",
+        type: MessageType.POLL,
+        poll: {
+          id: "poll-1",
+          allowMultiple: false,
+          options: [
+            { id: "opt-1", pollId: "poll-1", text: "Lunes" },
+            { id: "opt-2", pollId: "poll-1", text: "Martes" },
+          ],
+        },
+      });
+      vi.mocked(MessageRepository.findById).mockResolvedValue(mockMsg as any);
+
+      const updatedPollMock = {
+        id: "poll-1",
+        messageId: "msg-poll-1",
+        question: "¿Qué día?",
+        allowMultiple: false,
+        options: [
+          {
+            id: "opt-1",
+            pollId: "poll-1",
+            text: "Lunes",
+            order: 0,
+            votes: [{ id: "vote-1", optionId: "opt-1", userId: "u-1", user: { name: "User 1" }, createdAt: new Date() }],
+          },
+          { id: "opt-2", pollId: "poll-1", text: "Martes", order: 1, votes: [] },
+        ],
+        createdAt: new Date(),
+      };
+
+      vi.mocked(MessageRepository.togglePollVote).mockResolvedValue({
+        updatedPoll: updatedPollMock,
+        action: "added",
+      } as any);
+
+      const result = await votePoll("u-1", "conv-1", "msg-poll-1", "opt-1");
+
+      expect(MessageRepository.togglePollVote).toHaveBeenCalledWith("poll-1", "opt-1", "u-1", false);
+      expect(mockEmit).toHaveBeenCalledWith(
+        MESSAGE_EVENTS.POLL_VOTED,
+        expect.objectContaining({
+          conversationId: "conv-1",
+          messageId: "msg-poll-1",
+          action: "added",
+          optionId: "opt-1",
+        }),
+      );
+      expect(result.action).toBe("added");
+      expect(result.poll?.options[0].voteCount).toBe(1);
+    });
+
+    it("lanza NotFoundError si la opción no pertenece a la encuesta", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsg = buildMockMessage({
+        id: "msg-poll-1",
+        type: MessageType.POLL,
+        poll: {
+          id: "poll-1",
+          allowMultiple: false,
+          options: [{ id: "opt-1", pollId: "poll-1", text: "Lunes" }],
+        },
+      });
+      vi.mocked(MessageRepository.findById).mockResolvedValue(mockMsg as any);
+
+      await expect(votePoll("u-1", "conv-1", "msg-poll-1", "opt-nonexistent")).rejects.toThrow(NotFoundError);
+    });
+
+    it("lanza BadRequestError si el mensaje no es una encuesta válida", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+
+      const mockMsg = buildMockMessage({
+        id: "msg-text-1",
+        type: MessageType.TEXT,
+      });
+      vi.mocked(MessageRepository.findById).mockResolvedValue(mockMsg as any);
+
+      await expect(votePoll("u-1", "conv-1", "msg-text-1", "opt-1")).rejects.toThrow(BadRequestError);
     });
   });
 });

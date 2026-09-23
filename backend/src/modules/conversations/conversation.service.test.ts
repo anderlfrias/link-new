@@ -1111,6 +1111,24 @@ describe("conversation.service", () => {
       expect(sticker).toBe("Sticker");
     });
 
+    it("devuelve 'Encuesta: <pregunta>' para mensajes POLL con texto y 'Encuesta' si no hay texto", () => {
+      const pollWithQuestion = buildLastMessagePreview({
+        deletedAt: null,
+        content: "  ¿Almorzamos juntos?  ",
+        files: [],
+        type: MessageType.POLL,
+      });
+      expect(pollWithQuestion).toBe("Encuesta: ¿Almorzamos juntos?");
+
+      const pollEmpty = buildLastMessagePreview({
+        deletedAt: null,
+        content: "",
+        files: [],
+        type: MessageType.POLL,
+      });
+      expect(pollEmpty).toBe("Encuesta");
+    });
+
     it("devuelve el texto normal cuando solo hay texto", () => {
       const text = buildLastMessagePreview({
         deletedAt: null,

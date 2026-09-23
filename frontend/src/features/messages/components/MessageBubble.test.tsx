@@ -1096,7 +1096,50 @@ describe("MessageBubble", () => {
     expect(screen.queryByRole("button", { name: "Seleccionar mensaje" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Deseleccionar mensaje" })).not.toBeInTheDocument();
   });
+
+  it("renderiza una encuesta cuando el mensaje es de tipo POLL", () => {
+    const onVotePoll = vi.fn();
+    const pollMessage: Message = {
+      ...baseMessage,
+      type: "POLL",
+      content: "¿A qué hora salimos?",
+      poll: {
+        id: "poll-1",
+        messageId: baseMessage.id,
+        question: "¿A qué hora salimos?",
+        allowMultiple: false,
+        totalVotes: 1,
+        createdAt: "2026-09-09T10:00:00Z",
+        options: [
+          { id: "opt-1", pollId: "poll-1", text: "18:00", order: 0, votes: [], voteCount: 0 },
+          { id: "opt-2", pollId: "poll-1", text: "19:00", order: 1, votes: [{ id: "v-1", optionId: "opt-2", userId: "u-1", createdAt: "2026-09-09T10:01:00Z" }], voteCount: 1 },
+        ],
+      },
+    };
+
+    render(
+      <MessageBubble
+        message={pollMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="u-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+        onVotePoll={onVotePoll}
+      />,
+    );
+
+    expect(screen.getByText("¿A qué hora salimos?")).toBeInTheDocument();
+    expect(screen.getByText("18:00")).toBeInTheDocument();
+    expect(screen.getByText("19:00")).toBeInTheDocument();
+    expect(screen.getByText("1 voto")).toBeInTheDocument();
+  });
 });
+
 
 
 

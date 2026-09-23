@@ -73,6 +73,26 @@ describe("message-preview", () => {
     ).toBe("Sticker");
   });
 
+  it("returns 'Encuesta: [pregunta]' or 'Encuesta' for POLL messages", () => {
+    expect(
+      buildMessagePreview({
+        deletedAt: null,
+        content: "¿A qué hora nos juntamos?",
+        files: [],
+        type: "POLL",
+      }),
+    ).toBe("Encuesta: ¿A qué hora nos juntamos?");
+
+    expect(
+      buildMessagePreview({
+        deletedAt: null,
+        content: "   ",
+        files: [],
+        type: "POLL",
+      }),
+    ).toBe("Encuesta");
+  });
+
   it("segments voice notes (audio/*)", () => {
     expect(
       buildMessagePreview({

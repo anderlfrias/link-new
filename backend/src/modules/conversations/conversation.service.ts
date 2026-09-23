@@ -87,6 +87,11 @@ export function buildLastMessagePreview(message: {
     return "Sticker";
   }
 
+  if (message.type === MessageType.POLL) {
+    const text = message.content.trim().replace(/\s+/g, " ");
+    return text ? `Encuesta: ${text}` : "Encuesta";
+  }
+
   const text = message.content.trim().replace(/\s+/g, " ");
 
   if (message.files && message.files.length > 0) {

@@ -25,6 +25,7 @@ import { copyImageToClipboard, copyTextToClipboard } from "@/utils/clipboard";
 import { isImageMimeType } from "@/utils/file-format";
 import { FormattedMessageText } from "@/features/messages/components/FormattedMessageText";
 import { ContactMessageCard } from "@/features/messages/components/ContactMessageCard";
+import { PollMessageCard } from "@/features/messages/components/PollMessageCard";
 import { cn } from "@/utils/cn";
 import type { ContactMessagePayload, Message } from "@/features/messages/types/message.types";
 
@@ -41,6 +42,7 @@ interface MessageBubbleProps {
   onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  onVotePoll?: (messageId: string, optionId: string) => Promise<void> | void;
   searchQuery?: string;
   currentUserName?: string;
   isSelectionMode?: boolean;
@@ -65,6 +67,7 @@ export function MessageBubble({
   onForward,
   onJumpToMessage,
   onToggleReaction,
+  onVotePoll,
   searchQuery,
   currentUserName,
   isSelectionMode = false,
@@ -81,6 +84,7 @@ export function MessageBubble({
   // (tombstone genérico) — el look sin burbuja es solo para uno vivo.
   const isSticker = message.type === "STICKER" && !isDeleted;
   const isContact = message.type === "CONTACT" && !isDeleted;
+  const isPoll = message.type === "POLL" && !isDeleted;
   const gifFile = !isDeleted ? message.files.find((f) => !f.file.deletedAt && f.file.mimeType === "image/gif") : null;
   const stickerFile = isSticker && message.files.length > 0 ? message.files[0].file : null;
 
@@ -271,10 +275,19 @@ export function MessageBubble({
       } catch {
         textToCopy = message.content;
       }
+    } else if (message.type === "POLL" && message.poll) {
+      const opts = message.poll.options.map((o) => `• ${o.text} (${o.voteCount})`).join("\n");
+      textToCopy = `📊 Encuesta: ${message.poll.question}\n${opts}`;
     }
     const ok = await copyTextToClipboard(textToCopy);
     if (ok) {
-      setCopiedFeedback(message.type === "CONTACT" ? "Contacto copiado al portapapeles" : "Texto copiado al portapapeles");
+      setCopiedFeedback(
+        message.type === "CONTACT"
+          ? "Contacto copiado al portapapeles"
+          : message.type === "POLL"
+            ? "Encuesta copiada al portapapeles"
+            : "Texto copiado al portapapeles",
+      );
       setTimeout(() => setCopiedFeedback(null), 2000);
     }
   }
@@ -422,7 +435,11 @@ export function MessageBubble({
               ? "max-w-36"
               : cn(
                   "rounded-2xl px-3 py-2 shadow-sm",
-                  isContact ? "min-w-[240px] sm:min-w-[280px] max-w-[320px]" : "min-w-[80px]",
+                  isPoll
+                    ? "min-w-[260px] sm:min-w-[300px] max-w-[360px]"
+                    : isContact
+                      ? "min-w-[240px] sm:min-w-[280px] max-w-[320px]"
+                      : "min-w-[80px]",
                   renderAsOwn
                     ? "bg-brand-blue text-white"
                     : "bg-white text-brand-ink dark:bg-neutral-800 dark:text-white",
@@ -569,6 +586,14 @@ export function MessageBubble({
               {status && <MessageStatusTicks status={status} />}
             </span>
           </div>
+        ) : isPoll && message.poll ? (
+          <PollMessageCard
+            poll={message.poll}
+            isOwn={renderAsOwn}
+            currentUserId={currentUserId}
+            onVote={(optionId) => onVotePoll?.(message.id, optionId)}
+            footer={footer}
+          />
         ) : isContact ? (
           <ContactMessageCard
             rawContent={message.content}

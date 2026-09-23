@@ -2,6 +2,7 @@
 
 import {
   IconBan,
+  IconChartBar,
   IconFileText,
   IconMicrophone,
   IconMoodSmile,
@@ -89,6 +90,16 @@ export function parseMessagePreview(rawPreview: string | null | undefined): Pars
   if (trimmed.startsWith("👤 ") || trimmed.startsWith("👤") || trimmed.toLowerCase().startsWith("contacto")) {
     const text = trimmed.replace(/^👤\s*/, "") || "Contacto";
     return { Icon: IconUser, text, isDeleted: false };
+  }
+
+  // Encuesta
+  if (
+    trimmed.startsWith("📊 ") ||
+    trimmed.startsWith("📊") ||
+    trimmed.toLowerCase().startsWith("encuesta")
+  ) {
+    const text = trimmed.replace(/^📊\s*/, "") || "Encuesta";
+    return { Icon: IconChartBar, text, isDeleted: false };
   }
 
   // Archivo adjunto (genérico o demás archivos)

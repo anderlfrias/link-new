@@ -90,3 +90,18 @@ export async function toggleReaction(req: Request, res: Response, next: NextFunc
     next(error);
   }
 }
+
+export async function votePoll(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await MessageService.votePoll(
+      currentUserId(req),
+      req.params.conversationId,
+      req.params.id,
+      req.body.optionId,
+    );
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+

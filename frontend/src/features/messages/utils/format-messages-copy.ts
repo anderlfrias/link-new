@@ -32,6 +32,14 @@ export function formatSingleMessageContent(message: Message): string {
     return "[Sticker]";
   }
 
+  if (message.type === "POLL") {
+    if (message.poll) {
+      const opts = message.poll.options.map((o) => `• ${o.text} (${o.voteCount})`).join("\n");
+      return `📊 Encuesta: ${message.poll.question}\n${opts}`;
+    }
+    return `📊 Encuesta: ${message.content || ""}`.trim();
+  }
+
   if (message.content.trim()) {
     return message.content;
   }

@@ -25,7 +25,7 @@ import { extractFilesFromClipboard, copyTextToClipboard } from "@/utils/clipboar
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
 import { formatMessagesForCopy } from "@/features/messages/utils/format-messages-copy";
 import { cn } from "@/utils/cn";
-import type { Message } from "@/features/messages/types/message.types";
+import type { CreatePollPayload, Message } from "@/features/messages/types/message.types";
 
 interface ConversationViewProps {
   conversationId: string;
@@ -38,7 +38,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   const currentUserName = session?.user.username || session?.user.fullName || "";
 
   const { conversation, status: conversationStatus } = useConversation(conversationId);
-  const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction } =
+  const { messages, status: messagesStatus, hasMore, loadingMore, loadMore, send, edit, remove, toggleReaction, votePoll } =
     useMessages(conversationId);
   const { typingUserIds, notifyTyping, notifyStopped } = useTyping(conversationId);
   const attachmentsState = useMessageAttachments(conversationId);
@@ -240,6 +240,11 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
     setReplyTarget(null);
   }
 
+  async function handleSendPoll(payload: CreatePollPayload) {
+    await send(undefined, undefined, replyTarget?.id, "POLL", payload);
+    setReplyTarget(null);
+  }
+
   function handleDragEnter(event: DragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
@@ -383,6 +388,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           onReplyMessage={setReplyTarget}
           onForwardMessage={(msg) => setForwardModalMessages([msg])}
           onToggleReaction={toggleReaction}
+          onVotePoll={votePoll}
           searchQuery={isSearchOpen ? searchQuery : undefined}
           searchJumpTarget={searchJumpTarget}
           isSelectionMode={isSelectionMode}
@@ -401,6 +407,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
             onCancelReply={() => setReplyTarget(null)}
             currentUserId={currentUserId}
             mentionCandidates={mentionCandidates}
+            isGroup={conversation?.type === "GROUP"}
+            onSendPoll={handleSendPoll}
           />
         </div>
         {isDraggingFile && (

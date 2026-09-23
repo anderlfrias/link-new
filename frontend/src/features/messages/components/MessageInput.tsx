@@ -3,6 +3,7 @@
 import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   IconCamera,
+  IconChartBar,
   IconCheck,
   IconFileText,
   IconHeadphones,
@@ -20,6 +21,7 @@ import {
 import { AttachmentErrorModal } from "@/features/messages/components/AttachmentErrorModal";
 import { AttachmentPreviewChip } from "@/features/messages/components/AttachmentPreviewChip";
 import { CameraCaptureModal } from "@/features/messages/components/CameraCaptureModal";
+import { CreatePollModal } from "@/features/messages/components/CreatePollModal";
 import { EmojiGifStickerPicker } from "@/features/messages/components/EmojiGifStickerPicker";
 import { MentionAutocompleteList, type MentionCandidate } from "@/features/messages/components/MentionAutocompleteList";
 import { QuotedMessagePreview } from "@/features/messages/components/QuotedMessagePreview";
@@ -39,7 +41,7 @@ import { getActiveMentionQuery, type ActiveMentionQuery } from "@/utils/mention"
 import { getAvatarUrl } from "@/utils/file-url";
 import { clearDraft, getDraft, setDraft } from "@/features/messages/lib/draft-store";
 import type { DirectoryUser } from "@/features/users/types/user.types";
-import type { ContactMessagePayload, Message } from "@/features/messages/types/message.types";
+import type { ContactMessagePayload, CreatePollPayload, Message } from "@/features/messages/types/message.types";
 
 interface MessageInputProps {
   conversationId: string;
@@ -55,6 +57,8 @@ interface MessageInputProps {
   currentUserId: string;
   mentionCandidates?: MentionCandidate[];
   onShareContact?: (user: DirectoryUser) => void;
+  isGroup?: boolean;
+  onSendPoll?: (payload: CreatePollPayload) => Promise<void> | void;
 }
 
 interface AttachmentOption {
@@ -63,6 +67,7 @@ interface AttachmentOption {
   icon: TablerIcon;
   isContact?: boolean;
   isCamera?: boolean;
+  isPoll?: boolean;
 }
 
 /** `accept: undefined` para "Documento" — a propósito, sin filtro (el
@@ -95,6 +100,8 @@ export function MessageInput({
   currentUserId,
   mentionCandidates,
   onShareContact,
+  isGroup,
+  onSendPoll,
 }: MessageInputProps) {
   const [value, setValue] = useState(() => getDraft(currentUserId, conversationId));
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -114,6 +121,7 @@ export function MessageInput({
   const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
   const [isShareContactOpen, setIsShareContactOpen] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isPollOpen, setIsPollOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [reactionsPickerOpen, setReactionsPickerOpen] = useState(false);
@@ -523,7 +531,9 @@ export function MessageInput({
             <div className="relative shrink-0" ref={attachMenuRef}>
               {attachMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
-                  {ATTACHMENT_OPTIONS.map(({ label, accept, icon: OptionIcon, isContact, isCamera }) => (
+                  {ATTACHMENT_OPTIONS.concat(
+                    isGroup ? [{ label: "Encuesta", icon: IconChartBar, isPoll: true }] : [],
+                  ).map(({ label, accept, icon: OptionIcon, isContact, isCamera, isPoll }) => (
                     <button
                       key={label}
                       type="button"
@@ -533,6 +543,8 @@ export function MessageInput({
                           setIsCameraOpen(true);
                         } else if (isContact) {
                           setIsShareContactOpen(true);
+                        } else if (isPoll) {
+                          setIsPollOpen(true);
                         } else {
                           openPicker(accept);
                         }
@@ -649,6 +661,16 @@ export function MessageInput({
           addFiles([file]);
         }}
       />
+
+      {isPollOpen && (
+        <CreatePollModal
+          isOpen={isPollOpen}
+          onClose={() => setIsPollOpen(false)}
+          onSubmit={async (payload) => {
+            await onSendPoll?.(payload);
+          }}
+        />
+      )}
     </div>
   );
 }
