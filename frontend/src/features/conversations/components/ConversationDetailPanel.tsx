@@ -89,6 +89,10 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
     Boolean(publicSettings?.allowGroupDelete) &&
     groupSettings != null &&
     canPerformGroupAction(groupSettings.effective.whoCanDeleteGroup, conversation, currentUserId, session?.user.roles ?? []);
+  const canLeaveGroup =
+    isGroup &&
+    groupSettings != null &&
+    canPerformGroupAction(groupSettings.effective.whoCanLeaveGroup, conversation, currentUserId, session?.user.roles ?? []);
   const canDeleteChat = !isGroup && Boolean(publicSettings?.allowConversationDelete);
 
   const [editingName, setEditingName] = useState(false);
@@ -316,9 +320,9 @@ export function ConversationDetailPanel({ conversation, currentUserId, onClose }
 
         {isGroup && canManageGroup && <GroupSettingsSection conversationId={conversation.id} />}
 
-        {(isGroup || canDeleteChat) && (
+        {(canLeaveGroup || canDeleteGroup || canDeleteChat) && (
           <div className="mt-4 flex flex-col gap-1">
-            {isGroup && (
+            {canLeaveGroup && (
               <button
                 type="button"
                 onClick={() => setPendingAction("leave-group")}

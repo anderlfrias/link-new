@@ -450,13 +450,19 @@ export async function removeMember(
     throw new BadRequestError("Members cannot be removed from a private conversation");
   }
 
-  // Salir de la conversación (auto-remoción) siempre está permitido, sin
-  // importar `whoCanRemoveMembers` — esa configuración solo gobierna remover
-  // a OTRO miembro.
   const isSelf = targetUserId === currentUserId;
-  if (!isSelf) {
-    const override = await ConversationRepository.findGroupSettings(conversationId);
-    const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+  const override = await ConversationRepository.findGroupSettings(conversationId);
+  const effective = await SettingsService.resolveEffectiveGroupSettings(override);
+
+  if (isSelf) {
+    assertGroupPermission(
+      effective.whoCanLeaveGroup,
+      conversation,
+      currentUserId,
+      userRoles,
+      "You are not allowed to leave this conversation",
+    );
+  } else {
     assertGroupPermission(
       effective.whoCanRemoveMembers,
       conversation,
@@ -641,6 +647,9 @@ export async function updateGroupSettings(
   }
   if (input.whoCanDeleteGroup !== undefined && !settings.allowGroupOverrideDeleteGroup) {
     rejected.push("whoCanDeleteGroup");
+  }
+  if (input.whoCanLeaveGroup !== undefined && !settings.allowGroupOverrideLeaveGroup) {
+    rejected.push("whoCanLeaveGroup");
   }
   if (rejected.length > 0) {
     throw new ForbiddenError(`This installation does not allow per-group overrides for: ${rejected.join(", ")}`);

@@ -218,5 +218,20 @@ describe("settings.validator", () => {
         updateSettingsSchema.validate({ auditLogRetentionDays: 15.5 }),
       ).rejects.toThrow();
     });
+
+    it("accepts valid whoCanLeaveGroup and allowGroupOverrideLeaveGroup", async () => {
+      const res = await updateSettingsSchema.validate({
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        allowGroupOverrideLeaveGroup: true,
+      });
+      expect(res.whoCanLeaveGroup).toBe(GroupPermissionLevel.GROUP_ADMINS_ONLY);
+      expect(res.allowGroupOverrideLeaveGroup).toBe(true);
+    });
+
+    it("rejects invalid whoCanLeaveGroup value", async () => {
+      await expect(
+        updateSettingsSchema.validate({ whoCanLeaveGroup: "INVALID_LEVEL" as any }),
+      ).rejects.toThrow();
+    });
   });
 });

@@ -103,7 +103,7 @@ export async function updateSettings(input: UpdateSettingsInput): Promise<AppSet
 /// los `allowGroupOverride*`: si el flag global es false para una dimensión,
 /// el valor override guardado (si lo hay) se ignora — el global manda
 /// siempre, incluso si el grupo ya tenía un override guardado de cuando
-/// estaba permitido. Única función que debe usarse para leer estas 5
+/// estaba permitido. Única función que debe usarse para leer estas 6
 /// dimensiones en conversation.service.ts — nunca leer `AppSettings`
 /// directamente para ellas.
 export async function resolveEffectiveGroupSettings(
@@ -131,6 +131,10 @@ export async function resolveEffectiveGroupSettings(
       settings.allowGroupOverrideDeleteGroup && override?.whoCanDeleteGroup != null
         ? override.whoCanDeleteGroup
         : settings.whoCanDeleteGroup,
+    whoCanLeaveGroup:
+      settings.allowGroupOverrideLeaveGroup && override?.whoCanLeaveGroup != null
+        ? override.whoCanLeaveGroup
+        : settings.whoCanLeaveGroup,
   };
 }
 
@@ -145,5 +149,6 @@ export async function getGroupOverrideAllowedFlags(): Promise<GroupOverrideAllow
     maxGroupMembers: settings.allowGroupOverrideMaxGroupMembers,
     whoCanChangeGroupInfo: settings.allowGroupOverrideChangeGroupInfo,
     whoCanDeleteGroup: settings.allowGroupOverrideDeleteGroup,
+    whoCanLeaveGroup: settings.allowGroupOverrideLeaveGroup,
   };
 }

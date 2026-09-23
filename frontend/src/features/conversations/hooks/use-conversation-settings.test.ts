@@ -25,6 +25,7 @@ describe("useConversationSettings", () => {
       maxGroupMembers: 100,
       whoCanChangeGroupInfo: "GROUP_ADMINS_ONLY",
       whoCanDeleteGroup: "CREATOR_ONLY",
+      whoCanLeaveGroup: "ALL_MEMBERS",
     },
     overrideAllowed: {
       whoCanAddMembers: true,
@@ -32,6 +33,7 @@ describe("useConversationSettings", () => {
       maxGroupMembers: true,
       whoCanChangeGroupInfo: true,
       whoCanDeleteGroup: true,
+      whoCanLeaveGroup: true,
     },
   };
 

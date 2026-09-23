@@ -8,6 +8,7 @@ export interface GroupOverridableSettings {
   maxGroupMembers: number;
   whoCanChangeGroupInfo: GroupPermissionLevel;
   whoCanDeleteGroup: GroupPermissionLevel;
+  whoCanLeaveGroup: GroupPermissionLevel;
 }
 
 export type GroupOverrideAllowedFlags = Record<keyof GroupOverridableSettings, boolean>;

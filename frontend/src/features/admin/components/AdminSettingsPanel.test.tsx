@@ -38,11 +38,13 @@ describe("AdminSettingsPanel", () => {
     whoCanChangeGroupInfo: "ALL_MEMBERS",
     whoCanDeleteGroup: "GROUP_ADMINS_ONLY",
     allowGroupDelete: true,
+    whoCanLeaveGroup: "ALL_MEMBERS",
     allowGroupOverrideAddMembers: true,
     allowGroupOverrideRemoveMembers: true,
     allowGroupOverrideMaxGroupMembers: false,
     allowGroupOverrideChangeGroupInfo: true,
     allowGroupOverrideDeleteGroup: false,
+    allowGroupOverrideLeaveGroup: false,
     messageRetentionDays: null,
     allowMessageEdit: true,
     messageEditTimeLimitMinutes: 15,
@@ -290,5 +292,38 @@ describe("AdminSettingsPanel", () => {
     ).toBeInTheDocument();
     const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
     expect(saveButton).toBeDisabled();
+  });
+
+  it("permite cambiar quién puede salir del grupo y su override", async () => {
+    vi.mocked(useAdminSettings).mockReturnValue({
+      settings: defaultSettings,
+      status: "ready",
+      error: null,
+      refetch: mockRefetch,
+    });
+    mockSave.mockResolvedValueOnce({
+      ...defaultSettings,
+      whoCanLeaveGroup: "GROUP_ADMINS_ONLY",
+      allowGroupOverrideLeaveGroup: true,
+    });
+
+    const user = userEvent.setup();
+    render(<AdminSettingsPanel />);
+
+    const leaveGroupLabel = screen.getByText("¿Quién puede salir del grupo?");
+    const leaveGroupSelect = leaveGroupLabel.closest("label")?.querySelector("select")!;
+    expect(leaveGroupSelect).toHaveValue("ALL_MEMBERS");
+
+    await user.selectOptions(leaveGroupSelect, "GROUP_ADMINS_ONLY");
+
+    const saveButton = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        whoCanLeaveGroup: "GROUP_ADMINS_ONLY",
+      }),
+    );
   });
 });

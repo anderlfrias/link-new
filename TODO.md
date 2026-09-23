@@ -26,7 +26,7 @@ Archivos Adjuntos y Multimedia
 
 Grupos y Llamadas
 
-[ ] Gestión de salida de grupos: Los usuarios deben poder salirse de los grupos (configurable desde el admin y desde el grupo, si desde el admin es permitido).
+[x] Gestión de salida de grupos: Los usuarios deben poder salirse de los grupos (configurable desde el admin y desde el grupo, si desde el admin es permitido).
 
 [ ] Encuestas: Agregar encuestas (dentro de chats grupales).
 

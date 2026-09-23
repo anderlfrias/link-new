@@ -24,7 +24,7 @@ export function QuickReactionPicker({
     if (!onClose) return;
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        onClose();
+        onClose?.();
       }
     }
     document.addEventListener("mousedown", handleClickOutside);

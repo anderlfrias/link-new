@@ -138,5 +138,18 @@ describe("conversation.validator", () => {
         }),
       ).rejects.toThrow();
     });
+
+    it("acepta whoCanLeaveGroup válido y rechaza valor inválido", async () => {
+      const result = await updateGroupSettingsSchema.validate({
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+      });
+      expect(result.whoCanLeaveGroup).toBe(GroupPermissionLevel.GROUP_ADMINS_ONLY);
+
+      await expect(
+        updateGroupSettingsSchema.validate({
+          whoCanLeaveGroup: "INVALID_LEVEL" as any,
+        }),
+      ).rejects.toThrow();
+    });
   });
 });

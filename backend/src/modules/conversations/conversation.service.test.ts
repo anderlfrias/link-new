@@ -721,16 +721,86 @@ describe("conversation.service", () => {
   });
 
   describe("removeMember", () => {
-    it("permite salir del grupo (auto-remoción) siempre", async () => {
+    it("permite salir del grupo (auto-remoción) cuando whoCanLeaveGroup es ALL_MEMBERS", async () => {
       const group = buildMockConversation({
         members: [buildMockMember({ userId: "u-1" }), buildMockMember({ userId: "u-2" })],
       });
       vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
 
       const result = await removeMember("u-1", "c-1", "u-1", []);
 
       expect(result).toEqual({ conversationId: "c-1", userId: "u-1" });
       expect(ConversationRepository.removeMember).toHaveBeenCalledWith("c-1", "u-1");
+    });
+
+    it("rechaza salir del grupo cuando whoCanLeaveGroup es GROUP_ADMINS_ONLY y el usuario es miembro regular", async () => {
+      const group = buildMockConversation({
+        createdById: "creator-id",
+        members: [
+          buildMockMember({ userId: "u-regular", isAdmin: false }),
+          buildMockMember({ userId: "creator-id", isAdmin: true }),
+        ],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+      } as any);
+
+      await expect(
+        removeMember("u-regular", "c-1", "u-regular", []),
+      ).rejects.toThrow("You are not allowed to leave this conversation");
+    });
+
+    it("permite salir del grupo cuando whoCanLeaveGroup es GROUP_ADMINS_ONLY y el usuario es admin del grupo", async () => {
+      const group = buildMockConversation({
+        createdById: "creator-id",
+        members: [
+          buildMockMember({ userId: "u-admin", isAdmin: true }),
+          buildMockMember({ userId: "creator-id", isAdmin: true }),
+        ],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+      } as any);
+
+      const result = await removeMember("u-admin", "c-1", "u-admin", []);
+      expect(result).toEqual({ conversationId: "c-1", userId: "u-admin" });
+    });
+
+    it("rechaza salir del grupo cuando whoCanLeaveGroup es APP_ADMINS_ONLY y el usuario no tiene rol admin", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "u-1", isAdmin: true })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanLeaveGroup: GroupPermissionLevel.APP_ADMINS_ONLY,
+      } as any);
+
+      await expect(
+        removeMember("u-1", "c-1", "u-1", ["user"]),
+      ).rejects.toThrow("You are not allowed to leave this conversation");
+    });
+
+    it("permite salir del grupo cuando whoCanLeaveGroup es APP_ADMINS_ONLY y el usuario tiene rol admin", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "u-1", isAdmin: false })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanLeaveGroup: GroupPermissionLevel.APP_ADMINS_ONLY,
+      } as any);
+
+      const result = await removeMember("u-1", "c-1", "u-1", ["admin"]);
+      expect(result).toEqual({ conversationId: "c-1", userId: "u-1" });
     });
 
     it("rechaza si intenta remover a otro sin tener permisos", async () => {
@@ -843,6 +913,22 @@ describe("conversation.service", () => {
           whoCanAddMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
         }),
       ).rejects.toThrow("This installation does not allow per-group overrides for: whoCanAddMembers");
+    });
+
+    it("rechaza updateGroupSettings con whoCanLeaveGroup si allowGroupOverrideLeaveGroup está desactivado", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "admin-1", isAdmin: true })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        allowGroupOverrideLeaveGroup: false,
+      } as any);
+
+      await expect(
+        updateGroupSettings("admin-1", "c-1", {
+          whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        }),
+      ).rejects.toThrow("This installation does not allow per-group overrides for: whoCanLeaveGroup");
     });
 
     it("rechaza si quien actúa no es admin de ESE grupo (la autoridad final no vive en el validador de forma)", async () => {

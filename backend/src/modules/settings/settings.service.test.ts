@@ -57,11 +57,13 @@ describe("settings.service", () => {
     whoCanChangeGroupInfo: GroupPermissionLevel.GROUP_ADMINS_ONLY,
     whoCanDeleteGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
     allowGroupDelete: true,
+    whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
     allowGroupOverrideAddMembers: true,
     allowGroupOverrideRemoveMembers: false,
     allowGroupOverrideMaxGroupMembers: true,
     allowGroupOverrideChangeGroupInfo: false,
     allowGroupOverrideDeleteGroup: true,
+    allowGroupOverrideLeaveGroup: false,
     messageRetentionDays: null,
     allowMessageEdit: true,
     messageEditTimeLimitMinutes: 15,
@@ -278,6 +280,7 @@ describe("settings.service", () => {
         maxGroupMembers: defaultMockSettings.maxGroupMembers,
         whoCanChangeGroupInfo: defaultMockSettings.whoCanChangeGroupInfo,
         whoCanDeleteGroup: defaultMockSettings.whoCanDeleteGroup,
+        whoCanLeaveGroup: defaultMockSettings.whoCanLeaveGroup,
       });
     });
 
@@ -289,6 +292,7 @@ describe("settings.service", () => {
         allowGroupOverrideMaxGroupMembers: true,
         allowGroupOverrideChangeGroupInfo: true,
         allowGroupOverrideDeleteGroup: true,
+        allowGroupOverrideLeaveGroup: true,
       };
       vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(customSettings);
 
@@ -300,6 +304,7 @@ describe("settings.service", () => {
         maxGroupMembers: 25,
         whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
         whoCanDeleteGroup: GroupPermissionLevel.APP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
       };
 
       const effective = await resolveEffectiveGroupSettings(groupOverride);
@@ -310,6 +315,7 @@ describe("settings.service", () => {
         maxGroupMembers: 25,
         whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
         whoCanDeleteGroup: GroupPermissionLevel.APP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
       });
     });
 
@@ -321,12 +327,14 @@ describe("settings.service", () => {
         maxGroupMembers: 100,
         whoCanChangeGroupInfo: GroupPermissionLevel.GROUP_ADMINS_ONLY,
         whoCanDeleteGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
         // All override flags disabled globally:
         allowGroupOverrideAddMembers: false,
         allowGroupOverrideRemoveMembers: false,
         allowGroupOverrideMaxGroupMembers: false,
         allowGroupOverrideChangeGroupInfo: false,
         allowGroupOverrideDeleteGroup: false,
+        allowGroupOverrideLeaveGroup: false,
       };
       vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(customSettings);
 
@@ -338,6 +346,7 @@ describe("settings.service", () => {
         maxGroupMembers: 15,
         whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
         whoCanDeleteGroup: GroupPermissionLevel.APP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
       };
 
       const effective = await resolveEffectiveGroupSettings(groupOverride);
@@ -349,6 +358,7 @@ describe("settings.service", () => {
         maxGroupMembers: 100,
         whoCanChangeGroupInfo: GroupPermissionLevel.GROUP_ADMINS_ONLY,
         whoCanDeleteGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
       });
     });
 
@@ -370,6 +380,7 @@ describe("settings.service", () => {
         maxGroupMembers: null,
         whoCanChangeGroupInfo: null,
         whoCanDeleteGroup: null,
+        whoCanLeaveGroup: null,
       };
 
       const effective = await resolveEffectiveGroupSettings(partialOverride);
@@ -386,12 +397,14 @@ describe("settings.service", () => {
         maxGroupMembers: 100,
         whoCanChangeGroupInfo: GroupPermissionLevel.GROUP_ADMINS_ONLY,
         whoCanDeleteGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
         // Override allowed for AddMembers and MaxMembers only:
         allowGroupOverrideAddMembers: true,
         allowGroupOverrideRemoveMembers: false,
         allowGroupOverrideMaxGroupMembers: true,
         allowGroupOverrideChangeGroupInfo: false,
         allowGroupOverrideDeleteGroup: false,
+        allowGroupOverrideLeaveGroup: false,
       };
       vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(mixedSettings);
 
@@ -403,6 +416,7 @@ describe("settings.service", () => {
         maxGroupMembers: 30, // allowed -> override wins
         whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS, // not allowed -> global wins
         whoCanDeleteGroup: GroupPermissionLevel.APP_ADMINS_ONLY, // not allowed -> global wins
+        whoCanLeaveGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY, // not allowed -> global wins
       };
 
       const effective = await resolveEffectiveGroupSettings(groupOverride);
@@ -413,6 +427,7 @@ describe("settings.service", () => {
         maxGroupMembers: 30,
         whoCanChangeGroupInfo: GroupPermissionLevel.GROUP_ADMINS_ONLY,
         whoCanDeleteGroup: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+        whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
       });
     });
   });
@@ -426,6 +441,7 @@ describe("settings.service", () => {
         allowGroupOverrideMaxGroupMembers: true,
         allowGroupOverrideChangeGroupInfo: false,
         allowGroupOverrideDeleteGroup: true,
+        allowGroupOverrideLeaveGroup: false,
       };
       vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(customSettings);
 
@@ -437,6 +453,7 @@ describe("settings.service", () => {
         maxGroupMembers: true,
         whoCanChangeGroupInfo: false,
         whoCanDeleteGroup: true,
+        whoCanLeaveGroup: false,
       });
     });
   });

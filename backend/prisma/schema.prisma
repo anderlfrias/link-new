@@ -567,6 +567,9 @@ model AppSettings {
   /// de las 5 dimensiones de GroupPermissionLevel, esto no es un "quién" sino
   /// un "si". Default true: reproduce el comportamiento histórico.
   allowGroupDelete      Boolean              @default(true) @map("allow_group_delete")
+  /// Default ALL_MEMBERS: reproduce el comportamiento histórico donde cualquier
+  /// miembro puede salirse del grupo libremente.
+  whoCanLeaveGroup      GroupPermissionLevel @default(ALL_MEMBERS) @map("who_can_leave_group")
 
   // Permiten que los admins de un grupo específico sobrescriban, solo para SU
   // grupo, el valor global de la dimensión correspondiente (ver
@@ -579,6 +582,7 @@ model AppSettings {
   allowGroupOverrideMaxGroupMembers Boolean @default(false) @map("allow_group_override_max_group_members")
   allowGroupOverrideChangeGroupInfo Boolean @default(false) @map("allow_group_override_change_group_info")
   allowGroupOverrideDeleteGroup     Boolean @default(false) @map("allow_group_override_delete_group")
+  allowGroupOverrideLeaveGroup      Boolean @default(false) @map("allow_group_override_leave_group")
 
   // Retención de mensajes
   /// null = deshabilitado (default). Nunca empieza a borrar datos de una
@@ -659,6 +663,7 @@ model ConversationGroupSettings {
   maxGroupMembers       Int?                  @map("max_group_members")
   whoCanChangeGroupInfo GroupPermissionLevel? @map("who_can_change_group_info")
   whoCanDeleteGroup     GroupPermissionLevel? @map("who_can_delete_group")
+  whoCanLeaveGroup      GroupPermissionLevel? @map("who_can_leave_group")
 
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -39,11 +39,13 @@ interface DraftState {
   whoCanChangeGroupInfo: GroupPermissionLevel;
   whoCanDeleteGroup: GroupPermissionLevel;
   allowGroupDelete: boolean;
+  whoCanLeaveGroup: GroupPermissionLevel;
   allowGroupOverrideAddMembers: boolean;
   allowGroupOverrideRemoveMembers: boolean;
   allowGroupOverrideMaxGroupMembers: boolean;
   allowGroupOverrideChangeGroupInfo: boolean;
   allowGroupOverrideDeleteGroup: boolean;
+  allowGroupOverrideLeaveGroup: boolean;
   messageRetentionDays: string;
   auditLogRetentionDays: string;
   allowMessageEdit: boolean;
@@ -111,11 +113,13 @@ function toDraft(settings: AdminSettings): DraftState {
     whoCanChangeGroupInfo: settings.whoCanChangeGroupInfo,
     whoCanDeleteGroup: settings.whoCanDeleteGroup,
     allowGroupDelete: settings.allowGroupDelete,
+    whoCanLeaveGroup: settings.whoCanLeaveGroup,
     allowGroupOverrideAddMembers: settings.allowGroupOverrideAddMembers,
     allowGroupOverrideRemoveMembers: settings.allowGroupOverrideRemoveMembers,
     allowGroupOverrideMaxGroupMembers: settings.allowGroupOverrideMaxGroupMembers,
     allowGroupOverrideChangeGroupInfo: settings.allowGroupOverrideChangeGroupInfo,
     allowGroupOverrideDeleteGroup: settings.allowGroupOverrideDeleteGroup,
+    allowGroupOverrideLeaveGroup: settings.allowGroupOverrideLeaveGroup,
     messageRetentionDays: settings.messageRetentionDays == null ? "" : String(settings.messageRetentionDays),
     auditLogRetentionDays: settings.auditLogRetentionDays == null ? "" : String(settings.auditLogRetentionDays),
     allowMessageEdit: settings.allowMessageEdit,
@@ -237,11 +241,13 @@ function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
     whoCanChangeGroupInfo: draft.whoCanChangeGroupInfo,
     whoCanDeleteGroup: draft.whoCanDeleteGroup,
     allowGroupDelete: draft.allowGroupDelete,
+    whoCanLeaveGroup: draft.whoCanLeaveGroup,
     allowGroupOverrideAddMembers: draft.allowGroupOverrideAddMembers,
     allowGroupOverrideRemoveMembers: draft.allowGroupOverrideRemoveMembers,
     allowGroupOverrideMaxGroupMembers: draft.allowGroupOverrideMaxGroupMembers,
     allowGroupOverrideChangeGroupInfo: draft.allowGroupOverrideChangeGroupInfo,
     allowGroupOverrideDeleteGroup: draft.allowGroupOverrideDeleteGroup,
+    allowGroupOverrideLeaveGroup: draft.allowGroupOverrideLeaveGroup,
     messageRetentionDays: draft.messageRetentionDays.trim() === "" ? null : Number(draft.messageRetentionDays),
     auditLogRetentionDays: draft.auditLogRetentionDays.trim() === "" ? null : Number(draft.auditLogRetentionDays),
     allowMessageEdit: draft.allowMessageEdit,
@@ -602,6 +608,14 @@ export function AdminSettingsPanel() {
                 onChange={(value) => updateField("whoCanChangeGroupInfo", value)}
                 overrideAllowed={draft.allowGroupOverrideChangeGroupInfo}
                 onOverrideChange={(value) => updateField("allowGroupOverrideChangeGroupInfo", value)}
+              />
+              <GroupPermissionField
+                label="¿Quién puede salir del grupo?"
+                value={draft.whoCanLeaveGroup}
+                options={MEMBER_ACTION_OPTIONS}
+                onChange={(value) => updateField("whoCanLeaveGroup", value)}
+                overrideAllowed={draft.allowGroupOverrideLeaveGroup}
+                onOverrideChange={(value) => updateField("allowGroupOverrideLeaveGroup", value)}
               />
               <div className="flex flex-col gap-1">
                 <Checkbox

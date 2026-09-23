@@ -1,5 +1,6 @@
 import { ConversationGroupSettings, ConversationType, Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
+import { UpdateGroupSettingsInput } from "../settings/settings.types";
 
 const withMembers = {
   imageFile: { select: { path: true } },
@@ -194,12 +195,7 @@ export function findGroupSettings(conversationId: string): Promise<ConversationG
 
 export function upsertGroupSettings(
   conversationId: string,
-  data: Partial<
-    Pick<
-      ConversationGroupSettings,
-      "whoCanAddMembers" | "whoCanRemoveMembers" | "maxGroupMembers" | "whoCanChangeGroupInfo" | "whoCanDeleteGroup"
-    >
-  >,
+  data: UpdateGroupSettingsInput,
 ): Promise<ConversationGroupSettings> {
   return prisma.conversationGroupSettings.upsert({
     where: { conversationId },

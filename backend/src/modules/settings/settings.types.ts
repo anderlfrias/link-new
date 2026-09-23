@@ -16,11 +16,13 @@ export type UpdateSettingsInput = Partial<
     | "whoCanChangeGroupInfo"
     | "whoCanDeleteGroup"
     | "allowGroupDelete"
+    | "whoCanLeaveGroup"
     | "allowGroupOverrideAddMembers"
     | "allowGroupOverrideRemoveMembers"
     | "allowGroupOverrideMaxGroupMembers"
     | "allowGroupOverrideChangeGroupInfo"
     | "allowGroupOverrideDeleteGroup"
+    | "allowGroupOverrideLeaveGroup"
     | "messageRetentionDays"
     | "auditLogRetentionDays"
     | "allowMessageEdit"
@@ -72,7 +74,7 @@ export interface PublicAppSettingsDTO {
   allowStickersAndGifs: boolean;
 }
 
-/// Las 5 dimensiones de gobierno de grupo que pueden tener un override por
+/// Las 6 dimensiones de gobierno de grupo que pueden tener un override por
 /// grupo (ver `ConversationGroupSettings`). `whoCanCreateGroups` queda afuera
 /// a propósito: no existe grupo antes de crearse, así que no tiene sentido
 /// overridearlo por grupo.
@@ -82,12 +84,13 @@ export type GroupOverridableSettings = {
   maxGroupMembers: number;
   whoCanChangeGroupInfo: GroupPermissionLevel;
   whoCanDeleteGroup: GroupPermissionLevel;
+  whoCanLeaveGroup: GroupPermissionLevel;
 };
 
 /// Resultado de combinar `AppSettings` (global) con un override por-grupo,
 /// respetando los `allowGroupOverride*` — ver
 /// settings.service.ts#resolveEffectiveGroupSettings. Nunca contiene `null`:
-/// es el valor final que `conversation.service.ts` debe usar para estas 5
+/// es el valor final que `conversation.service.ts` debe usar para estas 6
 /// dimensiones, en vez de leer `AppSettings` directamente.
 export type EffectiveGroupSettings = GroupOverridableSettings;
 
@@ -96,6 +99,11 @@ export type GroupOverrideAllowedFlags = Record<keyof GroupOverridableSettings, b
 export type UpdateGroupSettingsInput = Partial<
   Pick<
     ConversationGroupSettings,
-    "whoCanAddMembers" | "whoCanRemoveMembers" | "maxGroupMembers" | "whoCanChangeGroupInfo" | "whoCanDeleteGroup"
+    | "whoCanAddMembers"
+    | "whoCanRemoveMembers"
+    | "maxGroupMembers"
+    | "whoCanChangeGroupInfo"
+    | "whoCanDeleteGroup"
+    | "whoCanLeaveGroup"
   >
 >;

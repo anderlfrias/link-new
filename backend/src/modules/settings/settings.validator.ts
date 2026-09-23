@@ -32,11 +32,13 @@ export const updateSettingsSchema = yup
     whoCanChangeGroupInfo: yup.string().oneOf(Object.values(GroupPermissionLevel)),
     whoCanDeleteGroup: yup.string().oneOf(Object.values(GroupPermissionLevel)),
     allowGroupDelete: yup.boolean(),
+    whoCanLeaveGroup: yup.string().oneOf(Object.values(GroupPermissionLevel)),
     allowGroupOverrideAddMembers: yup.boolean(),
     allowGroupOverrideRemoveMembers: yup.boolean(),
     allowGroupOverrideMaxGroupMembers: yup.boolean(),
     allowGroupOverrideChangeGroupInfo: yup.boolean(),
     allowGroupOverrideDeleteGroup: yup.boolean(),
+    allowGroupOverrideLeaveGroup: yup.boolean(),
     messageRetentionDays: yup.number().integer().min(0).nullable(),
     auditLogRetentionDays: yup.number().integer().positive().nullable(),
     allowMessageEdit: yup.boolean(),
@@ -70,11 +72,13 @@ export const updateSettingsSchema = yup
       value.whoCanChangeGroupInfo !== undefined ||
       value.whoCanDeleteGroup !== undefined ||
       value.allowGroupDelete !== undefined ||
+      value.whoCanLeaveGroup !== undefined ||
       value.allowGroupOverrideAddMembers !== undefined ||
       value.allowGroupOverrideRemoveMembers !== undefined ||
       value.allowGroupOverrideMaxGroupMembers !== undefined ||
       value.allowGroupOverrideChangeGroupInfo !== undefined ||
       value.allowGroupOverrideDeleteGroup !== undefined ||
+      value.allowGroupOverrideLeaveGroup !== undefined ||
       value.messageRetentionDays !== undefined ||
       value.auditLogRetentionDays !== undefined ||
       value.allowMessageEdit !== undefined ||

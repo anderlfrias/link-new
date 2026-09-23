@@ -53,6 +53,7 @@ export const updateGroupSettingsSchema = yup
     maxGroupMembers: yup.number().integer().min(2),
     whoCanChangeGroupInfo: yup.string().oneOf(Object.values(GroupPermissionLevel)),
     whoCanDeleteGroup: yup.string().oneOf(Object.values(GroupPermissionLevel)),
+    whoCanLeaveGroup: yup.string().oneOf(Object.values(GroupPermissionLevel)),
   })
   .test(
     "at-least-one-field",
@@ -62,5 +63,6 @@ export const updateGroupSettingsSchema = yup
       value.whoCanRemoveMembers !== undefined ||
       value.maxGroupMembers !== undefined ||
       value.whoCanChangeGroupInfo !== undefined ||
-      value.whoCanDeleteGroup !== undefined,
+      value.whoCanDeleteGroup !== undefined ||
+      value.whoCanLeaveGroup !== undefined,
   );

@@ -22,6 +22,7 @@ describe("GroupSettingsSection", () => {
       whoCanRemoveMembers: "GROUP_ADMINS_ONLY",
       whoCanChangeGroupInfo: "GROUP_ADMINS_ONLY",
       whoCanDeleteGroup: "CREATOR_ONLY",
+      whoCanLeaveGroup: "ALL_MEMBERS",
     },
     overrideAllowed: {
       maxGroupMembers: true,
@@ -29,6 +30,7 @@ describe("GroupSettingsSection", () => {
       whoCanRemoveMembers: false,
       whoCanChangeGroupInfo: false,
       whoCanDeleteGroup: true,
+      whoCanLeaveGroup: false,
     },
   };
 
@@ -59,6 +61,7 @@ describe("GroupSettingsSection", () => {
           whoCanRemoveMembers: false,
           whoCanChangeGroupInfo: false,
           whoCanDeleteGroup: false,
+          whoCanLeaveGroup: false,
         },
       },
       status: "ready",
@@ -127,5 +130,45 @@ describe("GroupSettingsSection", () => {
     render(<GroupSettingsSection conversationId="conv-1" />);
 
     expect(screen.getByText("Error al actualizar configuración")).toBeInTheDocument();
+  });
+
+  it("renders '¿Quién puede salir del grupo?' when whoCanLeaveGroup override is allowed and submits changes", async () => {
+    vi.mocked(useConversationSettings).mockReturnValue({
+      settings: {
+        ...mockSettings,
+        overrideAllowed: {
+          ...mockSettings.overrideAllowed,
+          whoCanLeaveGroup: true,
+        },
+      },
+      status: "ready",
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    mockSaveFn.mockResolvedValueOnce({
+      ...mockSettings,
+      effective: { ...mockSettings.effective, whoCanLeaveGroup: "GROUP_ADMINS_ONLY" },
+    });
+
+    render(<GroupSettingsSection conversationId="conv-1" />);
+
+    const select = screen.getByLabelText("¿Quién puede salir del grupo?");
+    expect(select).toBeInTheDocument();
+    expect(select).toHaveValue("ALL_MEMBERS");
+
+    fireEvent.change(select, { target: { value: "GROUP_ADMINS_ONLY" } });
+
+    const saveBtn = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(saveBtn).not.toBeDisabled();
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockSaveFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          whoCanLeaveGroup: "GROUP_ADMINS_ONLY",
+        }),
+      );
+    });
   });
 });

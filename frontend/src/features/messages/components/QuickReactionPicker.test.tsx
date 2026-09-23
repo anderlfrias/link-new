@@ -37,4 +37,17 @@ describe("QuickReactionPicker", () => {
     fireEvent.mouseDown(screen.getByTestId("outside"));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("no lanza error al hacer clic fuera si onClose no está definido", () => {
+    render(
+      <div>
+        <div data-testid="outside">Outside</div>
+        <QuickReactionPicker onSelectEmoji={vi.fn()} />
+      </div>,
+    );
+
+    expect(() => {
+      fireEvent.mouseDown(screen.getByTestId("outside"));
+    }).not.toThrow();
+  });
 });

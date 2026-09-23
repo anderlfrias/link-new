@@ -209,6 +209,7 @@ describe("ConversationDetailPanel", () => {
           whoCanRemoveMembers: "GROUP_ADMINS_ONLY",
           whoCanChangeGroupInfo: "GROUP_ADMINS_ONLY",
           whoCanDeleteGroup: "GROUP_ADMINS_ONLY",
+          whoCanLeaveGroup: "ALL_MEMBERS",
         },
         overrideAllowed: {
           maxGroupMembers: true,
@@ -216,6 +217,7 @@ describe("ConversationDetailPanel", () => {
           whoCanRemoveMembers: false,
           whoCanChangeGroupInfo: false,
           whoCanDeleteGroup: true,
+          whoCanLeaveGroup: false,
         },
       },
       status: "ready",
@@ -356,6 +358,43 @@ describe("ConversationDetailPanel", () => {
       expect(onClose).toHaveBeenCalled();
       expect(mockPush).toHaveBeenCalledWith("/");
     });
+  });
+
+  it("does not render 'Salir del grupo' when user does not have permission according to whoCanLeaveGroup", () => {
+    vi.mocked(useConversationSettings).mockReturnValue({
+      settings: {
+        conversationId: "grp-1",
+        effective: {
+          maxGroupMembers: 100,
+          whoCanAddMembers: "ALL_MEMBERS",
+          whoCanRemoveMembers: "GROUP_ADMINS_ONLY",
+          whoCanChangeGroupInfo: "GROUP_ADMINS_ONLY",
+          whoCanDeleteGroup: "GROUP_ADMINS_ONLY",
+          whoCanLeaveGroup: "APP_ADMINS_ONLY",
+        },
+        overrideAllowed: {
+          maxGroupMembers: true,
+          whoCanAddMembers: true,
+          whoCanRemoveMembers: false,
+          whoCanChangeGroupInfo: false,
+          whoCanDeleteGroup: true,
+          whoCanLeaveGroup: false,
+        },
+      },
+      status: "ready",
+      error: null,
+      refetch: vi.fn(),
+    });
+
+    render(
+      <ConversationDetailPanel
+        conversation={groupConv}
+        currentUserId="user-1"
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Salir del grupo/i })).not.toBeInTheDocument();
   });
 
   describe("Archivos compartidos: segmentación por tipo", () => {

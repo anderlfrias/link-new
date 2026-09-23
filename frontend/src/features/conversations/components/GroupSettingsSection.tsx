@@ -29,6 +29,7 @@ interface DraftState {
   whoCanRemoveMembers: GroupPermissionLevel;
   whoCanChangeGroupInfo: GroupPermissionLevel;
   whoCanDeleteGroup: GroupPermissionLevel;
+  whoCanLeaveGroup: GroupPermissionLevel;
 }
 
 function toDraft(effective: GroupOverridableSettings): DraftState {
@@ -38,6 +39,7 @@ function toDraft(effective: GroupOverridableSettings): DraftState {
     whoCanRemoveMembers: effective.whoCanRemoveMembers,
     whoCanChangeGroupInfo: effective.whoCanChangeGroupInfo,
     whoCanDeleteGroup: effective.whoCanDeleteGroup,
+    whoCanLeaveGroup: effective.whoCanLeaveGroup,
   };
 }
 
@@ -56,6 +58,7 @@ function toPayload(draft: DraftState, allowed: ConversationEffectiveSettings["ov
   if (allowed.whoCanRemoveMembers) payload.whoCanRemoveMembers = draft.whoCanRemoveMembers;
   if (allowed.whoCanChangeGroupInfo) payload.whoCanChangeGroupInfo = draft.whoCanChangeGroupInfo;
   if (allowed.whoCanDeleteGroup) payload.whoCanDeleteGroup = draft.whoCanDeleteGroup;
+  if (allowed.whoCanLeaveGroup) payload.whoCanLeaveGroup = draft.whoCanLeaveGroup;
   return payload;
 }
 
@@ -175,6 +178,21 @@ export function GroupSettingsSection({ conversationId }: GroupSettingsSectionPro
               onChange={(event) => updateField("whoCanDeleteGroup", event.target.value as GroupPermissionLevel)}
             >
               {DELETE_GROUP_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {GROUP_PERMISSION_LABELS[option]}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
+        {overrideAllowed.whoCanLeaveGroup && (
+          <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+            ¿Quién puede salir del grupo?
+            <Select
+              value={draft.whoCanLeaveGroup}
+              onChange={(event) => updateField("whoCanLeaveGroup", event.target.value as GroupPermissionLevel)}
+            >
+              {MEMBER_ACTION_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {GROUP_PERMISSION_LABELS[option]}
                 </option>

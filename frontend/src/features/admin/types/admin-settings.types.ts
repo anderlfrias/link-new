@@ -23,12 +23,15 @@ export interface AdminSettings {
   whoCanDeleteGroup: GroupPermissionLevel;
   /** Interruptor maestro: si es false, nadie puede eliminar un grupo sin importar `whoCanDeleteGroup`. */
   allowGroupDelete: boolean;
+  /** Quién puede salir del grupo (auto-remoción). */
+  whoCanLeaveGroup: GroupPermissionLevel;
   /** Si un grupo puede fijar su propio valor para la dimensión correspondiente. */
   allowGroupOverrideAddMembers: boolean;
   allowGroupOverrideRemoveMembers: boolean;
   allowGroupOverrideMaxGroupMembers: boolean;
   allowGroupOverrideChangeGroupInfo: boolean;
   allowGroupOverrideDeleteGroup: boolean;
+  allowGroupOverrideLeaveGroup: boolean;
   /** `null` = deshabilitado. */
   messageRetentionDays: number | null;
   /** Retención del audit trail. `null` = deshabilitado (se conserva para siempre). */
