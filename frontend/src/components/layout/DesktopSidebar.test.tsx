@@ -46,13 +46,21 @@ vi.mock("@/features/conversations/components/ConversationList", () => ({
     conversations,
     searchQuery,
     activeFilter,
+    isSelectionMode,
+    onEnterSelectionMode,
+    onExitSelectionMode,
   }: {
     conversations: ConversationListItem[];
     searchQuery: string;
     activeFilter: string;
+    isSelectionMode?: boolean;
+    onEnterSelectionMode?: () => void;
+    onExitSelectionMode?: () => void;
   }) => (
     <div data-testid="conversation-list">
-      Items: {conversations.length} | Search: &quot;{searchQuery}&quot; | Filter: {activeFilter}
+      Items: {conversations.length} | Search: &quot;{searchQuery}&quot; | Filter: {activeFilter} | Selection: {String(isSelectionMode)}
+      <button onClick={onEnterSelectionMode}>Enter Selection</button>
+      <button onClick={onExitSelectionMode}>Exit Selection</button>
     </div>
   ),
 }));
@@ -180,7 +188,7 @@ describe("DesktopSidebar", () => {
     expect(mockOpenSelfChat).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles selection mode when clicking 'Seleccionar chats' button", async () => {
+  it("no renderiza el botón de selección en el header y coordina el modo con ConversationList", async () => {
     const user = userEvent.setup();
     render(
       <DesktopSidebar
@@ -190,11 +198,14 @@ describe("DesktopSidebar", () => {
       />,
     );
 
-    const selectBtn = screen.getByRole("button", { name: "Seleccionar chats" });
-    expect(selectBtn).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Seleccionar chats" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Selection: false/)).toBeInTheDocument();
 
-    await user.click(selectBtn);
-    expect(screen.getByRole("button", { name: "Cerrar selección" })).toBeInTheDocument();
+    await user.click(screen.getByText("Enter Selection"));
+    expect(screen.getByText(/Selection: true/)).toBeInTheDocument();
+
+    await user.click(screen.getByText("Exit Selection"));
+    expect(screen.getByText(/Selection: false/)).toBeInTheDocument();
   });
 });
 

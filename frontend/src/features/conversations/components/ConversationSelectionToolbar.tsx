@@ -1,8 +1,7 @@
 "use client";
 
 import {
-  IconCheck,
-  IconChecks,
+  IconChecklist,
   IconDoorExit,
   IconLoader2,
   IconMailOpened,
@@ -90,7 +89,7 @@ export function ConversationSelectionToolbar({
           title={allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
           className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-brand-blue-light"
         >
-          <IconChecks size={19} stroke={1.8} />
+          <IconChecklist size={19} stroke={1.8} />
         </button>
 
         {/* Marcar como leído */}
