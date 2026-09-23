@@ -8,7 +8,7 @@ import type { StoredFile } from "@/features/files/types/file.types";
  * viaja como `TEXT` normal con un adjunto `image/gif` — no tiene tipo propio.
  * `CONTACT` almacena el contacto serializado en `content` y se renderiza como tarjeta.
  * `POLL` representa una encuesta interactiva dentro de grupos. */
-export type MessageType = "TEXT" | "SYSTEM" | "STICKER" | "CONTACT" | "POLL";
+export type MessageType = "TEXT" | "SYSTEM" | "STICKER" | "CONTACT" | "POLL" | "CALL";
 
 export interface ContactMessagePayload {
   id: string;

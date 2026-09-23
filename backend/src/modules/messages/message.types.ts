@@ -18,7 +18,8 @@ export interface CreateMessageInput {
   /// Omitido (o ausente) = `TEXT`, el caso normal. `"STICKER"` exige
   /// `content` vacío y exactamente un `fileId`. `"CONTACT"` contiene JSON en
   /// `content`. `"POLL"` representa una encuesta en grupo con opciones interactivas.
-  type?: "STICKER" | "CONTACT" | "POLL";
+  /// `"CALL"` representa un registro de resultado o duración de llamada.
+  type?: "STICKER" | "CONTACT" | "POLL" | "CALL";
   poll?: CreatePollInput;
 }
 

@@ -1138,6 +1138,60 @@ describe("MessageBubble", () => {
     expect(screen.getByText("19:00")).toBeInTheDocument();
     expect(screen.getByText("1 voto")).toBeInTheDocument();
   });
+
+  it("renderiza registro de llamada de voz sin el símbolo de reemplazo ni caracteres huérfanos", () => {
+    const callMessage: Message = {
+      ...baseMessage,
+      type: "CALL",
+      content: "📞 Llamada de voz finalizada (02:15)",
+    };
+
+    render(
+      <MessageBubble
+        message={callMessage}
+        isOwn={true}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="u-1"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    // Debe mostrar el texto limpio sin emojis ni símbolos corruptos (\uFFFD)
+    expect(screen.getByText("Llamada de voz finalizada (02:15)")).toBeInTheDocument();
+    expect(screen.queryByText(/\uFFFD/)).not.toBeInTheDocument();
+  });
+
+  it("renderiza videollamada perdida o rechazada con el icono y estilo correspondiente", () => {
+    const callMessage: Message = {
+      ...baseMessage,
+      type: "CALL",
+      content: "📹 Videollamada perdida",
+    };
+
+    render(
+      <MessageBubble
+        message={callMessage}
+        isOwn={false}
+        showSender={false}
+        isSelfChat={false}
+        currentUserId="u-2"
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onReply={onReply}
+        onForward={onForward}
+        onJumpToMessage={onJumpToMessage}
+      />,
+    );
+
+    expect(screen.getByText("Videollamada perdida")).toBeInTheDocument();
+    expect(screen.getByText("Videollamada")).toBeInTheDocument();
+    expect(screen.queryByText(/\uFFFD/)).not.toBeInTheDocument();
+  });
 });
 
 

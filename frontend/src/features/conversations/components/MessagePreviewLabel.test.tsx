@@ -130,6 +130,26 @@ describe("MessagePreviewLabel & parseMessagePreview", () => {
     expect(screen.queryByText("📊")).not.toBeInTheDocument();
   });
 
+  it("parsea llamadas de voz con ícono de teléfono y sin emoji", () => {
+    const parsed = parseMessagePreview("📞 Llamada de voz finalizada (02:15)");
+    expect(parsed.Icon).not.toBeNull();
+    expect(parsed.text).toBe("Llamada de voz finalizada (02:15)");
+
+    render(<MessagePreviewLabel preview="📞 Llamada de voz finalizada (02:15)" />);
+    expect(screen.getByText("Llamada de voz finalizada (02:15)")).toBeInTheDocument();
+    expect(screen.queryByText("📞")).not.toBeInTheDocument();
+  });
+
+  it("parsea videollamadas con ícono de video y sin emoji", () => {
+    const parsed = parseMessagePreview("📹 Videollamada finalizada (05:30)");
+    expect(parsed.Icon).not.toBeNull();
+    expect(parsed.text).toBe("Videollamada finalizada (05:30)");
+
+    render(<MessagePreviewLabel preview="📹 Videollamada finalizada (05:30)" />);
+    expect(screen.getByText("Videollamada finalizada (05:30)")).toBeInTheDocument();
+    expect(screen.queryByText("📹")).not.toBeInTheDocument();
+  });
+
   it("renderiza texto común sin íconos especiales", () => {
     const parsed = parseMessagePreview("Hola a todos");
     expect(parsed.Icon).toBeNull();

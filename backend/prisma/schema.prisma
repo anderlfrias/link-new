@@ -68,6 +68,8 @@ enum MessageType {
   CONTACT @map("contact")
   /// Encuesta dentro de un chat grupal con opciones interactivas y votación en tiempo real.
   POLL    @map("poll")
+  /// Registro de llamada o videollamada.
+  CALL    @map("call")
 
   @@map("message_type")
 }
@@ -98,6 +100,10 @@ enum AuditAction {
   UPDATE_SETTINGS     @map("update_settings")
   ADMIN_DELETE_FILE   @map("admin_delete_file")
 
+  /// Llamadas y videollamadas
+  START_CALL          @map("start_call")
+  END_CALL            @map("end_call")
+
   @@map("chat_audit_action")
 }
 
@@ -114,6 +120,26 @@ enum FileProvider {
   S3    @map("s3")
 
   @@map("file_provider")
+}
+
+/// Tipo de llamada (audio o video).
+enum CallType {
+  AUDIO @map("audio")
+  VIDEO @map("video")
+
+  @@map("call_type")
+}
+
+/// Estado de una llamada.
+enum CallStatus {
+  RINGING   @map("ringing")
+  ACCEPTED  @map("accepted")
+  REJECTED  @map("rejected")
+  MISSED    @map("missed")
+  COMPLETED @map("completed")
+  BUSY      @map("busy")
+
+  @@map("call_status")
 }
 
 /// Nivel de permiso para una acción sobre grupos, usado por `AppSettings` y,
@@ -216,6 +242,8 @@ model User {
   pushSubscriptions       PushSubscription[]
   reactions               MessageReaction[]
   pollVotes               PollVote[]
+  callsInitiated          Call[]               @relation("CallCaller")
+  callsReceived           Call[]               @relation("CallReceiver")
 
   @@map("users")
 }
@@ -258,6 +286,7 @@ model Conversation {
   /// primer PATCH de settings de este grupo.
   groupSettings ConversationGroupSettings?
   fileUploads   FileUpload[]
+  calls         Call[]
 
   @@index([createdById])
   @@map("conversations")
@@ -794,4 +823,34 @@ model FileUpload {
   @@index([createdById, status])
   @@map("file_uploads")
 }
+
+/// Registro histórico y de estado de una llamada o videollamada.
+model Call {
+  id             String     @id @default(uuid())
+  conversationId String     @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  callerId       String     @map("caller_id")
+  caller         User       @relation("CallCaller", fields: [callerId], references: [id])
+
+  receiverId     String     @map("receiver_id")
+  receiver       User       @relation("CallReceiver", fields: [receiverId], references: [id])
+
+  type           CallType   @default(AUDIO)
+  status         CallStatus @default(RINGING)
+
+  startedAt      DateTime   @default(now()) @map("started_at")
+  answeredAt     DateTime?  @map("answered_at")
+  endedAt        DateTime?  @map("ended_at")
+  duration       Int        @default(0)
+
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@index([conversationId, createdAt])
+  @@index([callerId, createdAt])
+  @@index([receiverId, createdAt])
+  @@map("calls")
+}
+
 

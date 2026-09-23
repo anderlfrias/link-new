@@ -21,4 +21,18 @@ export const SOCKET_EVENTS = {
     typingStart: "message:typing_start",
     typingStop: "message:typing_stop",
   },
+  call: {
+    initiate: "call:initiate",
+    outgoing: "call:outgoing",
+    incoming: "call:incoming",
+    accept: "call:accept",
+    accepted: "call:accepted",
+    reject: "call:reject",
+    rejected: "call:rejected",
+    busy: "call:busy",
+    signal: "call:signal",
+    end: "call:end",
+    ended: "call:ended",
+    error: "call:error",
+  },
 } as const;

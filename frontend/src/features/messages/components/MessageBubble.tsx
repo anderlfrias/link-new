@@ -6,6 +6,9 @@ import {
   IconCornerUpLeft,
   IconLoader2,
   IconMoodSmile,
+  IconPhone,
+  IconPhoneOff,
+  IconVideo,
   IconX,
 } from "@tabler/icons-react";
 import { MessageStatusTicks } from "@/components/ui/MessageStatusTicks";
@@ -85,6 +88,7 @@ export function MessageBubble({
   const isSticker = message.type === "STICKER" && !isDeleted;
   const isContact = message.type === "CONTACT" && !isDeleted;
   const isPoll = message.type === "POLL" && !isDeleted;
+  const isCall = message.type === "CALL" && !isDeleted;
   const gifFile = !isDeleted ? message.files.find((f) => !f.file.deletedAt && f.file.mimeType === "image/gif") : null;
   const stickerFile = isSticker && message.files.length > 0 ? message.files[0].file : null;
 
@@ -601,6 +605,49 @@ export function MessageBubble({
             currentUserId={currentUserId}
             footer={footer}
           />
+        ) : isCall ? (
+          <div className="flex flex-col gap-1 min-w-[200px]">
+            <div className="flex items-center gap-2.5 py-1">
+              <div
+                className={cn(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+                  message.content.toLowerCase().includes("perdida") ||
+                    message.content.toLowerCase().includes("rechazada") ||
+                    message.content.toLowerCase().includes("ocupado")
+                    ? "bg-red-500/15 text-red-500"
+                    : renderAsOwn
+                      ? "bg-white/20 text-white"
+                      : "bg-brand-blue/10 text-brand-blue dark:bg-brand-blue/20 dark:text-brand-blue-light",
+                )}
+              >
+                {message.content.toLowerCase().includes("videollamada") ? (
+                  <IconVideo size={20} />
+                ) : message.content.toLowerCase().includes("perdida") ||
+                  message.content.toLowerCase().includes("rechazada") ||
+                  message.content.toLowerCase().includes("ocupado") ? (
+                  <IconPhoneOff size={20} />
+                ) : (
+                  <IconPhone size={20} />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">
+                  {message.content
+                    .replace(/^[📞📹]\s*/u, "")
+                    .replace(/\uFFFD/g, "")
+                    .replace(/^[\uD800-\uDFFF]\s*/, "")
+                    .trim() ||
+                    (message.content.toLowerCase().includes("videollamada")
+                      ? "Videollamada"
+                      : "Llamada de voz")}
+                </p>
+                <p className="text-xs opacity-70">
+                  {message.content.toLowerCase().includes("videollamada") ? "Videollamada" : "Llamada de voz"}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end">{footer}</div>
+          </div>
         ) : (
           <>
             {hasAttachments && (

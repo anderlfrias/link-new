@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { IconChevronLeft, IconSearch } from "@tabler/icons-react";
+import { IconChevronLeft, IconPhone, IconSearch, IconVideo } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import type { ReactNode } from "react";
 
@@ -11,6 +11,8 @@ interface ConversationHeaderProps {
   onOpenDetails?: () => void;
   onToggleSearch?: () => void;
   isSearchOpen?: boolean;
+  onStartAudioCall?: () => void;
+  onStartVideoCall?: () => void;
 }
 
 export function ConversationHeader({
@@ -21,6 +23,8 @@ export function ConversationHeader({
   onOpenDetails,
   onToggleSearch,
   isSearchOpen = false,
+  onStartAudioCall,
+  onStartVideoCall,
 }: ConversationHeaderProps) {
   return (
     <div className="flex items-center gap-3 border-b border-black/5 px-3 py-2.5 dark:border-white/10">
@@ -46,6 +50,28 @@ export function ConversationHeader({
           )}
         </div>
       </button>
+      {onStartAudioCall && (
+        <button
+          type="button"
+          onClick={onStartAudioCall}
+          aria-label="Llamada de voz"
+          title="Llamada de voz"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+        >
+          <IconPhone size={20} stroke={1.8} />
+        </button>
+      )}
+      {onStartVideoCall && (
+        <button
+          type="button"
+          onClick={onStartVideoCall}
+          aria-label="Videollamada"
+          title="Videollamada"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white transition-colors"
+        >
+          <IconVideo size={20} stroke={1.8} />
+        </button>
+      )}
       {onToggleSearch && (
         <button
           type="button"

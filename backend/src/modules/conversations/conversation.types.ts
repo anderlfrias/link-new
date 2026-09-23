@@ -17,7 +17,7 @@ export interface UpdateConversationInput {
 }
 
 export type ConversationMemberWithUser = ConversationMember & {
-  user: Pick<User, "id" | "name" | "email" | "avatarFileId" | "status"> & {
+  user: Pick<User, "id" | "name" | "username" | "email" | "avatarFileId" | "status"> & {
     /// Solo `path` — lo demás del `StoredFile` no hace falta para construir la URL pública.
     avatarFile: Pick<StoredFile, "path"> | null;
   };

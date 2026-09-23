@@ -7,6 +7,7 @@ import {
   IconMicrophone,
   IconMoodSmile,
   IconPaperclip,
+  IconPhone,
   IconPhoto,
   IconPlayerPlay,
   IconUser,
@@ -100,6 +101,36 @@ export function parseMessagePreview(rawPreview: string | null | undefined): Pars
   ) {
     const text = trimmed.replace(/^📊\s*/, "") || "Encuesta";
     return { Icon: IconChartBar, text, isDeleted: false };
+  }
+
+  // Videollamada
+  if (
+    trimmed.startsWith("📹 ") ||
+    trimmed.startsWith("📹") ||
+    trimmed.toLowerCase().startsWith("videollamada")
+  ) {
+    const text =
+      trimmed
+        .replace(/^📹\s*/u, "")
+        .replace(/\uFFFD/g, "")
+        .replace(/^[\uD800-\uDFFF]\s*/, "")
+        .trim() || "Videollamada";
+    return { Icon: IconVideo, text, isDeleted: false };
+  }
+
+  // Llamada de voz
+  if (
+    trimmed.startsWith("📞 ") ||
+    trimmed.startsWith("📞") ||
+    trimmed.toLowerCase().startsWith("llamada")
+  ) {
+    const text =
+      trimmed
+        .replace(/^📞\s*/u, "")
+        .replace(/\uFFFD/g, "")
+        .replace(/^[\uD800-\uDFFF]\s*/, "")
+        .trim() || "Llamada";
+    return { Icon: IconPhone, text, isDeleted: false };
   }
 
   // Archivo adjunto (genérico o demás archivos)

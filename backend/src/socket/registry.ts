@@ -1,3 +1,4 @@
+import { registerCallSocket } from "../modules/calls/call.socket";
 import { registerConversationSocket } from "../modules/conversations/conversation.socket";
 import { registerMessageSocket } from "../modules/messages/message.socket";
 import { registerPresenceSocket } from "../modules/presence/presence.socket";
@@ -29,3 +30,4 @@ export function attachSocketModules(io: AppServer): void {
 registerSocketModule(registerMessageSocket);
 registerSocketModule(registerConversationSocket);
 registerSocketModule(registerPresenceSocket);
+registerSocketModule(registerCallSocket);

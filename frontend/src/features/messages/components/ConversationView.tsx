@@ -11,6 +11,7 @@ import { useMessageAttachments } from "@/features/messages/hooks/use-message-att
 import { Drawer } from "@/components/ui/Drawer";
 import { Modal } from "@/components/ui/Modal";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
+import { useCall } from "@/features/calls/hooks/use-call";
 import { MessageSelectionToolbar } from "@/features/messages/components/MessageSelectionToolbar";
 import { InChatSearchBar } from "@/features/messages/components/InChatSearchBar";
 import { MessageList } from "@/features/messages/components/MessageList";
@@ -33,6 +34,7 @@ interface ConversationViewProps {
 
 export function ConversationView({ conversationId }: ConversationViewProps) {
   const { session } = useAuth();
+  const { startCall } = useCall();
   const settings = usePublicSettings();
   const currentUserId = session?.user.internalUserId ?? "";
   const currentUserName = session?.user.username || session?.user.fullName || "";
@@ -358,6 +360,22 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
             onOpenDetails={() => setShowDetails(true)}
             onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
             isSearchOpen={isSearchOpen}
+            onStartAudioCall={
+              conversation.type === "PRIVATE" && conversation.members?.some((m) => m.userId !== currentUserId)
+                ? () => {
+                    const peer = conversation.members?.find((m) => m.userId !== currentUserId);
+                    if (peer) void startCall(conversationId, peer.userId, displayName, "AUDIO");
+                  }
+                : undefined
+            }
+            onStartVideoCall={
+              conversation.type === "PRIVATE" && conversation.members?.some((m) => m.userId !== currentUserId)
+                ? () => {
+                    const peer = conversation.members?.find((m) => m.userId !== currentUserId);
+                    if (peer) void startCall(conversationId, peer.userId, displayName, "VIDEO");
+                  }
+                : undefined
+            }
           />
         )}
         {isSearchOpen && !isSelectionMode && (

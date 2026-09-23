@@ -52,6 +52,11 @@ export function buildMessagePreview(
     return text ? `Encuesta: ${text}` : "Encuesta";
   }
 
+  if (message.type === "CALL") {
+    const text = message.content.trim().replace(/\s+/g, " ");
+    return text || "Llamada";
+  }
+
   const text = message.content.trim().replace(/\s+/g, " ");
 
   if (message.files && message.files.length > 0) {

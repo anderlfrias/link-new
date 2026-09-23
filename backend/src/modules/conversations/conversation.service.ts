@@ -92,6 +92,11 @@ export function buildLastMessagePreview(message: {
     return text ? `Encuesta: ${text}` : "Encuesta";
   }
 
+  if (message.type === MessageType.CALL) {
+    const text = message.content.trim().replace(/\s+/g, " ");
+    return text || "Llamada";
+  }
+
   const text = message.content.trim().replace(/\s+/g, " ");
 
   if (message.files && message.files.length > 0) {

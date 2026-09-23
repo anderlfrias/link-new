@@ -30,7 +30,7 @@ Grupos y Llamadas
 
 [x] Encuestas: Agregar encuestas (dentro de chats grupales).
 
-[ ] Llamadas: Agregar llamadas y videollamadas.
+[x] Llamadas: Agregar llamadas y videollamadas.
 
 Sistema y Configuración
 

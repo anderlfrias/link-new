@@ -45,6 +45,8 @@ export type AuditMetadataMap = {
   /// tabla con otra política de retención sería filtrarlo dos veces
   /// (LOGGING_PLAN.md §4.5).
   ADMIN_DELETE_FILE: { provider: FileProvider; sizeBytes: number; mimeType: string };
+  START_CALL: { callType: "AUDIO" | "VIDEO" };
+  END_CALL: { callType: "AUDIO" | "VIDEO"; duration: number; status: string };
 };
 
 export const DEFAULT_ADMIN_AUDIT_ACTIONS: AuditAction[] = [

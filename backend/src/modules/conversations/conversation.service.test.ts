@@ -74,6 +74,7 @@ function buildMockMember(overrides: Partial<ConversationMemberWithUser> = {}): C
     user: {
       id: "u-1",
       name: "User One",
+      username: "user1",
       email: "u1@test.com",
       avatarFileId: null,
       avatarFile: null,

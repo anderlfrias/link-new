@@ -69,4 +69,30 @@ describe("ConversationHeader", () => {
     await user.click(searchButton);
     expect(handleToggleSearch).toHaveBeenCalledTimes(1);
   });
+
+  it("renders audio and video call buttons when provided and calls callbacks on click", async () => {
+    const handleAudioCall = vi.fn();
+    const handleVideoCall = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ConversationHeader
+        title="Dr. Juan Pérez"
+        onStartAudioCall={handleAudioCall}
+        onStartVideoCall={handleVideoCall}
+      />,
+    );
+
+    const audioButton = screen.getByRole("button", { name: "Llamada de voz" });
+    const videoButton = screen.getByRole("button", { name: "Videollamada" });
+
+    expect(audioButton).toBeInTheDocument();
+    expect(videoButton).toBeInTheDocument();
+
+    await user.click(audioButton);
+    expect(handleAudioCall).toHaveBeenCalledTimes(1);
+
+    await user.click(videoButton);
+    expect(handleVideoCall).toHaveBeenCalledTimes(1);
+  });
 });

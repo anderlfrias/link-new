@@ -24,7 +24,7 @@ export const createMessageSchema = yup
     content: yup.string().trim().max(4000).default(""),
     fileIds: yup.array().of(yup.string().required()),
     replyToId: yup.string().optional(),
-    type: yup.string().oneOf(["STICKER", "CONTACT", "POLL"]).optional(),
+    type: yup.string().oneOf(["STICKER", "CONTACT", "POLL", "CALL"]).optional(),
     poll: pollSchema.optional().default(undefined),
   })
   .test(
@@ -46,6 +46,11 @@ export const createMessageSchema = yup
     "poll-shape",
     "a poll message must have poll payload and no files",
     (value) => value.type !== "POLL" || (Boolean(value.poll) && (!value.fileIds || value.fileIds.length === 0)),
+  )
+  .test(
+    "call-shape",
+    "a call message must have content and no files",
+    (value) => value.type !== "CALL" || (Boolean(value.content) && (!value.fileIds || value.fileIds.length === 0)),
   );
 
 export const updateMessageSchema = yup.object({

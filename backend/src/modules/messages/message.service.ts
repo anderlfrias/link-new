@@ -371,7 +371,9 @@ export async function sendMessage(
               ? MessageType.CONTACT
               : input.type === "POLL"
                 ? MessageType.POLL
-                : MessageType.TEXT,
+                : input.type === "CALL"
+                  ? MessageType.CALL
+                  : MessageType.TEXT,
         fileCount: fileIds.length,
       },
     },
@@ -382,7 +384,9 @@ export async function sendMessage(
           ? MessageType.CONTACT
           : input.type === "POLL"
             ? MessageType.POLL
-            : undefined,
+            : input.type === "CALL"
+              ? MessageType.CALL
+              : undefined,
   });
 }
 
