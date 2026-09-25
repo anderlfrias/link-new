@@ -34,8 +34,6 @@ Grupos y Llamadas
 
 Sistema y Configuración
 
-[ ] Gestión de almacenamiento (S3): Agregar a la configuración el tamaño de los archivos a partir del cual se enviarán a Amazon S3.
-
 [ ] Multi-idioma: Soporte para múltiples idiomas.
 
 [ ] Versionamiento: Versionar la aplicación.- [ ]
@@ -44,4 +42,4 @@ Sistema y Configuración
 
 Otros
 
-[ ] Al seleccionar varios para reenviar algun archivo se pierden si cambio los parametros de busqueda. Si ya estan seleccionados deben aparecer siempre.
+[x] Al seleccionar varios para reenviar algun archivo se pierden si cambio los parametros de busqueda. Si ya estan seleccionados deben aparecer siempre.

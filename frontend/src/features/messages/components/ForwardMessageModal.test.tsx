@@ -301,5 +301,50 @@ describe("ForwardMessageModal", () => {
     expect(submitBtn).toBeDisabled();
     expect(mockForward).not.toHaveBeenCalled();
   });
+
+  it("mantiene visibles las conversaciones y contactos seleccionados al cambiar los parámetros de búsqueda", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardMessageModal
+        message={baseMessage}
+        currentUserId="current-u"
+        onClose={onClose}
+      />,
+    );
+
+    // Inicialmente Carlos y Ana Gomez están visibles
+    expect(screen.getByText("Carlos")).toBeInTheDocument();
+    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
+
+    // Seleccionamos Carlos
+    await user.click(screen.getByText("Carlos"));
+    expect(screen.getByRole("button", { name: "Reenviar (1)" })).toBeInTheDocument();
+
+    // Buscamos "Ana" (Carlos no coincide con el texto de búsqueda, pero al estar seleccionado debe permanecer visible)
+    const searchInput = screen.getByPlaceholderText("Buscar conversación");
+    await user.type(searchInput, "Ana");
+
+    expect(screen.getByText("Carlos")).toBeInTheDocument();
+    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
+
+    // Seleccionamos también a Ana Gomez
+    await user.click(screen.getByText("Ana Gomez"));
+    expect(screen.getByRole("button", { name: "Reenviar (2)" })).toBeInTheDocument();
+
+    // Cambiamos el parámetro de búsqueda a algo que no coincida con ninguno
+    await user.clear(searchInput);
+    await user.type(searchInput, "NoExisteNadie");
+
+    // Ambos deben seguir apareciendo porque ya están seleccionados
+    expect(screen.getByText("Carlos")).toBeInTheDocument();
+    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
+    expect(screen.queryByText("Sin resultados")).not.toBeInTheDocument();
+
+    // Si deseleccionamos a Carlos mientras la búsqueda no coincide con él, desaparece pero Ana sigue
+    await user.click(screen.getByText("Carlos"));
+    expect(screen.getByRole("button", { name: "Reenviar (1)" })).toBeInTheDocument();
+    expect(screen.queryByText("Carlos")).not.toBeInTheDocument();
+    expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
+  });
 });
 

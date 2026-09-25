@@ -109,16 +109,21 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
   const query = search.trim().toLowerCase();
   const filteredConversations = useMemo(() => {
     if (!query) return otherConversations;
-    return otherConversations.filter((conversation) =>
-      getConversationDisplayName(conversation, currentUserId).toLowerCase().includes(query),
+    return otherConversations.filter(
+      (conversation) =>
+        selectedIds.includes(conversation.id) ||
+        getConversationDisplayName(conversation, currentUserId).toLowerCase().includes(query),
     );
-  }, [otherConversations, query, currentUserId]);
+  }, [otherConversations, query, currentUserId, selectedIds]);
   const filteredContacts = useMemo(() => {
     if (!query) return contacts;
     return contacts.filter(
-      (user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query),
+      (user) =>
+        selectedIds.includes(user.id) ||
+        user.name.toLowerCase().includes(query) ||
+        user.email.toLowerCase().includes(query),
     );
-  }, [contacts, query]);
+  }, [contacts, query, selectedIds]);
 
   function toggle(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((existing) => existing !== id) : [...prev, id]));
