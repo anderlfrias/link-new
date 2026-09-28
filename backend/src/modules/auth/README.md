@@ -100,6 +100,10 @@ Cada intento de autenticación se registra en el audit trail normativo (`AuditLo
 - **Ambigüedad de EXTERNAL_AUTH**: `forbidden_by_provider` refleja que el proveedor retornó 403 / "forbidden". Como EXTERNAL_AUTH no distingue entre "contraseña incorrecta" y "usuario sin permisos para esta app", este valor **no** debe interpretarse de forma taxativa como contraseña errónea.
 - **Privacidad estricta**: Las contraseñas, tokens y respuestas completas de EXTERNAL_AUTH **nunca** se almacenan en la tabla de auditoría ni en los logs de aplicación.
 
+### Reenvío de IP a EXTERNAL_AUTH
+
+Para evitar que EXTERNAL_AUTH aplique rate limiting o bloquee la IP del servidor de chat (lo que generaría un bloqueo general para todos los usuarios ante fallos reiterados), la petición a `/v1/login` de EXTERNAL_AUTH reenvía la IP del cliente real en los encabezados HTTP `X-Forwarded-For` y `X-Real-IP` (tomada de `CF-Connecting-IP` o `req.ip`). Así, las sanciones o límites de EXTERNAL_AUTH se aplican de forma individual por IP de origen.
+
 ## Desacoplar el perfil del proveedor externo (`syncProfileWithIntegration`)
 
 `User.syncProfileWithIntegration` (`schema.prisma`, default `true`) decide si el login (y la sincronización de contactos vía `syncAppUsers`, ver más abajo) sigue actualizando `name`/avatar desde el proveedor de identidad externo configurado — hoy EXTERNAL_AUTH, pero el mecanismo no asume cuál; podría ser cualquier otro mañana sin tocar este flag. Pasa a `false` automáticamente la primera vez que el usuario cambia su nombre o su foto **acá** (`auth.service.ts`: `updateOwnName`/`setProfilePicture`/`removeProfilePicture`, todas vía `setLocalName`/`setLocalAvatar` en `auth.repository.ts`) — desde ese momento esos dos campos viven únicamente en esta base: ni el login ni `syncAppUsers` vuelven a pisarlos con lo que diga el proveedor externo, sin importar cuántas veces ese usuario inicie sesión.

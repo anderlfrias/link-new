@@ -78,7 +78,7 @@ describe("auth.controller", () => {
 
       await login(req, res, next);
 
-      expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123");
+      expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", undefined);
       expect(verifyToken).toHaveBeenCalledWith(mockToken);
       expect(mapTokenToUser).toHaveBeenCalledWith(mockPayload);
       expect(AuthService.upsertUsuario).toHaveBeenCalledWith(mockMapped);
@@ -106,6 +106,43 @@ describe("auth.controller", () => {
         true,
       );
       expect(next).not.toHaveBeenCalled();
+    });
+
+    it("pasa req.ip a AuthService.login cuando no hay header cf-connecting-ip", async () => {
+      const req = createMockRequest({
+        body: { user: "testuser", password: "password123" },
+        ip: "203.0.113.10",
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      vi.mocked(AuthService.login).mockResolvedValue("mock-token");
+      vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
+      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User" } as any);
+
+      await login(req, res, next);
+
+      expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", "203.0.113.10");
+    });
+
+    it("prioriza el header cf-connecting-ip y lo pasa a AuthService.login cuando está presente", async () => {
+      const req = createMockRequest({
+        body: { user: "testuser", password: "password123" },
+        ip: "10.0.0.1",
+        headers: { "cf-connecting-ip": "198.51.100.77" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      vi.mocked(AuthService.login).mockResolvedValue("mock-token");
+      vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
+      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User" } as any);
+
+      await login(req, res, next);
+
+      expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", "198.51.100.77");
     });
 
     it("pasa BadRequestError a next si falta user o password y NO audita", async () => {

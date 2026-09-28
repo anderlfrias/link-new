@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { User } from "@prisma/client";
 import env from "../../config/env";
-import { getLogger } from "../../config/request-context";
+import { getLogger, getRequestMeta } from "../../config/request-context";
 import {
   ForbiddenError,
   NotFoundError,
@@ -23,15 +23,24 @@ import { buildFullName } from "./jwt";
 /// Mismo timeout para toda llamada a EXTERNAL_AUTH (login, foto de perfil, lo que se agregue después).
 const EXTERNAL_AUTH_REQUEST_TIMEOUT_MS = 5000;
 
-export async function login(user: string, password: string): Promise<string> {
+export async function login(user: string, password: string, clientIp?: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), EXTERNAL_AUTH_REQUEST_TIMEOUT_MS);
+
+  const effectiveIp = clientIp ?? getRequestMeta().ip;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // Reenvía la IP del cliente real para que EXTERNAL_AUTH aplique rate-limiting y bloqueos
+  // por IP individual y no sobre la IP del servidor de chat (evita bloqueos generales).
+  if (effectiveIp) {
+    headers["X-Forwarded-For"] = effectiveIp;
+    headers["X-Real-IP"] = effectiveIp;
+  }
 
   let response: Response;
   try {
     response = await fetch(`${env.EXTERNAL_AUTH_API_URL}/v1/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ user, password, app: env.APP_CODE_EXTERNAL_AUTH }),
       signal: controller.signal,
     });

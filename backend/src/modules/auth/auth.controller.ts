@@ -35,7 +35,8 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       throw new BadRequestError("Ingresá tu usuario y tu contraseña.");
     }
 
-    const token = await AuthService.login(user, password);
+    const clientIp = (req.headers["cf-connecting-ip"] as string | undefined) ?? req.ip;
+    const token = await AuthService.login(user, password, clientIp);
     const mappedUser = mapTokenToUser(verifyToken(token));
     const internalUser = await AuthService.upsertUsuario(mappedUser);
 

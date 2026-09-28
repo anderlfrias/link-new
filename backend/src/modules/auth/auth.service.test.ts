@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import env from "../../config/env";
 import { logger } from "../../config/logger";
+import { runWithContext } from "../../config/request-context";
 import {
   ForbiddenError,
   NotFoundError,
@@ -87,6 +88,64 @@ describe("auth.service", () => {
             password: "correctpassword",
             app: env.APP_CODE_EXTERNAL_AUTH,
           }),
+        }),
+      );
+    });
+
+    it("reenvía encabezados X-Forwarded-For y X-Real-IP a EXTERNAL_AUTH cuando clientIp es provisto", async () => {
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ success: true, token: "token-with-ip" })),
+        clone: () => ({ text: () => Promise.resolve('{"success":true}') }),
+      };
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse));
+
+      const token = await login("validuser", "correctpassword", "203.0.113.195");
+
+      expect(token).toBe("token-with-ip");
+      expect(fetch).toHaveBeenCalledWith(
+        `${env.EXTERNAL_AUTH_API_URL}/v1/login`,
+        expect.objectContaining({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Forwarded-For": "203.0.113.195",
+            "X-Real-IP": "203.0.113.195",
+          },
+          body: JSON.stringify({
+            user: "validuser",
+            password: "correctpassword",
+            app: env.APP_CODE_EXTERNAL_AUTH,
+          }),
+        }),
+      );
+    });
+
+    it("toma la IP del contexto de la petición si clientIp no se pasa como argumento", async () => {
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ success: true, token: "token-context-ip" })),
+        clone: () => ({ text: () => Promise.resolve('{"success":true}') }),
+      };
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse));
+
+      let token: string | undefined;
+      await runWithContext(logger, { ip: "198.51.100.42" }, async () => {
+        token = await login("validuser", "correctpassword");
+      });
+
+      expect(token).toBe("token-context-ip");
+      expect(fetch).toHaveBeenCalledWith(
+        `${env.EXTERNAL_AUTH_API_URL}/v1/login`,
+        expect.objectContaining({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Forwarded-For": "198.51.100.42",
+            "X-Real-IP": "198.51.100.42",
+          },
         }),
       );
     });

@@ -12,5 +12,6 @@ import { logger } from "../config/logger";
 export function requestContext(req: Request, _res: Response, next: NextFunction) {
   const requestId = (req as Request & { id?: string }).id;
   const child = logger.child({ requestId });
-  runWithContext(child, { requestId, ip: req.ip, userAgent: req.headers["user-agent"] }, () => next());
+  const ip = (req.headers["cf-connecting-ip"] as string | undefined) ?? req.ip;
+  runWithContext(child, { requestId, ip, userAgent: req.headers["user-agent"] }, () => next());
 }

@@ -46,4 +46,27 @@ describe("requestContext", () => {
       userAgent: "vitest",
     });
   });
+
+  it("prioriza cf-connecting-ip sobre req.ip para getRequestMeta() si el header está presente", () => {
+    const req = createMockRequest({
+      id: "req-2",
+      ip: "10.0.0.1",
+      headers: {
+        "cf-connecting-ip": "198.51.100.99",
+        "user-agent": "vitest",
+      },
+    });
+    let capturedMeta: unknown;
+    const next = () => {
+      capturedMeta = getRequestMeta();
+    };
+
+    requestContext(req, createMockResponse(), next);
+
+    expect(capturedMeta).toEqual({
+      requestId: "req-2",
+      ip: "198.51.100.99",
+      userAgent: "vitest",
+    });
+  });
 });
