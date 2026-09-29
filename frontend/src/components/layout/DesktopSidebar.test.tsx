@@ -96,6 +96,7 @@ describe("DesktopSidebar", () => {
     );
 
     expect(screen.getByTestId("user-menu")).toBeInTheDocument();
+    expect(screen.getByAltText("Link")).toBeInTheDocument();
     expect(screen.getByTestId("theme-toggle")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Buscar conversación")).toBeInTheDocument();
     expect(screen.getByTestId("filter-bar")).toBeInTheDocument();

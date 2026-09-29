@@ -43,9 +43,15 @@ export function MobileChatListScreen({
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4">
         <div className="flex items-center gap-3">
           <UserMenu onOpenProfileSettings={() => setView("profileSettings")} />
-          <h1 className="font-display text-2xl font-semibold text-brand-ink dark:text-white">
-            {t("chat.chatsTitle")}
-          </h1>
+          {/* eslint-disable-next-line @next/next/no-img-element -- SVG vectorial, no pasa por el optimizador de next/image */}
+          <img src="/brand/logo-wordmark.svg" alt="Link" className="h-6 w-auto dark:hidden" />
+          {/* eslint-disable-next-line @next/next/no-img-element -- idem, variante para fondo oscuro */}
+          <img
+            src="/brand/logo-wordmark-dark.svg"
+            alt=""
+            aria-hidden="true"
+            className="hidden h-6 w-auto dark:block"
+          />
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />

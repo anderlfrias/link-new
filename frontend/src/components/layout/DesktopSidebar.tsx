@@ -37,7 +37,13 @@ export function DesktopSidebar({ conversations, status, currentUserId }: Desktop
   return (
     <div className="relative flex h-full w-full flex-col">
       <div className="flex items-center justify-between gap-2 px-4 py-3">
-        <UserMenu onOpenProfileSettings={() => setView("profileSettings")} />
+        <div className="flex items-center gap-2.5">
+          <UserMenu onOpenProfileSettings={() => setView("profileSettings")} />
+          {/* eslint-disable-next-line @next/next/no-img-element -- SVG vectorial, no pasa por el optimizador de next/image */}
+          <img src="/brand/logo-wordmark.svg" alt="Link" className="h-6 w-auto dark:hidden" />
+          {/* eslint-disable-next-line @next/next/no-img-element -- idem, variante para fondo oscuro */}
+          <img src="/brand/logo-wordmark-dark.svg" alt="" aria-hidden="true" className="hidden h-6 w-auto dark:block" />
+        </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <button

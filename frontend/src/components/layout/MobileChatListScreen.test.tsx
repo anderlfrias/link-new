@@ -86,7 +86,7 @@ describe("MobileChatListScreen", () => {
     vi.clearAllMocks();
   });
 
-  it("renders mobile chat list screen with heading 'Chats', search input, and conversation list", () => {
+  it("renders mobile chat list screen with Link wordmark, search input, and conversation list", () => {
     render(
       <MobileChatListScreen
         conversations={[]}
@@ -95,7 +95,7 @@ describe("MobileChatListScreen", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Chats", level: 1 })).toBeInTheDocument();
+    expect(screen.getByAltText("Link")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Buscar")).toBeInTheDocument();
     expect(screen.getByTestId("conversation-list")).toBeInTheDocument();
   });

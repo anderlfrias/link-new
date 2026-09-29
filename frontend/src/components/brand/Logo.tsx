@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { cn } from "@/utils/cn";
 
 interface LogoProps {
@@ -12,12 +11,12 @@ interface LogoProps {
 export function Logo({ variant = "full", className, iconClassName, textClassName }: LogoProps) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <Image
-        src="/brand/logo-mark.png"
+      {/* eslint-disable-next-line @next/next/no-img-element -- SVG vectorial, no pasa por el optimizador de next/image */}
+      <img
+        src="/brand/logo-mark.svg"
         alt="Link"
-        width={555}
-        height={386}
-        priority
+        width={570}
+        height={395}
         className={cn("h-8 w-auto", iconClassName)}
       />
       {variant === "full" && (
