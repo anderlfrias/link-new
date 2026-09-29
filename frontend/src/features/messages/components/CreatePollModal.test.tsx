@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CreatePollModal } from "./CreatePollModal";
+import { I18nProvider } from "@/i18n";
 
 describe("CreatePollModal", () => {
   it("no renderiza nada cuando isOpen es false", () => {
@@ -98,5 +99,21 @@ describe("CreatePollModal", () => {
 
     await user.click(screen.getByLabelText("Cerrar modal"));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("renderiza correctamente en inglés cuando el locale es en", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <CreatePollModal isOpen={true} onClose={vi.fn()} onSubmit={vi.fn()} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Create poll" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Question")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Option 1")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Option 2")).toBeInTheDocument();
+    expect(screen.getByText("Allow multiple answers")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create poll" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 });

@@ -20,6 +20,7 @@ import { useStartConversation } from "@/features/conversations/hooks/use-start-c
 import { useCreateGroup } from "@/features/conversations/hooks/use-create-group";
 import { getAvatarUrl } from "@/utils/file-url";
 import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image";
+import { useTranslation } from "@/i18n";
 
 interface NewChatModalProps {
   onClose: () => void;
@@ -30,6 +31,7 @@ type Step = "contacts" | "selectMembers" | "groupDetails";
 /** Un solo modal para dos flujos: elegir 1 contacto (chat privado, como antes)
  * o "Nuevo grupo" (elegir 2+ participantes, después nombre/foto). */
 export function NewChatModal({ onClose }: NewChatModalProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>("contacts");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -105,23 +107,23 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
             <button
               type="button"
               onClick={goBack}
-              aria-label="Volver"
+              aria-label={t("common.back")}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
             >
               <IconArrowLeft size={20} stroke={1.75} />
             </button>
           )}
           <h2 className="truncate font-display text-lg font-semibold text-brand-ink dark:text-white">
-            {step === "contacts" && "Chat nuevo"}
+            {step === "contacts" && t("modals.newChatTitle")}
             {step === "selectMembers" &&
-              `Elegir participantes${selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}`}
-            {step === "groupDetails" && "Datos del grupo"}
+              `${t("modals.chooseParticipants")}${selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}`}
+            {step === "groupDetails" && t("modals.groupDetailsTitle")}
           </h2>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label={t("common.close")}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <IconX size={20} stroke={1.75} />
@@ -132,7 +134,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
         <div className="px-3 pb-2">
           <Input
             icon={<IconSearch size={16} stroke={1.75} />}
-            placeholder={step === "contacts" ? "Buscar contacto" : "Buscar"}
+            placeholder={step === "contacts" ? t("modals.searchContact") : t("common.search")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             autoFocus
@@ -161,7 +163,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white">
               <IconUsersGroup size={22} stroke={1.75} />
             </span>
-            <p className="font-medium text-brand-ink dark:text-white">Nuevo grupo</p>
+            <p className="font-medium text-brand-ink dark:text-white">{t("navigation.newGroup")}</p>
           </button>
 
           {(status === "loading" || status === "idle") && (
@@ -171,14 +173,14 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
           )}
           {status === "error" && (
             <div className="flex flex-1 items-center justify-center px-6 py-8 text-center text-sm text-neutral-500 dark:text-neutral-400">
-              No se pudieron cargar los contactos.
+              {t("modals.loadContactsError")}
             </div>
           )}
           {status === "ready" && filtered.length === 0 && (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-8 text-center">
               <IconUsers size={32} className="text-neutral-300 dark:text-neutral-600" />
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                {search ? "Sin resultados" : "No hay otros usuarios todavía"}
+                {search ? t("chatList.noSearchResultsSimple") : t("modals.noOtherUsersYet")}
               </p>
             </div>
           )}
@@ -199,7 +201,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
               <div className="flex flex-col items-center justify-center gap-2 px-6 py-8 text-center">
                 <IconUsers size={32} className="text-neutral-300 dark:text-neutral-600" />
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                  {search ? "Sin resultados" : "No hay otros usuarios todavía"}
+                  {search ? t("chatList.noSearchResultsSimple") : t("modals.noOtherUsersYet")}
                 </p>
               </div>
             )}
@@ -214,11 +216,11 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
           </div>
           <div className="border-t border-black/5 px-4 py-3 dark:border-white/10">
             <Button type="button" className="w-full" disabled={selectedIds.length < 2} onClick={() => setStep("groupDetails")}>
-              Siguiente
+              {t("common.next")}
             </Button>
             {selectedIds.length === 1 && (
               <p className="mt-2 text-center text-xs text-neutral-500 dark:text-neutral-400">
-                Elegí al menos una persona más
+                {t("modals.selectAtLeastOneMore")}
               </p>
             )}
           </div>
@@ -229,10 +231,10 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="relative">
-              <Avatar name={groupName || "Grupo"} imageUrl={groupImagePreview} size="xl" />
+              <Avatar name={groupName || t("modals.groupDefaultName")} imageUrl={groupImagePreview} size="xl" />
               <label
                 htmlFor="group-image-input"
-                aria-label="Elegir foto del grupo"
+                aria-label={t("modals.chooseGroupPhoto")}
                 className="absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-brand-blue text-white shadow"
               >
                 <IconCamera size={16} stroke={1.75} />
@@ -254,7 +256,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
           </div>
 
           <Input
-            placeholder="Nombre del grupo"
+            placeholder={t("modals.groupName")}
             value={groupName}
             onChange={(event) => setGroupName(event.target.value)}
             maxLength={120}
@@ -263,7 +265,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
 
           <div className="mt-4">
             <p className="mb-2 text-sm text-neutral-500 dark:text-neutral-400">
-              Participantes ({selectedUsers.length})
+              {t("modals.participantsWithCount", { count: selectedUsers.length })}
             </p>
             <div className="flex flex-wrap gap-3">
               {selectedUsers.map((user) => (
@@ -287,7 +289,7 @@ export function NewChatModal({ onClose }: NewChatModalProps) {
             disabled={!groupName.trim() || creatingGroup}
             onClick={handleCreateGroup}
           >
-            {creatingGroup ? <IconLoader2 className="animate-spin" size={16} /> : "Crear grupo"}
+            {creatingGroup ? <IconLoader2 className="animate-spin" size={16} /> : t("modals.createGroupButton")}
           </Button>
         </div>
       )}

@@ -16,6 +16,7 @@ vi.mock("./auth.repository", () => ({
   setLocalName: vi.fn(),
   setNotificationSoundEnabled: vi.fn(),
   updateAvatarFileId: vi.fn(),
+  updateUserPreferences: vi.fn(),
   upsertUserFromExternalUser: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ import {
   setLocalName,
   setNotificationSoundEnabled,
   updateAvatarFileId,
+  updateUserPreferences,
   upsertUserFromExternalUser,
 } from "./auth.repository";
 import * as FileService from "../files/file.service";
@@ -46,6 +48,7 @@ import {
   syncProfilePicture,
   updateNotificationSoundEnabled,
   updateOwnName,
+  updatePreferences,
   upsertUsuario,
 } from "./auth.service";
 
@@ -371,13 +374,28 @@ describe("auth.service", () => {
   });
 
   describe("updateNotificationSoundEnabled", () => {
-    it("llama a setNotificationSoundEnabled en el repositorio", async () => {
+    it("llama a updateUserPreferences a través de updatePreferences", async () => {
       const mockUser = { id: "u-1", notificationSoundEnabled: true } as any;
-      vi.mocked(setNotificationSoundEnabled).mockResolvedValue(mockUser);
+      vi.mocked(updateUserPreferences).mockResolvedValue(mockUser);
 
       const result = await updateNotificationSoundEnabled("u-1", true);
 
-      expect(setNotificationSoundEnabled).toHaveBeenCalledWith("u-1", true);
+      expect(updateUserPreferences).toHaveBeenCalledWith("u-1", { notificationSoundEnabled: true });
+      expect(result).toBe(mockUser);
+    });
+  });
+
+  describe("updatePreferences", () => {
+    it("delega a updateUserPreferences en el repositorio con notificationSoundEnabled y language", async () => {
+      const mockUser = { id: "u-1", notificationSoundEnabled: false, language: "en" } as any;
+      vi.mocked(updateUserPreferences).mockResolvedValue(mockUser);
+
+      const result = await updatePreferences("u-1", { notificationSoundEnabled: false, language: "en" });
+
+      expect(updateUserPreferences).toHaveBeenCalledWith("u-1", {
+        notificationSoundEnabled: false,
+        language: "en",
+      });
       expect(result).toBe(mockUser);
     });
   });

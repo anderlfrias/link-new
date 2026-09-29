@@ -228,6 +228,9 @@ model User {
   /// en su cliente (ver frontend/src/features/conversations/hooks/use-new-message-sound.ts).
   notificationSoundEnabled Boolean @default(true) @map("notification_sound_enabled")
 
+  /// Idioma preferido del usuario ("es" | "en") — preferencia 100% local.
+  language String @default("es") @map("language")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

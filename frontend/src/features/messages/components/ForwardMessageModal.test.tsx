@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ForwardMessageModal } from "./ForwardMessageModal";
+import { I18nProvider } from "@/i18n";
 import type { Message } from "@/features/messages/types/message.types";
 import type { Conversation } from "@/features/conversations/types/conversation.types";
 import type { DirectoryUser } from "@/features/users/types/user.types";
@@ -345,6 +346,24 @@ describe("ForwardMessageModal", () => {
     expect(screen.getByRole("button", { name: "Reenviar (1)" })).toBeInTheDocument();
     expect(screen.queryByText("Carlos")).not.toBeInTheDocument();
     expect(screen.getByText("Ana Gomez")).toBeInTheDocument();
+  });
+
+  it("renderiza correctamente en inglés cuando el locale es en", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <ForwardMessageModal
+          message={baseMessage}
+          currentUserId="current-u"
+          onClose={onClose}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Forward message" })).toBeInTheDocument();
+    expect(screen.getByText("Saved messages")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search conversation")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Forward" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });
 

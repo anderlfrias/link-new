@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ConversationFilterBar } from "./ConversationFilterBar";
+import { I18nProvider } from "@/i18n";
+import React from "react";
 
 describe("ConversationFilterBar", () => {
   it("renders all filter options", () => {
@@ -11,6 +13,20 @@ describe("ConversationFilterBar", () => {
     expect(screen.getByRole("button", { name: "No leídos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Grupos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Favoritos" })).toBeInTheDocument();
+  });
+
+  it("renders all filter options in English when locale is en", () => {
+    const onChange = vi.fn();
+    render(
+      <I18nProvider initialLocale="en">
+        <ConversationFilterBar active="all" onChange={onChange} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unread" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Groups" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Favorites" })).toBeInTheDocument();
   });
 
   it("applies active styles to the selected filter", () => {

@@ -26,6 +26,7 @@ import { extractFilesFromClipboard, copyTextToClipboard } from "@/utils/clipboar
 import { isWithinMessageTimeLimit } from "@/utils/message-edit-window";
 import { formatMessagesForCopy } from "@/features/messages/utils/format-messages-copy";
 import { cn } from "@/utils/cn";
+import { useTranslation } from "@/i18n";
 import type { CreatePollPayload, Message } from "@/features/messages/types/message.types";
 
 interface ConversationViewProps {
@@ -33,6 +34,7 @@ interface ConversationViewProps {
 }
 
 export function ConversationView({ conversationId }: ConversationViewProps) {
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { startCall } = useCall();
   const settings = usePublicSettings();
@@ -163,8 +165,8 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
     await copyTextToClipboard(formatted);
     const feedback =
       selectedMessages.length === 1
-        ? "Mensaje copiado al portapapeles"
-        : `${selectedMessages.length} mensajes copiados al portapapeles`;
+        ? t("chat.copiedFeedbackSingle")
+        : t("chat.copiedFeedbackMultiple", { count: selectedMessages.length });
     setMultiCopiedFeedback(feedback);
     setTimeout(() => setMultiCopiedFeedback(null), 2500);
     handleExitSelectionMode();
@@ -310,7 +312,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
   if (conversationStatus === "error" || !conversation) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-neutral-500 dark:text-neutral-400">
-        No se pudo cargar la conversación.
+        {t("chat.loadError")}
       </div>
     );
   }
@@ -323,9 +325,11 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
 
   const subtitle =
     typingNames.length > 0
-      ? `${typingNames.join(", ")} escribiendo...`
+      ? t("chat.typingIndicator", { name: typingNames.join(", ") })
       : conversation.type === "GROUP"
-        ? `${conversation.members.length} miembros`
+        ? conversation.members.length === 1
+          ? t("chat.groupMemberSingle")
+          : t("chat.groupMembers", { count: conversation.members.length })
         : undefined;
 
   return (
@@ -451,10 +455,10 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
                   <div className="absolute inset-0 rounded-full border border-brand-blue/30 dark:border-brand-blue/50 animate-pulse-glow" />
                 </div>
                 <h3 className="font-display text-xl font-bold text-neutral-800 dark:text-neutral-100 mb-2">
-                  Enviar archivos
+                  {t("chat.dropFilesTitle")}
                 </h3>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400 leading-relaxed max-w-[280px]">
-                  Soltá tus imágenes, videos o documentos aquí para compartirlos
+                  {t("chat.dropFilesDesc")}
                 </p>
                 <div className="mt-8 flex gap-1.5 justify-center">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-blue/20 dark:bg-brand-blue/30" />
@@ -466,7 +470,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           </div>
         )}
         {showDetails && (
-          <Drawer onClose={() => setShowDetails(false)} aria-label="Información de la conversación">
+          <Drawer onClose={() => setShowDetails(false)} aria-label={t("chat.conversationInfoAria")}>
             <ConversationDetailPanel
               conversation={conversation}
               currentUserId={currentUserId}
@@ -475,7 +479,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
           </Drawer>
         )}
         {forwardModalMessages && (
-          <Modal onClose={() => setForwardModalMessages(null)} aria-label="Reenviar mensaje">
+          <Modal onClose={() => setForwardModalMessages(null)} aria-label={t("chat.forwardMessageAria")}>
             <ForwardMessageModal
               messages={forwardModalMessages}
               currentUserId={currentUserId}

@@ -19,6 +19,8 @@ export interface AuthUser {
   internalUserId: string;
   /** Preferencia 100% local — ver backend User.notificationSoundEnabled. */
   notificationSoundEnabled: boolean;
+  /** Idioma preferido del usuario — ver backend User.language. */
+  language?: "es" | "en";
 }
 
 export interface LoginResponse {

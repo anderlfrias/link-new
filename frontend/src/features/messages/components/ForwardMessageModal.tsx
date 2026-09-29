@@ -11,6 +11,7 @@ import { useUsers } from "@/features/users/hooks/use-users";
 import { useForwardMessage, type ForwardTarget } from "@/features/messages/hooks/use-forward-message";
 import { getConversationAvatarUrl, getConversationDisplayName, getOtherMembers } from "@/utils/conversation-display";
 import { cn } from "@/utils/cn";
+import { useTranslation } from "@/i18n";
 import type { Message } from "@/features/messages/types/message.types";
 
 interface ForwardMessageModalProps {
@@ -73,6 +74,7 @@ function SelectableChatRow({ name, avatar, selected, onClick, disabled }: Select
  * destino (podría haber muchos) — al reenviar con éxito el modal simplemente
  * se cierra y el usuario se queda donde estaba. */
 export function ForwardMessageModal({ message, messages, currentUserId, onClose }: ForwardMessageModalProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const { conversations, status } = useConversations();
@@ -150,7 +152,9 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
   }
 
   const titlePrefix =
-    targetMessages.length > 1 ? `Reenviar ${targetMessages.length} mensajes` : "Reenviar mensaje";
+    targetMessages.length > 1
+      ? t("modals.forwardMessageTitlePrefixMultiple", { count: targetMessages.length })
+      : t("modals.forwardMessageTitlePrefixSingle");
 
   return (
     <div className="flex min-h-0 w-full flex-col">
@@ -161,7 +165,7 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
         <button
           type="button"
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label={t("common.close")}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <IconX size={20} stroke={1.75} />
@@ -171,7 +175,7 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
       <div className="px-3 pb-2">
         <Input
           icon={<IconSearch size={16} stroke={1.75} />}
-          placeholder="Buscar conversación"
+          placeholder={t("chatList.searchConversation")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           autoFocus
@@ -187,8 +191,8 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SelectableChatRow
-          name="Mensajes guardados"
-          avatar={<Avatar name="Mensajes guardados" icon={<IconBookmark size={20} stroke={1.75} />} size="lg" />}
+          name={t("chatList.savedMessages")}
+          avatar={<Avatar name={t("chatList.savedMessages")} icon={<IconBookmark size={20} stroke={1.75} />} size="lg" />}
           selected={selectedIds.includes(SELF_ID)}
           onClick={() => toggle(SELF_ID)}
           disabled={pending}
@@ -218,7 +222,7 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
         {/* Gente con la que todavía no tenés chat — no solo lo ya conversado. */}
         {usersStatus === "ready" && filteredContacts.length > 0 && (
           <p className="px-4 pb-1 pt-3 text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-            Contactos
+            {t("navigation.contacts")}
           </p>
         )}
         {usersStatus === "ready" &&
@@ -238,7 +242,7 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
           filteredContacts.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-2 px-6 py-8 text-center">
               <IconUsers size={32} className="text-neutral-300 dark:text-neutral-600" />
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">Sin resultados</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">{t("chatList.noSearchResultsSimple")}</p>
             </div>
           )}
       </div>
@@ -252,8 +256,10 @@ export function ForwardMessageModal({ message, messages, currentUserId, onClose 
         >
           {pending ? (
             <IconLoader2 className="animate-spin" size={16} />
+          ) : selectedIds.length > 0 ? (
+            t("modals.forwardCountButton", { count: selectedIds.length })
           ) : (
-            `Reenviar${selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}`
+            t("modals.forwardButton")
           )}
         </Button>
       </div>

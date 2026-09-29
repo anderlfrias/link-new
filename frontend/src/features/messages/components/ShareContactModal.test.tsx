@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ShareContactModal } from "./ShareContactModal";
+import { I18nProvider } from "@/i18n";
 import type { DirectoryUser } from "@/features/users/types/user.types";
 
 const mockUseUsers = vi.fn();
@@ -152,5 +153,21 @@ describe("ShareContactModal", () => {
 
     expect(onSelectContact).toHaveBeenCalledWith(mockUsers[0]);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("renderiza correctamente en inglés cuando el locale es en", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <ShareContactModal
+          onClose={onClose}
+          onSelectContact={onSelectContact}
+          currentUserId="u-me"
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Share contact" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search by name, username or email...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close modal" })).toBeInTheDocument();
   });
 });

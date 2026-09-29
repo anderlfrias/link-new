@@ -19,6 +19,7 @@ import {
 } from "@/utils/conversation-display";
 import { formatConversationTimestamp } from "@/utils/format-date";
 import { cn } from "@/utils/cn";
+import { useTranslation } from "@/i18n";
 import type { ConversationListItem as ConversationListItemType } from "@/features/conversations/types/conversation.types";
 
 interface ConversationListItemProps {
@@ -56,6 +57,7 @@ export function ConversationListItem({
   onToggleSelect,
   onEnterSelectionMode,
 }: ConversationListItemProps) {
+  const { t, locale } = useTranslation();
   const publicSettings = usePublicSettings();
   const isGroup = conversation.type === "GROUP";
   // El backend es la autoridad real (`whoCanDeleteGroup` incluido) — acá solo
@@ -102,7 +104,11 @@ export function ConversationListItem({
             <div
               role="checkbox"
               aria-checked={isSelected}
-              aria-label={isSelected ? `Deseleccionar ${displayName}` : `Seleccionar ${displayName}`}
+              aria-label={
+                isSelected
+                  ? t("chatList.deselectAria", { name: displayName })
+                  : t("chatList.selectAria", { name: displayName })
+              }
               className={cn(
                 "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all",
                 isSelected
@@ -125,7 +131,7 @@ export function ConversationListItem({
               <span className="flex shrink-0 items-center gap-1">
                 {conversation.isPinnedByMe && <IconPin size={12} className="text-neutral-400" />}
                 <span className="text-xs text-neutral-400">
-                  {conversation.lastMessageAt ? formatConversationTimestamp(conversation.lastMessageAt) : ""}
+                  {conversation.lastMessageAt ? formatConversationTimestamp(conversation.lastMessageAt, locale) : ""}
                 </span>
               </span>
             </div>
@@ -133,7 +139,7 @@ export function ConversationListItem({
               <span className="truncate text-sm text-neutral-500 dark:text-neutral-400">
                 {draft ? (
                   <>
-                    <span className="font-medium text-rose-500 dark:text-rose-400">Borrador: </span>
+                    <span className="font-medium text-rose-500 dark:text-rose-400">{t("chatList.draftPrefix")}</span>
                     <span className="text-neutral-700 dark:text-neutral-300">{draft}</span>
                   </>
                 ) : (
@@ -159,7 +165,7 @@ export function ConversationListItem({
                       else onOpenMenu();
                     }}
                     disabled={pending}
-                    aria-label={`Opciones de ${displayName}`}
+                    aria-label={t("chatList.optionsAria", { name: displayName })}
                     className="hidden h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-500 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 disabled:opacity-60 dark:text-neutral-400 dark:hover:bg-white/10 md:flex"
                   >
                     <IconChevronDown size={14} stroke={2} />

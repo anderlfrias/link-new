@@ -6,6 +6,7 @@ import {
   deleteProfilePicture,
   updateProfile,
   updateNotificationSoundPreference,
+  updateUserPreferences,
 } from "./auth.api";
 import { apiRequest } from "@/lib/api-client";
 
@@ -97,5 +98,21 @@ describe("auth.api", () => {
       body: { notificationSoundEnabled: false },
     });
     expect(result).toEqual({ notificationSoundEnabled: false });
+  });
+
+  it("updateUserPreferences sends PATCH to /v1/auth/profile/preferences", async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce({
+      notificationSoundEnabled: true,
+      language: "en",
+    });
+
+    const result = await updateUserPreferences("token-abc", { language: "en" });
+
+    expect(apiRequest).toHaveBeenCalledWith("/v1/auth/profile/preferences", {
+      method: "PATCH",
+      token: "token-abc",
+      body: { language: "en" },
+    });
+    expect(result).toEqual({ notificationSoundEnabled: true, language: "en" });
   });
 });

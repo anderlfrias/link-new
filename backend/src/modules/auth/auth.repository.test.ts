@@ -18,6 +18,7 @@ import {
   setLocalName,
   setNotificationSoundEnabled,
   updateAvatarFileId,
+  updateUserPreferences,
   upsertUserFromExternalUser,
 } from "./auth.repository";
 
@@ -159,6 +160,21 @@ describe("auth.repository", () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: "u-1" },
         data: { notificationSoundEnabled: false },
+      });
+      expect(result).toBe(mockUser);
+    });
+  });
+
+  describe("updateUserPreferences", () => {
+    it("actualiza preferencias combinadas (idioma y sonido)", async () => {
+      const mockUser = { id: "u-1", notificationSoundEnabled: true, language: "en" } as any;
+      vi.mocked(prisma.user.update).mockResolvedValue(mockUser);
+
+      const result = await updateUserPreferences("u-1", { notificationSoundEnabled: true, language: "en" });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "u-1" },
+        data: { notificationSoundEnabled: true, language: "en" },
       });
       expect(result).toBe(mockUser);
     });

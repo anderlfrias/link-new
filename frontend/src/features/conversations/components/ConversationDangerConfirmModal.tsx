@@ -3,6 +3,7 @@
 import { IconAlertCircle, IconAlertTriangle, IconLoader2 } from "@tabler/icons-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { useTranslation } from "@/i18n";
 
 interface ConversationDangerConfirmModalProps {
   title: string;
@@ -27,6 +28,8 @@ export function ConversationDangerConfirmModal({
   onConfirm,
   onCancel,
 }: ConversationDangerConfirmModalProps) {
+  const { t } = useTranslation();
+
   return (
     <Modal onClose={onCancel} aria-label={title}>
       <div className="flex-1 overflow-y-auto p-4">
@@ -44,7 +47,7 @@ export function ConversationDangerConfirmModal({
       </div>
       <div className="flex justify-end gap-2 border-t border-black/5 px-4 py-3 dark:border-white/10">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
-          Cancelar
+          {t("common.cancel")}
         </Button>
         <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
           {pending && <IconLoader2 className="animate-spin" size={16} />}

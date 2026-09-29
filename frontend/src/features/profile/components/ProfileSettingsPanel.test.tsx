@@ -41,6 +41,16 @@ vi.mock("@/features/profile/hooks/use-update-notification-sound", () => ({
   }),
 }));
 
+const mockChangeLanguage = vi.fn();
+vi.mock("@/features/profile/hooks/use-update-language", () => ({
+  useUpdateLanguage: () => ({
+    currentLocale: "es",
+    changeLanguage: mockChangeLanguage,
+    pending: false,
+    error: null,
+  }),
+}));
+
 describe("ProfileSettingsPanel", () => {
   const onClose = vi.fn();
 
@@ -115,5 +125,15 @@ describe("ProfileSettingsPanel", () => {
 
     await user.click(soundCheckbox);
     expect(mockSetEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it("permite cambiar el idioma usando el selector", async () => {
+    const user = userEvent.setup();
+    render(<ProfileSettingsPanel onClose={onClose} />);
+
+    const englishBtn = screen.getByRole("radio", { name: /english/i });
+    await user.click(englishBtn);
+
+    expect(mockChangeLanguage).toHaveBeenCalledWith("en");
   });
 });

@@ -65,12 +65,20 @@ export function setLocalName(userId: string, name: string): Promise<User> {
   });
 }
 
-/// Preferencia 100% local, sin ningún flag tipo `syncProfileWithIntegration`
-/// de por medio (no existe en el proveedor externo, ver schema.prisma) —
-/// a diferencia de `setLocalName`/`setLocalAvatar`, cambiar esto nunca afecta
-/// esa sincronización.
+/// Preferencias 100% locales (sonido, idioma), sin ningún flag tipo
+/// `syncProfileWithIntegration` de por medio — a diferencia de
+/// `setLocalName`/`setLocalAvatar`, cambiar esto nunca afecta esa sincronización.
+export interface UserPreferencesData {
+  notificationSoundEnabled?: boolean;
+  language?: string;
+}
+
+export function updateUserPreferences(userId: string, data: UserPreferencesData): Promise<User> {
+  return prisma.user.update({ where: { id: userId }, data });
+}
+
 export function setNotificationSoundEnabled(userId: string, enabled: boolean): Promise<User> {
-  return prisma.user.update({ where: { id: userId }, data: { notificationSoundEnabled: enabled } });
+  return updateUserPreferences(userId, { notificationSoundEnabled: enabled });
 }
 
 /// Para servir la propia foto ya cacheada (`getOwnProfilePictureUrl` en

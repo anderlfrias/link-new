@@ -12,6 +12,7 @@ import { useLeaveGroup } from "@/features/conversations/hooks/use-leave-group";
 import { useSetConversationPreference } from "@/features/conversations/hooks/use-set-conversation-preference";
 import { markConversationRead } from "@/features/conversations/api/conversations.api";
 import { getConversationDisplayName } from "@/utils/conversation-display";
+import { useTranslation } from "@/i18n";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
 import type {
   ConversationFilter,
@@ -41,6 +42,7 @@ export function ConversationList({
   onExitSelectionMode,
   onEnterSelectionMode,
 }: ConversationListProps) {
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { setPinned, setFavorite, pendingId } = useSetConversationPreference();
   const { remove: deleteConversation, pending: deletePending, error: deleteError } = useDeleteConversation();
@@ -194,7 +196,7 @@ export function ConversationList({
         if (!ok) failed++;
       }
       if (failed > 0) {
-        setBatchError(`No se pudo salir de ${failed} grupo(s).`);
+        setBatchError(t("chatList.batchLeaveError", { count: failed }));
       } else {
         setBatchAction(null);
         handleExitSelectionMode();
@@ -217,7 +219,7 @@ export function ConversationList({
         if (!ok) failed++;
       }
       if (failed > 0) {
-        setBatchError(`No se pudieron eliminar ${failed} conversación(es).`);
+        setBatchError(t("chatList.batchDeleteError", { count: failed }));
       } else {
         setBatchAction(null);
         handleExitSelectionMode();
@@ -249,7 +251,7 @@ export function ConversationList({
   if (status === "error") {
     return (
       <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-        No se pudieron cargar tus conversaciones.
+        {t("chatList.loadError")}
       </div>
     );
   }
@@ -259,7 +261,9 @@ export function ConversationList({
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         <IconMessageCircle2 size={32} className="text-neutral-300 dark:text-neutral-600" />
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          {searchQuery || activeFilter !== "all" ? "Sin resultados" : "Todavía no tenés conversaciones"}
+          {searchQuery || activeFilter !== "all"
+            ? t("chatList.noSearchResultsSimple")
+            : t("chatList.noConversationsYet")}
         </p>
       </div>
     );
@@ -317,26 +321,28 @@ export function ConversationList({
         <ConversationDangerConfirmModal
           title={
             pendingAction.kind === "delete-chat"
-              ? "Eliminar chat"
+              ? t("chatList.deleteChat")
               : pendingAction.kind === "delete-group"
-                ? "Eliminar grupo"
-                : "Salir del grupo"
+                ? t("chatList.deleteGroup")
+                : t("chatList.leaveGroup")
           }
           description={
             pendingAction.kind === "delete-chat"
-              ? `Se eliminará esta conversación de tu lista. Si ${
-                  pendingConversation ? getConversationDisplayName(pendingConversation, currentUserId) : "la otra persona"
-                } te escribe de nuevo, o si vos le volvés a escribir, va a reaparecer.`
+              ? t("chatList.deleteChatDescription", {
+                  name: pendingConversation
+                    ? getConversationDisplayName(pendingConversation, currentUserId)
+                    : t("chatList.otherPerson"),
+                })
               : pendingAction.kind === "delete-group"
-                ? "Esta acción no se puede deshacer. El grupo se va a eliminar para todos los integrantes."
-                : "Vas a dejar de ser miembro de este grupo y no vas a poder ver los mensajes nuevos."
+                ? t("chatList.deleteGroupDescription")
+                : t("chatList.leaveGroupDescription")
           }
           confirmLabel={
             pendingAction.kind === "delete-chat"
-              ? "Eliminar chat"
+              ? t("chatList.deleteChat")
               : pendingAction.kind === "delete-group"
-                ? "Eliminar grupo"
-                : "Salir del grupo"
+                ? t("chatList.deleteGroup")
+                : t("chatList.leaveGroup")
           }
           pending={pendingAction.kind === "leave-group" ? leavePending : deletePending}
           error={pendingAction.kind === "leave-group" ? leaveError : deleteError}

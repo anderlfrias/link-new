@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { DeleteMessageConfirmModal } from "./DeleteMessageConfirmModal";
+import { I18nProvider } from "@/i18n";
 
 describe("DeleteMessageConfirmModal", () => {
   it("renders title, description and confirm button", () => {
@@ -91,6 +92,24 @@ describe("DeleteMessageConfirmModal", () => {
 
     expect(screen.getByText("Eliminar 3 mensajes para todos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Eliminar para todos (3)" })).toBeInTheDocument();
+  });
+
+  it("renders correctly in English when locale is en", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <DeleteMessageConfirmModal
+          pending={false}
+          error={null}
+          count={2}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("Delete 2 messages for everyone")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete for everyone (2)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 });
 

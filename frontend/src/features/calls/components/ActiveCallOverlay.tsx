@@ -9,6 +9,7 @@ import {
   IconVideoOff,
 } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { useTranslation } from "@/i18n";
 import { useCall } from "../hooks/use-call";
 
 function formatSeconds(sec: number): string {
@@ -18,6 +19,7 @@ function formatSeconds(sec: number): string {
 }
 
 export function ActiveCallOverlay() {
+  const { t } = useTranslation();
   const {
     callState,
     activeCall,
@@ -67,7 +69,7 @@ export function ActiveCallOverlay() {
   return (
     <div
       role="dialog"
-      aria-label={isVideo ? "Videollamada en curso" : "Llamada de voz en curso"}
+      aria-label={isVideo ? t("calls.activeVideoCallAria") : t("calls.activeAudioCallAria")}
       className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-neutral-950/95 p-6 text-white backdrop-blur-md animate-in fade-in"
     >
       {/* Audio oculto para llamadas de voz */}
@@ -78,11 +80,11 @@ export function ActiveCallOverlay() {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">{peerName}</h2>
           <p className="text-sm font-medium text-neutral-400">
-            {isConnected ? formatSeconds(callDuration) : "Llamando..."}
+            {isConnected ? formatSeconds(callDuration) : t("calls.calling")}
           </p>
         </div>
         <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-neutral-300">
-          {isVideo ? "Videollamada" : "Llamada de voz"}
+          {isVideo ? t("calls.videoCallBadge") : t("calls.audioCallBadge")}
         </div>
       </div>
 
@@ -131,7 +133,7 @@ export function ActiveCallOverlay() {
         <button
           type="button"
           onClick={toggleMute}
-          aria-label={isMuted ? "Activar micrófono" : "Silenciar micrófono"}
+          aria-label={isMuted ? t("calls.unmuteMic") : t("calls.muteMic")}
           className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
             isMuted
               ? "bg-red-500/20 text-red-400 border border-red-500/40"
@@ -146,7 +148,7 @@ export function ActiveCallOverlay() {
           <button
             type="button"
             onClick={toggleVideo}
-            aria-label={isVideoOff ? "Encender cámara" : "Apagar cámara"}
+            aria-label={isVideoOff ? t("calls.turnOnCamera") : t("calls.turnOffCamera")}
             className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
               isVideoOff
                 ? "bg-red-500/20 text-red-400 border border-red-500/40"
@@ -161,7 +163,7 @@ export function ActiveCallOverlay() {
         <button
           type="button"
           onClick={() => void endCall()}
-          aria-label="Finalizar llamada"
+          aria-label={t("calls.endCall")}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-xl shadow-red-600/40 transition-transform hover:scale-105 active:scale-95"
         >
           <IconPhoneOff size={26} stroke={2} />

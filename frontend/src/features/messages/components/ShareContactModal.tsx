@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Avatar } from "@/components/ui/Avatar";
 import { useUsers } from "@/features/users/hooks/use-users";
 import { getAvatarUrl } from "@/utils/file-url";
+import { useTranslation } from "@/i18n";
 import type { DirectoryUser } from "@/features/users/types/user.types";
 
 interface ShareContactModalProps {
@@ -19,6 +20,7 @@ export function ShareContactModal({
   onSelectContact,
   currentUserId,
 }: ShareContactModalProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const { users, status } = useUsers(true);
 
@@ -36,15 +38,15 @@ export function ShareContactModal({
   }, [users, search, currentUserId]);
 
   return (
-    <Modal onClose={onClose} aria-label="Compartir contacto">
+    <Modal onClose={onClose} aria-label={t("modals.shareContactTitle")}>
       <div className="flex items-center justify-between border-b border-black/5 px-4 py-3 dark:border-white/10">
         <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-          Compartir contacto
+          {t("modals.shareContactTitle")}
         </h2>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Cerrar modal"
+          aria-label={t("modals.closeModal")}
           className="rounded-lg p-1.5 text-neutral-500 hover:bg-black/5 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-neutral-200"
         >
           <IconX size={20} />
@@ -61,7 +63,7 @@ export function ShareContactModal({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, usuario o correo..."
+            placeholder={t("modals.searchContactsPlaceholderDetailed")}
             autoFocus
             className="w-full pl-9 pr-3 py-2 text-sm rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
           />
@@ -77,13 +79,13 @@ export function ShareContactModal({
 
         {status === "error" && (
           <div className="p-6 text-center text-sm text-red-500">
-            Error al cargar los contactos. Por favor intenta de nuevo.
+            {t("modals.loadContactsErrorDetailed")}
           </div>
         )}
 
         {status === "ready" && filtered.length === 0 && (
           <div className="p-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-            No se encontraron contactos
+            {t("modals.noContactsFound")}
           </div>
         )}
 

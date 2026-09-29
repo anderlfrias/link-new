@@ -46,5 +46,27 @@ describe("auth.validator", () => {
         updatePreferencesSchema.validate({ notificationSoundEnabled: "invalid" }),
       ).rejects.toThrow();
     });
+
+    it("acepta language en 'es' y 'en'", async () => {
+      const resEs = await updatePreferencesSchema.validate({ language: "es" });
+      expect(resEs).toEqual({ language: "es" });
+
+      const resEn = await updatePreferencesSchema.validate({ language: "en" });
+      expect(resEn).toEqual({ language: "en" });
+    });
+
+    it("acepta ambas preferencias juntas", async () => {
+      const resBoth = await updatePreferencesSchema.validate({
+        notificationSoundEnabled: true,
+        language: "en",
+      });
+      expect(resBoth).toEqual({ notificationSoundEnabled: true, language: "en" });
+    });
+
+    it("rechaza si language no es un idioma soportado", async () => {
+      await expect(
+        updatePreferencesSchema.validate({ language: "fr" }),
+      ).rejects.toThrow();
+    });
   });
 });

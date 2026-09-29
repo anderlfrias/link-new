@@ -96,7 +96,8 @@ Response `200`:
     "app": "chat-interno",
     "exp": 1735000000,
     "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>",
-    "notificationSoundEnabled": true
+    "notificationSoundEnabled": true,
+    "language": "es"
   }
 }
 ```
@@ -156,20 +157,24 @@ await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
 ### Preferencias propias
 
 ```
-PATCH /api/v1/auth/profile/preferences   { "notificationSoundEnabled": false }
+PATCH /api/v1/auth/profile/preferences   { "notificationSoundEnabled": false, "language": "en" }
 ```
 
-Requiere `Authorization: Bearer <token>`. 100% local — no existe en EXTERNAL_AUTH ni en ningún otro proveedor de identidad, y a diferencia de `PATCH /profile` no toca `syncProfileWithIntegration` (no tiene nada que ver con nombre/foto). Hoy solo controla si el cliente reproduce un tono al recibir un mensaje nuevo (ver `frontend/src/features/conversations/hooks/use-new-message-sound.ts`); el valor por defecto para un usuario nuevo es `true`.
+Requiere `Authorization: Bearer <token>`. 100% locales — no existen en EXTERNAL_AUTH ni en ningún otro proveedor de identidad, y a diferencia de `PATCH /profile` no tocan `syncProfileWithIntegration` (no tienen nada que ver con nombre/foto). Controla:
+- `notificationSoundEnabled` (`boolean`, opcional): si el cliente reproduce un tono al recibir un mensaje nuevo (default `true`).
+- `language` (`"es" | "en"`, opcional): idioma preferido de la interfaz (default `"es"`).
+
+Al menos un campo debe enviarse en la petición.
 
 ```js
 await fetch("http://localhost:4000/api/v1/auth/profile/preferences", {
   method: "PATCH",
   headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-  body: JSON.stringify({ notificationSoundEnabled: false }),
-}); // 200 { "notificationSoundEnabled": false }
+  body: JSON.stringify({ notificationSoundEnabled: false, language: "en" }),
+}); // 200 { "notificationSoundEnabled": false, "language": "en" }
 ```
 
-`notificationSoundEnabled` viaja también en `user` de `POST /api/v1/auth/login` (arriba) — el frontend lo guarda en la sesión igual que `fullName`, sin necesitar un fetch aparte. Errores: `400` (falta o no es boolean).
+`notificationSoundEnabled` y `language` viajan también en `user` de `POST /api/v1/auth/login` (arriba) — el frontend los guarda en la sesión igual que `fullName`, sin necesitar un fetch aparte. Errores: `400` (ninguna preferencia proporcionada o tipo inválido).
 
 ---
 

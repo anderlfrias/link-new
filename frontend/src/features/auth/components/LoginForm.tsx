@@ -13,9 +13,11 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/providers/auth-provider";
+import { useTranslation } from "@/i18n";
 import { ApiError } from "@/types/api.types";
 
 export function LoginForm() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { login } = useAuth();
   const [user, setUser] = useState("");
@@ -33,7 +35,7 @@ export function LoginForm() {
       router.push("/");
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : "No se pudo iniciar sesión. Intentá de nuevo.",
+        err instanceof ApiError ? err.message : t("auth.defaultLoginError"),
       );
     } finally {
       setLoading(false);
@@ -44,7 +46,7 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <Input
         type="text"
-        placeholder="Usuario"
+        placeholder={t("auth.username")}
         autoComplete="username"
         icon={<IconUser size={18} stroke={1.75} />}
         value={user}
@@ -53,7 +55,7 @@ export function LoginForm() {
       />
       <Input
         type={showPassword ? "text" : "password"}
-        placeholder="Contraseña"
+        placeholder={t("auth.password")}
         autoComplete="current-password"
         icon={<IconLock size={18} stroke={1.75} />}
         rightElement={
@@ -61,10 +63,10 @@ export function LoginForm() {
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
             className="text-neutral-400 hover:text-brand-ink dark:hover:text-white"
-            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
           >
             {showPassword ? (
-              <IconEyeOff size={18} stroke={1.75} />
+               <IconEyeOff size={18} stroke={1.75} />
             ) : (
               <IconEye size={18} stroke={1.75} />
             )}
@@ -84,7 +86,7 @@ export function LoginForm() {
 
       <Button type="submit" disabled={loading} className="mt-2 w-full">
         {loading && <IconLoader2 size={18} className="animate-spin" />}
-        {loading ? "Ingresando..." : "Ingresar"}
+        {loading ? t("auth.loggingIn") : t("auth.loginButton")}
       </Button>
     </form>
   );

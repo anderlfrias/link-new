@@ -5,6 +5,7 @@ import { IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useTranslation } from "@/i18n";
 import type { CreatePollPayload } from "@/features/messages/types/message.types";
 
 interface CreatePollModalProps {
@@ -14,6 +15,7 @@ interface CreatePollModalProps {
 }
 
 export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalProps) {
+  const { t } = useTranslation();
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [allowMultiple, setAllowMultiple] = useState(false);
@@ -47,19 +49,19 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
     e.preventDefault();
     const cleanQuestion = question.trim();
     if (!cleanQuestion) {
-      setError("Debes escribir una pregunta para la encuesta.");
+      setError(t("modals.pollQuestionRequired"));
       return;
     }
 
     const cleanOptions = options.map((opt) => opt.trim()).filter(Boolean);
     if (cleanOptions.length < 2) {
-      setError("Debes incluir al menos 2 opciones con texto.");
+      setError(t("modals.pollOptionsMin"));
       return;
     }
 
     const uniqueSet = new Set(cleanOptions.map((opt) => opt.toLowerCase()));
     if (uniqueSet.size !== cleanOptions.length) {
-      setError("Las opciones no pueden ser iguales entre sí.");
+      setError(t("modals.pollOptionsDuplicate"));
       return;
     }
 
@@ -76,7 +78,7 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
       setAllowMultiple(false);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear la encuesta.");
+      setError(err instanceof Error ? err.message : t("modals.pollCreateError"));
     } finally {
       setSubmitting(false);
     }
@@ -86,15 +88,15 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
   const canSubmit = question.trim().length > 0 && cleanOptions.length >= 2 && !submitting;
 
   return (
-    <Modal onClose={onClose} aria-label="Crear encuesta">
+    <Modal onClose={onClose} aria-label={t("modals.createPollButton")}>
       <form onSubmit={handleSubmit} className="flex max-h-[85vh] flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-black/5 px-4 py-3 dark:border-white/10">
-          <h2 className="text-base font-semibold text-brand-ink dark:text-white">Crear encuesta</h2>
+          <h2 className="text-base font-semibold text-brand-ink dark:text-white">{t("modals.createPollButton")}</h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Cerrar modal"
+            aria-label={t("modals.closeModal")}
             className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/10"
           >
             <IconX size={18} stroke={1.75} />
@@ -111,11 +113,11 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
 
           <div>
             <label htmlFor="poll-question" className="block text-xs font-medium text-neutral-600 dark:text-neutral-300 mb-1">
-              Pregunta
+              {t("modals.pollQuestion")}
             </label>
             <Input
               id="poll-question"
-              placeholder="¿Hacer una pregunta?"
+              placeholder={t("modals.pollQuestionPlaceholder")}
               value={question}
               onChange={(e) => {
                 setError(null);
@@ -128,24 +130,24 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
 
           <div>
             <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-300 mb-1.5">
-              Opciones
+              {t("modals.pollOptionsLabel")}
             </label>
             <div className="space-y-2">
               {options.map((opt, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <Input
-                    placeholder={`Opción ${idx + 1}`}
+                    placeholder={t("modals.pollOptionPlaceholder", { number: idx + 1 })}
                     value={opt}
                     onChange={(e) => handleOptionChange(idx, e.target.value)}
                     maxLength={200}
-                    aria-label={`Opción ${idx + 1}`}
+                    aria-label={t("modals.pollOptionPlaceholder", { number: idx + 1 })}
                   />
                   {options.length > 2 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveOption(idx)}
-                      title="Eliminar opción"
-                      aria-label={`Eliminar opción ${idx + 1}`}
+                      title={t("modals.deleteOption")}
+                      aria-label={t("modals.pollDeleteOption", { number: idx + 1 })}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
                     >
                       <IconTrash size={16} stroke={1.75} />
@@ -162,7 +164,7 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
                 className="mt-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-brand-blue hover:text-brand-blue-dark dark:hover:text-brand-blue"
               >
                 <IconPlus size={16} stroke={2} />
-                Agregar opción
+                {t("modals.addOption")}
               </button>
             )}
           </div>
@@ -172,10 +174,10 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
             <label className="flex items-center justify-between cursor-pointer select-none">
               <div>
                 <span className="text-sm font-medium text-brand-ink dark:text-white">
-                  Permitir varias respuestas
+                  {t("modals.allowMultipleAnswers")}
                 </span>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Los participantes pueden votar en más de una opción
+                  {t("modals.allowMultipleAnswersDesc")}
                 </p>
               </div>
               <input
@@ -191,10 +193,10 @@ export function CreatePollModal({ isOpen, onClose, onSubmit }: CreatePollModalPr
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-3 dark:border-white/10">
           <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={!canSubmit}>
-            {submitting ? "Creando..." : "Crear encuesta"}
+            {submitting ? t("modals.creatingPoll") : t("modals.createPollButton")}
           </Button>
         </div>
       </form>

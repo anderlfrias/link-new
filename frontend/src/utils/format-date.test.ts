@@ -62,5 +62,22 @@ describe("format-date", () => {
       const result = formatDateSeparator(older.toISOString());
       expect(result).toMatch(/15 de enero de 2026/);
     });
+
+    it("supports English locale for 'Today', 'Yesterday', and full date", () => {
+      expect(formatDateSeparator("2026-09-09T12:00:00.000Z", "en")).toBe("Today");
+
+      const yesterday = new Date(fixedNow);
+      yesterday.setDate(yesterday.getDate() - 1);
+      expect(formatDateSeparator(yesterday.toISOString(), "en")).toBe("Yesterday");
+
+      const older = new Date("2026-01-15T12:00:00.000Z");
+      expect(formatDateSeparator(older.toISOString(), "en")).toMatch(/January 15, 2026/);
+    });
+
+    it("supports English locale in formatConversationTimestamp", () => {
+      const yesterday = new Date(fixedNow);
+      yesterday.setDate(yesterday.getDate() - 1);
+      expect(formatConversationTimestamp(yesterday.toISOString(), "en")).toBe("Yesterday");
+    });
   });
 });

@@ -7,6 +7,7 @@ import type { LoginCredentials, Session } from "@/features/auth/types/auth.types
 import { disconnectSocket } from "@/lib/socket-client";
 import { SESSION_EXPIRED_EVENT, setUnauthorizedHandler } from "@/lib/api-client";
 import { SessionExpiredModal } from "@/features/auth/components/SessionExpiredModal";
+import { useTranslation } from "@/i18n";
 
 const SESSION_STORAGE_KEY = "chat-interno:session";
 
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const routerRef = useRef(router);
   routerRef.current = router;
+  const { setLocale } = useTranslation();
 
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<AuthStatus>("idle");
@@ -85,9 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {}
       return;
     }
+    if (stored?.user?.language) {
+      setLocale(stored.user.language);
+    }
     setSession(stored);
     setStatus(stored ? "authenticated" : "unauthenticated");
-  }, []);
+  }, [setLocale]);
 
   useEffect(() => {
     const handleExpired = () => {
@@ -127,11 +132,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (credentials: LoginCredentials) => {
     const response = await loginRequest(credentials);
     const nextSession: Session = { token: response.token, user: response.user };
+    if (response.user.language) {
+      setLocale(response.user.language);
+    }
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
     setStatus("authenticated");
     setIsSessionExpiredModalOpen(false);
-  }, []);
+  }, [setLocale]);
 
   const logout = useCallback(() => {
     disconnectSocket();

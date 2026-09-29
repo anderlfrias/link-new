@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NewChatModal } from "./NewChatModal";
+import { I18nProvider } from "@/i18n";
 import type { DirectoryUser } from "@/features/users/types/user.types";
 
 const mockUseUsers = vi.fn();
@@ -116,5 +117,18 @@ describe("NewChatModal", () => {
 
     await user.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("renderiza correctamente en inglés cuando el locale es en", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <NewChatModal onClose={onClose} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: "New chat" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search contact")).toBeInTheDocument();
+    expect(screen.getByText("New group")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });

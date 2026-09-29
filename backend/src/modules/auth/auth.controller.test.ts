@@ -10,6 +10,7 @@ vi.mock("./auth.service", () => ({
   removeProfilePicture: vi.fn(),
   updateOwnName: vi.fn(),
   updateNotificationSoundEnabled: vi.fn(),
+  updatePreferences: vi.fn(),
 }));
 
 vi.mock("./jwt", () => ({
@@ -68,6 +69,7 @@ describe("auth.controller", () => {
         name: "Local Name",
         avatarFileId: "avatar-1",
         notificationSoundEnabled: true,
+        language: "es",
         syncProfileWithIntegration: true,
       } as any;
 
@@ -96,6 +98,7 @@ describe("auth.controller", () => {
           fullName: "Local Name",
           internalUserId: "internal-id-1",
           notificationSoundEnabled: true,
+          language: "es",
         },
       });
 
@@ -365,7 +368,7 @@ describe("auth.controller", () => {
   });
 
   describe("updatePreferences", () => {
-    it("actualiza notificationSoundEnabled y devuelve la preferencia actualizada", async () => {
+    it("actualiza notificationSoundEnabled y devuelve las preferencias actualizadas", async () => {
       const req = createMockRequest({
         user: { internalUserId: "u-123" } as any,
         body: { notificationSoundEnabled: false },
@@ -373,14 +376,35 @@ describe("auth.controller", () => {
       const res = createMockResponse();
       const next = createMockNext();
 
-      vi.mocked(AuthService.updateNotificationSoundEnabled).mockResolvedValue({
+      vi.mocked(AuthService.updatePreferences).mockResolvedValue({
         notificationSoundEnabled: false,
+        language: "es",
       } as any);
 
       await updatePreferences(req, res, next);
 
-      expect(AuthService.updateNotificationSoundEnabled).toHaveBeenCalledWith("u-123", false);
-      expect(res.json).toHaveBeenCalledWith({ notificationSoundEnabled: false });
+      expect(AuthService.updatePreferences).toHaveBeenCalledWith("u-123", { notificationSoundEnabled: false });
+      expect(res.json).toHaveBeenCalledWith({ notificationSoundEnabled: false, language: "es" });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("actualiza language y devuelve las preferencias actualizadas", async () => {
+      const req = createMockRequest({
+        user: { internalUserId: "u-123" } as any,
+        body: { language: "en" },
+      });
+      const res = createMockResponse();
+      const next = createMockNext();
+
+      vi.mocked(AuthService.updatePreferences).mockResolvedValue({
+        notificationSoundEnabled: true,
+        language: "en",
+      } as any);
+
+      await updatePreferences(req, res, next);
+
+      expect(AuthService.updatePreferences).toHaveBeenCalledWith("u-123", { language: "en" });
+      expect(res.json).toHaveBeenCalledWith({ notificationSoundEnabled: true, language: "en" });
       expect(next).not.toHaveBeenCalled();
     });
   });

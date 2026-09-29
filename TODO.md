@@ -34,7 +34,7 @@ Grupos y Llamadas
 
 Sistema y Configuración
 
-[ ] Multi-idioma: Soporte para múltiples idiomas.
+[x] Multi-idioma: Soporte para múltiples idiomas.
 
 [ ] Versionamiento: Versionar la aplicación.
 

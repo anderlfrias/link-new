@@ -1,14 +1,8 @@
 "use client";
 
 import { cn } from "@/utils/cn";
+import { useTranslation } from "@/i18n";
 import type { ConversationFilter } from "@/features/conversations/types/conversation.types";
-
-const FILTERS: { value: ConversationFilter; label: string }[] = [
-  { value: "all", label: "Todos" },
-  { value: "unread", label: "No leídos" },
-  { value: "groups", label: "Grupos" },
-  { value: "favorites", label: "Favoritos" },
-];
 
 interface ConversationFilterBarProps {
   active: ConversationFilter;
@@ -16,9 +10,18 @@ interface ConversationFilterBarProps {
 }
 
 export function ConversationFilterBar({ active, onChange }: ConversationFilterBarProps) {
+  const { t } = useTranslation();
+
+  const filters: { value: ConversationFilter; label: string }[] = [
+    { value: "all", label: t("chatList.filterAll") },
+    { value: "unread", label: t("chatList.filterUnread") },
+    { value: "groups", label: t("chatList.filterGroups") },
+    { value: "favorites", label: t("chatList.filterFavorites") },
+  ];
+
   return (
     <div className="flex gap-2 overflow-x-auto">
-      {FILTERS.map((filter) => (
+      {filters.map((filter) => (
         <button
           key={filter.value}
           type="button"

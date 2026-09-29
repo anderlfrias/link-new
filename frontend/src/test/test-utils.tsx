@@ -4,6 +4,7 @@ import { AppProviders } from "@/providers/app-providers";
 import type { AuthUser, Session } from "@/features/auth/types/auth.types";
 import type { PublicAppSettings } from "@/features/settings/types/public-settings.types";
 import { THEME_STORAGE_KEY } from "@/constants/theme";
+import { LOCALE_STORAGE_KEY, type Locale } from "@/i18n/types";
 
 export function createMockAuthUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -50,6 +51,7 @@ export function createMockPublicSettings(
 
 interface CustomRenderOptions extends Omit<RenderOptions, "wrapper"> {
   initialTheme?: "light" | "dark";
+  initialLocale?: Locale;
   initialSession?: Session | null;
 }
 
@@ -57,10 +59,14 @@ export function renderWithProviders(
   ui: ReactElement,
   options: CustomRenderOptions = {},
 ) {
-  const { initialTheme, initialSession, ...renderOptions } = options;
+  const { initialTheme, initialLocale, initialSession, ...renderOptions } = options;
 
   if (initialTheme) {
     window.localStorage.setItem(THEME_STORAGE_KEY, initialTheme);
+  }
+
+  if (initialLocale) {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, initialLocale);
   }
 
   if (initialSession !== undefined) {

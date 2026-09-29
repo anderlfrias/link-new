@@ -19,21 +19,26 @@ import { useProfilePicture } from "@/features/auth/hooks/use-profile-picture";
 import { useUpdateProfilePicture } from "@/features/profile/hooks/use-update-profile-picture";
 import { useUpdateProfileName } from "@/features/profile/hooks/use-update-profile-name";
 import { useUpdateNotificationSound } from "@/features/profile/hooks/use-update-notification-sound";
+import { useUpdateLanguage } from "@/features/profile/hooks/use-update-language";
+import { useTranslation } from "@/i18n";
 import { AvatarSelectionModal } from "@/features/profile/components/AvatarSelectionModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { LanguageSelector } from "@/components/ui/LanguageSelector";
 
 interface ProfileSettingsPanelProps {
   onClose: () => void;
 }
 
 export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
+  const { t } = useTranslation();
   const { session } = useAuth();
   const { url: profilePictureUrl } = useProfilePicture();
   const { upload, remove, pending, error } = useUpdateProfilePicture();
   const { updateName, pending: updatingName, error: nameError } = useUpdateProfileName();
   const { setEnabled: setSoundEnabled, pending: updatingSound, error: soundError } = useUpdateNotificationSound();
+  const { changeLanguage, pending: updatingLanguage, error: languageError } = useUpdateLanguage();
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
@@ -81,19 +86,19 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
         <button
           type="button"
           onClick={onClose}
-          aria-label="Volver"
+          aria-label={t("common.back")}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
         >
           <IconArrowLeft size={20} stroke={1.75} />
         </button>
-        <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Mi perfil</h2>
+        <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">{t("profile.myProfile")}</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-6">
-        {(error || nameError || soundError) && (
+        {(error || nameError || soundError || languageError) && (
           <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
             <IconAlertCircle size={16} className="shrink-0" />
-            <span>{error || nameError || soundError}</span>
+            <span>{error || nameError || soundError || languageError}</span>
           </div>
         )}
 
@@ -102,7 +107,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             type="button"
             onClick={() => setIsAvatarModalOpen(true)}
             disabled={pending}
-            title="Cambiar foto de perfil"
+            title={t("profile.changePhoto")}
             className="group relative cursor-pointer rounded-full focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 dark:focus:ring-offset-neutral-900"
           >
             <Avatar name={currentName} imageUrl={profilePictureUrl} size="xl" />
@@ -113,7 +118,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
                 <IconCamera size={22} className="text-white" stroke={2} />
-                <span className="text-[10px] font-medium text-white">Cambiar</span>
+                <span className="text-[10px] font-medium text-white">{t("common.edit")}</span>
               </div>
             )}
             <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-brand-blue text-white shadow-md dark:border-neutral-900">
@@ -136,7 +141,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
                 type="button"
                 onClick={saveName}
                 disabled={updatingName || !nameDraft.trim()}
-                aria-label="Guardar nombre"
+                aria-label={t("profile.saveName")}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-brand-blue hover:bg-black/5 disabled:opacity-40 dark:hover:bg-white/10"
               >
                 {updatingName ? <IconLoader2 className="animate-spin" size={16} /> : <IconCheck size={18} />}
@@ -148,7 +153,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
                   setEditingName(false);
                 }}
                 disabled={updatingName}
-                aria-label="Cancelar"
+                aria-label={t("common.cancel")}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/10"
               >
                 <IconX size={18} />
@@ -160,7 +165,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
               <button
                 type="button"
                 onClick={() => setEditingName(true)}
-                aria-label="Editar mi nombre"
+                aria-label={t("profile.editName")}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
               >
                 <IconPencil size={14} stroke={1.75} />
@@ -177,7 +182,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             className="w-full gap-2 shadow-sm"
           >
             <IconPhoto size={16} stroke={1.75} />
-            Cambiar foto o avatar
+            {t("profile.changePhotoOrAvatar")}
           </Button>
 
           {!confirmingRemove ? (
@@ -190,21 +195,21 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
                 className="w-full"
               >
                 <IconTrash size={16} stroke={1.75} />
-                Eliminar foto actual
+                {t("profile.deleteCurrentPhoto")}
               </Button>
             ) : null
           ) : (
             <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm dark:bg-red-500/10">
-              <span className="flex-1 text-red-700 dark:text-red-300">¿Eliminar tu foto de perfil?</span>
+              <span className="flex-1 text-red-700 dark:text-red-300">{t("profile.confirmDeletePhoto")}</span>
               <button
                 type="button"
                 onClick={() => setConfirmingRemove(false)}
                 className="rounded px-2 py-1 text-neutral-600 hover:bg-black/5 dark:text-neutral-300 dark:hover:bg-white/10"
               >
-                Cancelar
+                {t("common.cancel")}
               </button>
               <Button type="button" variant="danger" disabled={pending} onClick={handleRemove}>
-                Eliminar
+                {t("common.delete")}
               </Button>
             </div>
           )}
@@ -213,18 +218,18 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
         {/* Sección de galería de ilustraciones y avatares */}
         <div className="mt-6">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-brand-ink dark:text-white">Avatares e ilustraciones</h3>
+            <h3 className="text-sm font-medium text-brand-ink dark:text-white">{t("profile.avatarsAndIllustrations")}</h3>
             <button
               type="button"
               onClick={() => setIsAvatarModalOpen(true)}
               disabled={pending}
               className="text-xs font-medium text-brand-blue hover:underline dark:text-brand-blue-light"
             >
-              Ver catálogo
+              {t("profile.viewCatalog")}
             </button>
           </div>
           <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
-            Elegí entre ilustraciones de personas, robots, formas abstractas y estilos retro para tu foto de perfil.
+            {t("profile.catalogDescription")}
           </p>
           <button
             type="button"
@@ -238,10 +243,10 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
               </div>
               <div>
                 <span className="block text-sm font-medium text-brand-ink dark:text-white">
-                  Galería de ilustraciones
+                  {t("profile.galleryTitle")}
                 </span>
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Explorar opciones y personalizar colores
+                  {t("profile.gallerySubtitle")}
                 </span>
               </div>
             </div>
@@ -254,12 +259,27 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
         </div>
 
         <div className="mt-6">
-          <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Notificaciones</h3>
+          <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">{t("profile.notifications")}</h3>
           <Checkbox
             checked={session.user.notificationSoundEnabled !== false}
             disabled={updatingSound}
             onChange={(event) => setSoundEnabled(event.target.checked)}
-            label="Reproducir un sonido al recibir mensajes"
+            label={t("profile.soundNotification")}
+          />
+        </div>
+
+        {/* Sección de Selección de Idioma */}
+        <div className="mt-6">
+          <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">
+            {t("profile.language")}
+          </h3>
+          <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+            {t("profile.languageDescription")}
+          </p>
+          <LanguageSelector
+            variant="segmented"
+            disabled={updatingLanguage}
+            onLanguageChange={(locale) => void changeLanguage(locale)}
           />
         </div>
       </div>

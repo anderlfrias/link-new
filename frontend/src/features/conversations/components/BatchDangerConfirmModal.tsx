@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { IconAlertCircle, IconAlertTriangle, IconLoader2 } from "@tabler/icons-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { useTranslation } from "@/i18n";
 import type { ConversationListItem } from "@/features/conversations/types/conversation.types";
 
 interface BatchDangerConfirmModalProps {
@@ -23,17 +24,22 @@ export function BatchDangerConfirmModal({
   onConfirm,
   onCancel,
 }: BatchDangerConfirmModalProps) {
+  const { t } = useTranslation();
   const count = selectedConversations.length;
 
   const { title, description, confirmLabel } = useMemo(() => {
     if (kind === "leave") {
       const isSingle = count === 1;
       return {
-        title: isSingle ? "Salir del grupo" : `¿Salir de ${count} grupos?`,
+        title: isSingle
+          ? t("modals.batchLeaveTitleSingle")
+          : t("modals.batchLeaveTitleMultiple", { count }),
         description: isSingle
-          ? "Dejarás de ser miembro de este grupo y no podrás ver los mensajes nuevos."
-          : `Dejarás de ser miembro de estos ${count} grupos y no podrás ver los mensajes nuevos.`,
-        confirmLabel: isSingle ? "Salir del grupo" : `Salir de ${count} grupos`,
+          ? t("modals.batchLeaveDescSingle")
+          : t("modals.batchLeaveDescMultiple", { count }),
+        confirmLabel: isSingle
+          ? t("modals.batchLeaveConfirmSingle")
+          : t("modals.batchLeaveConfirmMultiple", { count }),
       };
     }
 
@@ -44,31 +50,39 @@ export function BatchDangerConfirmModal({
     if (groupCount === 0) {
       const isSingle = privateCount === 1;
       return {
-        title: isSingle ? "Eliminar chat" : `¿Eliminar ${privateCount} chats?`,
+        title: isSingle
+          ? t("modals.batchDeletePrivateTitleSingle")
+          : t("modals.batchDeletePrivateTitleMultiple", { count: privateCount }),
         description: isSingle
-          ? "Se eliminará esta conversación de tu lista. Si te escriben de nuevo o le escribes a la persona, reaparecerá."
-          : `Se eliminarán estas ${privateCount} conversaciones de tu lista. Si te escriben de nuevo, volverán a aparecer.`,
-        confirmLabel: isSingle ? "Eliminar chat" : `Eliminar ${privateCount} chats`,
+          ? t("modals.batchDeletePrivateDescSingle")
+          : t("modals.batchDeletePrivateDescMultiple", { count: privateCount }),
+        confirmLabel: isSingle
+          ? t("modals.batchDeletePrivateConfirmSingle")
+          : t("modals.batchDeletePrivateConfirmMultiple", { count: privateCount }),
       };
     }
 
     if (privateCount === 0) {
       const isSingle = groupCount === 1;
       return {
-        title: isSingle ? "Eliminar grupo" : `¿Eliminar ${groupCount} grupos?`,
+        title: isSingle
+          ? t("modals.batchDeleteGroupTitleSingle")
+          : t("modals.batchDeleteGroupTitleMultiple", { count: groupCount }),
         description: isSingle
-          ? "Esta acción no se puede deshacer. El grupo se eliminará definitivamente para todos los integrantes."
-          : `Esta acción no se puede deshacer. Los ${groupCount} grupos se eliminarán definitivamente para todos los integrantes.`,
-        confirmLabel: isSingle ? "Eliminar grupo" : `Eliminar ${groupCount} grupos`,
+          ? t("modals.batchDeleteGroupDescSingle")
+          : t("modals.batchDeleteGroupDescMultiple", { count: groupCount }),
+        confirmLabel: isSingle
+          ? t("modals.batchDeleteGroupConfirmSingle")
+          : t("modals.batchDeleteGroupConfirmMultiple", { count: groupCount }),
       };
     }
 
     return {
-      title: `¿Eliminar ${count} conversaciones?`,
-      description: `Se eliminarán ${privateCount} chat${privateCount > 1 ? "s" : ""} de tu lista y ${groupCount} grupo${groupCount > 1 ? "s" : ""} de forma definitiva para todos los integrantes.`,
-      confirmLabel: `Eliminar ${count} conversaciones`,
+      title: t("modals.batchDeleteMixedTitle", { count }),
+      description: t("modals.batchDeleteMixedDesc", { privateCount, groupCount }),
+      confirmLabel: t("modals.batchDeleteMixedConfirm", { count }),
     };
-  }, [kind, count, selectedConversations]);
+  }, [kind, count, selectedConversations, t]);
 
   return (
     <Modal onClose={onCancel} aria-label={title}>
@@ -87,7 +101,7 @@ export function BatchDangerConfirmModal({
       </div>
       <div className="flex justify-end gap-2 border-t border-black/5 px-4 py-3 dark:border-white/10">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
-          Cancelar
+          {t("common.cancel")}
         </Button>
         <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
           {pending && <IconLoader2 className="animate-spin" size={16} />}

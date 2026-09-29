@@ -40,6 +40,7 @@ import { extractFilesFromClipboard } from "@/utils/clipboard";
 import { getActiveMentionQuery, type ActiveMentionQuery } from "@/utils/mention";
 import { getAvatarUrl } from "@/utils/file-url";
 import { clearDraft, getDraft, setDraft } from "@/features/messages/lib/draft-store";
+import { useTranslation } from "@/i18n";
 import type { DirectoryUser } from "@/features/users/types/user.types";
 import type { ContactMessagePayload, CreatePollPayload, Message } from "@/features/messages/types/message.types";
 
@@ -103,6 +104,19 @@ export function MessageInput({
   isGroup,
   onSendPoll,
 }: MessageInputProps) {
+  const { t } = useTranslation();
+  const attachmentOptions: AttachmentOption[] = useMemo(
+    () => [
+      { label: t("composer.camera"), icon: IconCamera, isCamera: true },
+      { label: t("composer.photo"), accept: "image/*", icon: IconPhoto },
+      { label: t("composer.video"), accept: "video/*", icon: IconVideo },
+      { label: t("composer.audio"), accept: "audio/*", icon: IconHeadphones },
+      { label: t("composer.document"), icon: IconFileText },
+      { label: t("composer.contact"), icon: IconUser, isContact: true },
+    ],
+    [t],
+  );
+
   const [value, setValue] = useState(() => getDraft(currentUserId, conversationId));
   const [cursorPosition, setCursorPosition] = useState(0);
 
@@ -497,7 +511,7 @@ export function MessageInput({
           <button
             type="button"
             onClick={recorder.cancel}
-            aria-label="Cancelar grabación"
+            aria-label={t("composer.cancelRecording")}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
           >
             <IconTrash size={20} stroke={1.75} />
@@ -505,13 +519,13 @@ export function MessageInput({
           <div className="flex flex-1 items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300">
             <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
             <span className="tabular-nums">{formatDuration(recorder.elapsedMs)}</span>
-            <span className="text-neutral-400 dark:text-neutral-500">Grabando nota de voz...</span>
+            <span className="text-neutral-400 dark:text-neutral-500">{t("composer.recordingVoiceNote")}</span>
           </div>
           <button
             type="button"
             onClick={() => void handleSendRecording()}
             disabled={sendingVoiceNote}
-            aria-label="Enviar nota de voz"
+            aria-label={t("composer.sendRecording")}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity disabled:opacity-40"
           >
             {sendingVoiceNote ? <IconLoader2 className="animate-spin" size={18} /> : <IconCheck size={20} />}
@@ -531,8 +545,8 @@ export function MessageInput({
             <div className="relative shrink-0" ref={attachMenuRef}>
               {attachMenuOpen && (
                 <div className="absolute bottom-full left-0 mb-2 flex flex-col overflow-hidden rounded-lg border border-black/5 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-neutral-900">
-                  {ATTACHMENT_OPTIONS.concat(
-                    isGroup ? [{ label: "Encuesta", icon: IconChartBar, isPoll: true }] : [],
+                  {attachmentOptions.concat(
+                    isGroup ? [{ label: t("composer.poll"), icon: IconChartBar, isPoll: true }] : [],
                   ).map(({ label, accept, icon: OptionIcon, isContact, isCamera, isPoll }) => (
                     <button
                       key={label}
@@ -563,7 +577,7 @@ export function MessageInput({
                   setReactionsPickerOpen(false);
                   setAttachMenuOpen((prev) => !prev);
                 }}
-                aria-label="Adjuntar"
+                aria-label={t("composer.attachFile")}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
               >
                 <IconPaperclip size={20} stroke={1.75} />
@@ -578,7 +592,7 @@ export function MessageInput({
               onKeyUp={handleTextareaCursorUpdate}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              placeholder={attachments.length > 0 ? "Agregá un mensaje (opcional)" : "Escribí un mensaje"}
+              placeholder={attachments.length > 0 ? t("composer.placeholderWithAttachments") : t("composer.placeholder")}
               className="max-h-32 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-sm text-brand-ink outline-none dark:text-white"
             />
             {session && (
@@ -603,7 +617,7 @@ export function MessageInput({
                     setReactionsPickerOpen((prev) => !prev);
                   }}
                   disabled={importingGif}
-                  aria-label="Emojis, GIFs y stickers"
+                  aria-label={t("composer.emojisGifsStickers")}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
                 >
                   {importingGif ? (
@@ -619,7 +633,7 @@ export function MessageInput({
             <button
               type="button"
               onClick={() => void handleStartRecording()}
-              aria-label="Grabar nota de voz"
+              aria-label={t("composer.recordAudio")}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity"
             >
               <IconMicrophone size={18} stroke={1.75} />
@@ -628,7 +642,7 @@ export function MessageInput({
             <button
               type="submit"
               disabled={!canSend}
-              aria-label="Enviar mensaje"
+              aria-label={t("composer.send")}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity disabled:opacity-40"
             >
               <IconSend2 size={18} stroke={1.75} />

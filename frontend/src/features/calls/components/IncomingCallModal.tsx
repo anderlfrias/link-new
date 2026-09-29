@@ -3,9 +3,11 @@
 import React from "react";
 import { IconPhone, IconPhoneOff, IconVideo } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
+import { useTranslation } from "@/i18n";
 import { useCall } from "../hooks/use-call";
 
 export function IncomingCallModal() {
+  const { t } = useTranslation();
   const { callState, activeCall, acceptCall, rejectCall } = useCall();
 
   if (callState !== "incoming" || !activeCall) {
@@ -18,7 +20,7 @@ export function IncomingCallModal() {
   return (
     <div
       role="dialog"
-      aria-label="Llamada entrante"
+      aria-label={t("calls.incomingCall")}
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in"
     >
@@ -39,12 +41,12 @@ export function IncomingCallModal() {
           {isVideo ? (
             <>
               <IconVideo size={18} className="text-brand-blue" />
-              <span>Videollamada entrante...</span>
+              <span>{t("calls.incomingVideoCallSubtitle")}</span>
             </>
           ) : (
             <>
               <IconPhone size={18} className="text-brand-blue" />
-              <span>Llamada de voz entrante...</span>
+              <span>{t("calls.incomingAudioCallSubtitle")}</span>
             </>
           )}
         </p>
@@ -55,7 +57,7 @@ export function IncomingCallModal() {
           <button
             type="button"
             onClick={() => void rejectCall("declined")}
-            aria-label="Rechazar llamada"
+            aria-label={t("calls.declineCall")}
             className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-600/30 transition-transform hover:scale-105 active:scale-95"
           >
             <IconPhoneOff size={26} stroke={2} />
@@ -65,7 +67,7 @@ export function IncomingCallModal() {
           <button
             type="button"
             onClick={() => void acceptCall()}
-            aria-label="Aceptar llamada"
+            aria-label={t("calls.acceptCall")}
             className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 transition-transform hover:scale-105 active:scale-95 animate-pulse"
           >
             {isVideo ? <IconVideo size={26} stroke={2} /> : <IconPhone size={26} stroke={2} />}

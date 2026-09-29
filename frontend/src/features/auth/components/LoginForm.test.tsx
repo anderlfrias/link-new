@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { LoginForm } from "./LoginForm";
 import { useAuth } from "@/providers/auth-provider";
+import { I18nProvider } from "@/i18n";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/types/api.types";
 
@@ -35,6 +36,18 @@ describe("LoginForm", () => {
     expect(screen.getByPlaceholderText("Usuario")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Contraseña")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ingresar" })).toBeInTheDocument();
+  });
+
+  it("renders in English when locale is set to en", () => {
+    render(
+      <I18nProvider initialLocale="en">
+        <LoginForm />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByPlaceholderText("Username")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Password")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 
   it("toggles password visibility when eye icon button is clicked", async () => {

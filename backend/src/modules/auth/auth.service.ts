@@ -15,6 +15,7 @@ import {
   setLocalName,
   setNotificationSoundEnabled,
   updateAvatarFileId,
+  updateUserPreferences,
   upsertUserFromExternalUser,
 } from "./auth.repository";
 import { MappedUser, ExternalUserLoginResponse } from "./auth.types";
@@ -277,10 +278,18 @@ export function updateOwnName(userId: string, name: string): Promise<User> {
   return setLocalName(userId, name);
 }
 
+/// Actualizar preferencias propias del usuario (sonido, idioma) — 100% locales.
+export function updatePreferences(
+  userId: string,
+  prefs: { notificationSoundEnabled?: boolean; language?: string },
+): Promise<User> {
+  return updateUserPreferences(userId, prefs);
+}
+
 /// Activar/desactivar el tono de notificación de mensajes nuevos — preferencia
 /// exclusiva de este usuario, ver `notificationSoundEnabled` en schema.prisma.
 export function updateNotificationSoundEnabled(userId: string, enabled: boolean): Promise<User> {
-  return setNotificationSoundEnabled(userId, enabled);
+  return updatePreferences(userId, { notificationSoundEnabled: enabled });
 }
 
 /// URL pública segura (`/api/v1/files/:id/content`) de mi propia foto ya cacheada

@@ -158,4 +158,12 @@ describe("MessagePreviewLabel & parseMessagePreview", () => {
     render(<MessagePreviewLabel preview="Hola a todos" />);
     expect(screen.getByText("Hola a todos")).toBeInTheDocument();
   });
+
+  it("localizes message preview in English", () => {
+    const parsedNull = parseMessagePreview(null, "en");
+    expect(parsedNull.text).toBe("No messages yet");
+
+    const parsedDeleted = parseMessagePreview("Mensaje eliminado", "en");
+    expect(parsedDeleted.text).toBe("Message deleted");
+  });
 });

@@ -12,6 +12,7 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
+import { useTranslation } from "@/i18n";
 
 interface ConversationSelectionToolbarProps {
   selectedCount: number;
@@ -54,8 +55,11 @@ export function ConversationSelectionToolbar({
   onDelete,
   pending = false,
 }: ConversationSelectionToolbarProps) {
+  const { t } = useTranslation();
   const countLabel =
-    selectedCount === 1 ? "1 seleccionada" : `${selectedCount} seleccionadas`;
+    selectedCount === 1
+      ? t("chatList.selectedSingle")
+      : t("chatList.selectedCount", { count: selectedCount });
 
   return (
     <div
@@ -68,8 +72,8 @@ export function ConversationSelectionToolbar({
           type="button"
           onClick={onClose}
           disabled={pending}
-          aria-label="Cerrar selección"
-          title="Cerrar selección (Esc)"
+          aria-label={t("chatList.closeSelection")}
+          title={t("chatList.closeSelectionShortcut")}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/5 hover:text-brand-ink disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
         >
           <IconX size={20} stroke={1.8} />
@@ -85,8 +89,8 @@ export function ConversationSelectionToolbar({
           type="button"
           onClick={onToggleSelectAll}
           disabled={totalCount === 0 || pending}
-          aria-label={allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
-          title={allSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+          aria-label={allSelected ? t("chatList.deselectAll") : t("chatList.selectAll")}
+          title={allSelected ? t("chatList.deselectAll") : t("chatList.selectAll")}
           className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-brand-blue-light"
         >
           <IconChecklist size={19} stroke={1.8} />
@@ -98,8 +102,8 @@ export function ConversationSelectionToolbar({
             type="button"
             onClick={onMarkAsRead}
             disabled={selectedCount === 0 || pending}
-            aria-label="Marcar como leídos"
-            title="Marcar como leídos"
+            aria-label={t("chatList.markAsRead")}
+            title={t("chatList.markAsRead")}
             className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-brand-blue-light"
           >
             <IconMailOpened size={19} stroke={1.8} />
@@ -112,8 +116,8 @@ export function ConversationSelectionToolbar({
             type="button"
             onClick={onTogglePin}
             disabled={selectedCount === 0 || pending}
-            aria-label={isAllPinned ? "Desfijar chats" : "Fijar chats"}
-            title={isAllPinned ? "Desfijar chats" : "Fijar chats"}
+            aria-label={isAllPinned ? t("chatList.unpinSelected") : t("chatList.pinSelected")}
+            title={isAllPinned ? t("chatList.unpinSelected") : t("chatList.pinSelected")}
             className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-brand-blue disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-brand-blue-light"
           >
             {isAllPinned ? <IconPinnedOff size={19} stroke={1.8} /> : <IconPin size={19} stroke={1.8} />}
@@ -126,8 +130,8 @@ export function ConversationSelectionToolbar({
             type="button"
             onClick={onToggleFavorite}
             disabled={selectedCount === 0 || pending}
-            aria-label={isAllFavorite ? "Quitar de favoritos" : "Marcar como favoritos"}
-            title={isAllFavorite ? "Quitar de favoritos" : "Marcar como favoritos"}
+            aria-label={isAllFavorite ? t("chatList.unfavoriteSelected") : t("chatList.favoriteSelected")}
+            title={isAllFavorite ? t("chatList.unfavoriteSelected") : t("chatList.favoriteSelected")}
             className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-black/5 hover:text-amber-500 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-amber-400"
           >
             {isAllFavorite ? (
@@ -144,8 +148,8 @@ export function ConversationSelectionToolbar({
             type="button"
             onClick={onLeaveGroups}
             disabled={selectedCount === 0 || pending}
-            aria-label="Salir de los grupos seleccionados"
-            title="Salir de los grupos seleccionados"
+            aria-label={t("chatList.leaveSelectedGroups")}
+            title={t("chatList.leaveSelectedGroups")}
             className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-red-500/15 dark:hover:text-red-400"
           >
             <IconDoorExit size={19} stroke={1.8} />
@@ -158,8 +162,8 @@ export function ConversationSelectionToolbar({
             type="button"
             onClick={onDelete}
             disabled={selectedCount === 0 || pending}
-            aria-label="Eliminar chats seleccionados"
-            title="Eliminar chats seleccionados"
+            aria-label={t("chatList.deleteSelectedChats")}
+            title={t("chatList.deleteSelectedChats")}
             className="inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-neutral-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-red-500/15 dark:hover:text-red-400"
           >
             {pending ? <IconLoader2 size={19} className="animate-spin" /> : <IconTrash size={19} stroke={1.8} />}

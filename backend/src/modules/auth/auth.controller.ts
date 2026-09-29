@@ -59,6 +59,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         fullName: internalUser.name,
         internalUserId: internalUser.id,
         notificationSoundEnabled: internalUser.notificationSoundEnabled,
+        language: internalUser.language,
       },
     });
 
@@ -136,10 +137,19 @@ export async function updateProfile(req: Request, res: Response, next: NextFunct
 
 export async function updatePreferences(req: Request, res: Response, next: NextFunction) {
   try {
-    const { notificationSoundEnabled } = req.body as { notificationSoundEnabled: boolean };
+    const { notificationSoundEnabled, language } = req.body as {
+      notificationSoundEnabled?: boolean;
+      language?: string;
+    };
     const userId = req.user!.internalUserId!;
-    const updated = await AuthService.updateNotificationSoundEnabled(userId, notificationSoundEnabled);
-    res.json({ notificationSoundEnabled: updated.notificationSoundEnabled });
+    const updated = await AuthService.updatePreferences(userId, {
+      ...(notificationSoundEnabled !== undefined && { notificationSoundEnabled }),
+      ...(language !== undefined && { language }),
+    });
+    res.json({
+      notificationSoundEnabled: updated.notificationSoundEnabled,
+      language: updated.language,
+    });
   } catch (error) {
     next(error);
   }

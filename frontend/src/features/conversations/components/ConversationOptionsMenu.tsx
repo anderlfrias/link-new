@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { IconCheckbox, IconDoorExit, IconPin, IconPinnedOff, IconStar, IconStarFilled, IconTrash } from "@tabler/icons-react";
+import { useTranslation } from "@/i18n";
 
 interface ConversationOptionsMenuProps {
   open: boolean;
@@ -36,6 +37,7 @@ export function ConversationOptionsMenu({
   onDeleteGroup,
   onLeaveGroup,
 }: ConversationOptionsMenuProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function ConversationOptionsMenu({
           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
         >
           <IconCheckbox size={16} stroke={1.75} />
-          Seleccionar
+          {t("chatList.select")}
         </button>
       )}
       <button
@@ -78,7 +80,7 @@ export function ConversationOptionsMenu({
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
       >
         {isPinned ? <IconPinnedOff size={16} stroke={1.75} /> : <IconPin size={16} stroke={1.75} />}
-        {isPinned ? "Desfijar" : "Fijar arriba"}
+        {isPinned ? t("chatList.unpin") : t("chatList.pinAbove")}
       </button>
       <button
         type="button"
@@ -89,7 +91,7 @@ export function ConversationOptionsMenu({
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-brand-ink hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
       >
         {isFavorite ? <IconStarFilled size={16} /> : <IconStar size={16} stroke={1.75} />}
-        {isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
+        {isFavorite ? t("chatList.unmarkFavorite") : t("chatList.markAsFavorite")}
       </button>
       {onLeaveGroup && (
         <button
@@ -101,7 +103,7 @@ export function ConversationOptionsMenu({
           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
         >
           <IconDoorExit size={16} stroke={1.75} />
-          Salir del grupo
+          {t("chatList.leaveGroup")}
         </button>
       )}
       {(onDeleteChat || onDeleteGroup) && (
@@ -114,7 +116,7 @@ export function ConversationOptionsMenu({
           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
         >
           <IconTrash size={16} stroke={1.75} />
-          {onDeleteChat ? "Eliminar chat" : "Eliminar grupo"}
+          {onDeleteChat ? t("chatList.deleteChat") : t("chatList.deleteGroup")}
         </button>
       )}
     </div>

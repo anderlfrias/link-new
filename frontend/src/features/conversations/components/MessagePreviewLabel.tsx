@@ -15,6 +15,8 @@ import {
   type TablerIcon,
 } from "@tabler/icons-react";
 import { cn } from "@/utils/cn";
+import type { Locale } from "@/i18n/types";
+import { useTranslation } from "@/i18n";
 
 export interface ParsedPreview {
   Icon: TablerIcon | null;
@@ -27,16 +29,24 @@ export interface ParsedPreview {
  * y limpiar el texto eliminando emojis, de modo que la UI
  * utilice íconos visuales de Tabler en vez de emojis crudos.
  */
-export function parseMessagePreview(rawPreview: string | null | undefined): ParsedPreview {
+export function parseMessagePreview(rawPreview: string | null | undefined, locale: Locale = "es"): ParsedPreview {
   if (!rawPreview || !rawPreview.trim()) {
-    return { Icon: null, text: "Sin mensajes todavía", isDeleted: false };
+    return {
+      Icon: null,
+      text: locale === "en" ? "No messages yet" : "Sin mensajes todavía",
+      isDeleted: false,
+    };
   }
 
   const trimmed = rawPreview.trim();
 
   // Mensaje eliminado
-  if (trimmed === "Mensaje eliminado" || trimmed.startsWith("🚫") || trimmed.includes("Mensaje eliminado")) {
-    return { Icon: IconBan, text: "Mensaje eliminado", isDeleted: true };
+  if (trimmed === "Mensaje eliminado" || trimmed.startsWith("🚫") || trimmed.includes("Mensaje eliminado") || trimmed.toLowerCase().includes("message deleted")) {
+    return {
+      Icon: IconBan,
+      text: locale === "en" ? "Message deleted" : "Mensaje eliminado",
+      isDeleted: true,
+    };
   }
 
   // Sticker
@@ -160,11 +170,17 @@ export function MessagePreviewLabel({
   className,
   iconClassName,
 }: MessagePreviewLabelProps) {
-  const { Icon, text, isDeleted } = parseMessagePreview(preview);
+  const { locale, t } = useTranslation();
+  const { Icon, text, isDeleted } = parseMessagePreview(preview, locale);
+
+  const localizedSenderPrefix =
+    senderPrefix === "Tú: "
+      ? t("chatList.youPrefix")
+      : senderPrefix;
 
   return (
     <span className={cn("inline-flex min-w-0 max-w-full items-center truncate text-sm text-neutral-500 dark:text-neutral-400", className)}>
-      {senderPrefix && <span className="shrink-0 mr-1">{senderPrefix}</span>}
+      {localizedSenderPrefix && <span className="shrink-0 mr-1">{localizedSenderPrefix}</span>}
       {Icon && (
         <Icon
           size={15}

@@ -3,6 +3,7 @@
 import { IconAlertCircle, IconAlertTriangle, IconLoader2 } from "@tabler/icons-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { useTranslation } from "@/i18n";
 
 interface DeleteMessageConfirmModalProps {
   pending: boolean;
@@ -19,8 +20,11 @@ export function DeleteMessageConfirmModal({
   onConfirm,
   onCancel,
 }: DeleteMessageConfirmModalProps) {
+  const { t } = useTranslation();
   const isMultiple = count > 1;
-  const title = isMultiple ? `Eliminar ${count} mensajes para todos` : "Eliminar mensaje para todos";
+  const title = isMultiple
+    ? t("modals.deleteMessagesForEveryoneTitleMultiple", { count })
+    : t("modals.deleteMessageForEveryoneTitleSingle");
 
   return (
     <Modal onClose={onCancel} aria-label={title}>
@@ -30,8 +34,8 @@ export function DeleteMessageConfirmModal({
           <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
           <span>
             {isMultiple
-              ? "El resto de la conversación va a ver \"Mensaje eliminado\" en su lugar para cada mensaje. Esta acción no se puede deshacer."
-              : "El resto de la conversación va a ver \"Mensaje eliminado\" en su lugar. Esta acción no se puede deshacer."}
+              ? t("modals.deleteForEveryoneWarningMultiple")
+              : t("modals.deleteForEveryoneWarningSingle")}
           </span>
         </div>
         {error && (
@@ -43,11 +47,11 @@ export function DeleteMessageConfirmModal({
       </div>
       <div className="flex justify-end gap-2 border-t border-black/5 px-4 py-3 dark:border-white/10">
         <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
-          Cancelar
+          {t("common.cancel")}
         </Button>
         <Button type="button" variant="danger" onClick={onConfirm} disabled={pending}>
           {pending && <IconLoader2 className="animate-spin" size={16} />}
-          {isMultiple ? `Eliminar para todos (${count})` : "Eliminar para todos"}
+          {isMultiple ? t("modals.deleteForEveryoneMultiple", { count }) : t("modals.deleteForEveryone")}
         </Button>
       </div>
     </Modal>

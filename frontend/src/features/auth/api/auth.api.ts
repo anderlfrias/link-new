@@ -32,15 +32,33 @@ export function updateProfile(token: string, name: string): Promise<{ name: stri
   return apiRequest<{ name: string }>("/v1/auth/profile", { method: "PATCH", token, body: { name } });
 }
 
+export interface UserPreferencesPayload {
+  notificationSoundEnabled?: boolean;
+  language?: "es" | "en";
+}
+
+export interface UserPreferencesResponse {
+  notificationSoundEnabled: boolean;
+  language?: "es" | "en";
+}
+
+/** Actualiza las preferencias del usuario (sonido, idioma) en backend. */
+export function updateUserPreferences(
+  token: string,
+  preferences: UserPreferencesPayload,
+): Promise<UserPreferencesResponse> {
+  return apiRequest<UserPreferencesResponse>("/v1/auth/profile/preferences", {
+    method: "PATCH",
+    token,
+    body: preferences,
+  });
+}
+
 /** Activa/desactiva el tono de notificación de mensajes nuevos — preferencia
  * exclusiva mía, 100% local (no existe en el proveedor externo de identidad). */
 export function updateNotificationSoundPreference(
   token: string,
   enabled: boolean,
 ): Promise<{ notificationSoundEnabled: boolean }> {
-  return apiRequest<{ notificationSoundEnabled: boolean }>("/v1/auth/profile/preferences", {
-    method: "PATCH",
-    token,
-    body: { notificationSoundEnabled: enabled },
-  });
+  return updateUserPreferences(token, { notificationSoundEnabled: enabled });
 }
