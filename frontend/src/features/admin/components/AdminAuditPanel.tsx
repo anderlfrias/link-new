@@ -9,6 +9,7 @@ import type { AdminAuditLogFilters } from "@/features/admin/types/admin-audit.ty
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { useTranslation } from "@/i18n";
 
 interface FilterDraft {
   action: string;
@@ -42,6 +43,7 @@ function draftToFilters(draft: FilterDraft): AdminAuditLogFilters {
 }
 
 export function AdminAuditPanel() {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<FilterDraft>(EMPTY_DRAFT);
   const [filters, setFilters] = useState<AdminAuditLogFilters>({});
 
@@ -66,7 +68,7 @@ export function AdminAuditPanel() {
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">
-              Registro de Auditoría
+              {t("admin.audit.title")}
             </h2>
           </div>
 
@@ -77,7 +79,7 @@ export function AdminAuditPanel() {
             >
               <IconInfoCircle size={16} className="shrink-0" />
               <span>
-                <strong>Filtro por omisión activo:</strong> mostrando solo acciones de administración y autenticación (Login, Configuración, Borrado de archivos). Las acciones de chat requieren selección explícita.
+                <strong>{t("admin.audit.defaultFilterNoticeTitle")}</strong> {t("admin.audit.defaultFilterNoticeDesc")}
               </span>
             </div>
           )}
@@ -87,17 +89,17 @@ export function AdminAuditPanel() {
               value={draft.action}
               onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}
             >
-              <option value="">Filtro por defecto (Admin y autenticación)</option>
-              <option value="ALL">Todas las acciones</option>
+              <option value="">{t("admin.audit.defaultFilterOption")}</option>
+              <option value="ALL">{t("admin.audit.allActionsOption")}</option>
               {ALL_AUDIT_ACTION_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(`admin.audit.actions.${opt.value}` as any) || opt.label}
                 </option>
               ))}
             </Select>
 
             <Input
-              placeholder="ID de usuario o actor"
+              placeholder={t("admin.audit.userIdPlaceholder")}
               value={draft.userId}
               onChange={(e) => setDraft((d) => ({ ...d, userId: e.target.value }))}
             />
@@ -115,9 +117,9 @@ export function AdminAuditPanel() {
             />
 
             <div className="col-span-1 flex gap-2 sm:col-span-2 lg:col-span-4">
-              <Button type="submit">Filtrar</Button>
+              <Button type="submit">{t("admin.audit.filter")}</Button>
               <Button type="button" variant="ghost" onClick={handleClearFilters}>
-                Limpiar
+                {t("admin.audit.clear")}
               </Button>
             </div>
           </form>
@@ -133,14 +135,14 @@ export function AdminAuditPanel() {
               <IconAlertCircle size={16} className="shrink-0" />
               <span>{error}</span>
               <Button type="button" variant="ghost" onClick={refetch}>
-                Reintentar
+                {t("admin.audit.retry")}
               </Button>
             </div>
           )}
 
           {status === "ready" && items.length === 0 && (
             <p className="py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-              No se encontraron eventos de auditoría con estos filtros.
+              {t("admin.audit.empty")}
             </p>
           )}
 
@@ -156,7 +158,7 @@ export function AdminAuditPanel() {
             <div className="flex justify-center py-3">
               <Button type="button" variant="ghost" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore && <IconLoader2 className="animate-spin" size={16} />}
-                Cargar más
+                {t("admin.audit.loadMore")}
               </Button>
             </div>
           )}

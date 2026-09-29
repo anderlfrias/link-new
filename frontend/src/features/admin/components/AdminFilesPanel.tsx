@@ -8,6 +8,7 @@ import { useDeleteAdminFile } from "@/features/admin/hooks/use-delete-admin-file
 import { AdminFileRow } from "@/features/admin/components/AdminFileRow";
 import { DeleteFileConfirmModal } from "@/features/admin/components/DeleteFileConfirmModal";
 import type { AdminFileFilters, AdminFileListItem, AdminFileType } from "@/features/admin/types/admin-files.types";
+import { useTranslation } from "@/i18n";
 import { formatFileSize } from "@/utils/file-format";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -34,6 +35,7 @@ function draftToFilters(draft: FilterDraft): AdminFileFilters {
 }
 
 export function AdminFilesPanel() {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<FilterDraft>(EMPTY_DRAFT);
   const [filters, setFilters] = useState<AdminFileFilters>({});
   const { files, status, error, hasMore, loadingMore, loadMore, totalCount, totalSize, refetch, removeFile } =
@@ -66,24 +68,27 @@ export function AdminFilesPanel() {
     <div className="flex h-full w-full flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
-          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Archivos</h2>
+          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">{t("admin.files.title")}</h2>
 
           {stats && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black/5 bg-neutral-50/60 p-3.5 text-xs text-neutral-600 dark:border-white/10 dark:bg-neutral-900/40 dark:text-neutral-300">
               <div className="flex flex-wrap items-center gap-4">
-                <span className="font-medium text-brand-ink dark:text-white">Almacenamiento:</span>
+                <span className="font-medium text-brand-ink dark:text-white">{t("admin.files.storage")}</span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-                  Disco local: <strong className="text-brand-ink dark:text-white">{stats.localCount}</strong>
+                  {t("admin.files.localDisk")} <strong className="text-brand-ink dark:text-white">{stats.localCount}</strong>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                  SeaweedFS (S3): <strong className="text-brand-ink dark:text-white">{stats.s3Count}</strong>
+                  {t("admin.files.seaweedFs")} <strong className="text-brand-ink dark:text-white">{stats.s3Count}</strong>
                 </span>
               </div>
               {stats.migrationEnabled && (
                 <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                  Migración activa ({stats.migrationBatchSize}/lote · {stats.migrationIntervalMinutes} min)
+                  {t("admin.files.migrationActive", {
+                    batch: stats.migrationBatchSize,
+                    interval: stats.migrationIntervalMinutes,
+                  })}
                 </span>
               )}
             </div>
@@ -94,18 +99,18 @@ export function AdminFilesPanel() {
               value={draft.type}
               onChange={(event) => setDraft((d) => ({ ...d, type: event.target.value as AdminFileType | "" }))}
             >
-              <option value="">Todos los tipos</option>
-              <option value="image">Imágenes</option>
-              <option value="audio">Audio</option>
-              <option value="other">Otros</option>
+              <option value="">{t("admin.files.allTypes")}</option>
+              <option value="image">{t("admin.files.images")}</option>
+              <option value="audio">{t("admin.files.audio")}</option>
+              <option value="other">{t("admin.files.other")}</option>
             </Select>
             <Input
-              placeholder="Nombre de archivo"
+              placeholder={t("admin.files.fileNamePlaceholder")}
               value={draft.search}
               onChange={(event) => setDraft((d) => ({ ...d, search: event.target.value }))}
             />
             <Input
-              placeholder="Usuario (nombre o email)"
+              placeholder={t("admin.files.uploaderPlaceholder")}
               value={draft.uploader}
               onChange={(event) => setDraft((d) => ({ ...d, uploader: event.target.value }))}
             />
@@ -116,16 +121,16 @@ export function AdminFilesPanel() {
             />
             <Input type="date" value={draft.to} onChange={(event) => setDraft((d) => ({ ...d, to: event.target.value }))} />
             <div className="col-span-2 flex gap-2 sm:col-span-3 lg:col-span-5">
-              <Button type="submit">Filtrar</Button>
+              <Button type="submit">{t("admin.files.filter")}</Button>
               <Button type="button" variant="ghost" onClick={handleClearFilters}>
-                Limpiar
+                {t("admin.files.clear")}
               </Button>
             </div>
           </form>
 
           {status !== "error" && (status !== "loading" || files.length > 0) && (
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              {totalCount} archivo(s) · {formatFileSize(totalSize)} en total
+              {t("admin.files.filesCountTotal", { count: totalCount, size: formatFileSize(totalSize) })}
             </p>
           )}
 
@@ -140,14 +145,14 @@ export function AdminFilesPanel() {
               <IconAlertCircle size={16} className="shrink-0" />
               <span>{error}</span>
               <Button type="button" variant="ghost" onClick={refetch}>
-                Reintentar
+                {t("admin.files.retry")}
               </Button>
             </div>
           )}
 
           {status === "ready" && files.length === 0 && (
             <p className="py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-              No se encontraron archivos con estos filtros.
+              {t("admin.files.empty")}
             </p>
           )}
 
@@ -163,7 +168,7 @@ export function AdminFilesPanel() {
             <div className="flex justify-center py-3">
               <Button type="button" variant="ghost" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore && <IconLoader2 className="animate-spin" size={16} />}
-                Cargar más
+                {t("admin.files.loadMore")}
               </Button>
             </div>
           )}

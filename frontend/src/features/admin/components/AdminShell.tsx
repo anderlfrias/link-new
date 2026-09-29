@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ADMIN_NAV_ITEMS } from "@/features/admin/constants/admin-nav.constant";
+import { useTranslation } from "@/i18n";
 import { cn } from "@/utils/cn";
 
 interface AdminShellProps {
@@ -17,6 +18,7 @@ interface AdminShellProps {
 /// asume que quien lo renderiza ya está autorizado.
 export function AdminShell({ children }: AdminShellProps) {
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   return (
     <div className="flex h-screen h-[100dvh] overflow-hidden">
@@ -24,7 +26,7 @@ export function AdminShell({ children }: AdminShellProps) {
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <Link
             href="/"
-            aria-label="Volver al chat"
+            aria-label={t("admin.backToChat")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
           >
             <IconArrowLeft size={20} stroke={1.75} />
@@ -35,6 +37,7 @@ export function AdminShell({ children }: AdminShellProps) {
           {ADMIN_NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
+            const label = t(`admin.${item.labelKey}`);
             return (
               <Link
                 key={item.href}
@@ -45,7 +48,7 @@ export function AdminShell({ children }: AdminShellProps) {
                 )}
               >
                 <Icon size={16} stroke={1.75} />
-                {item.label}
+                {label}
               </Link>
             );
           })}

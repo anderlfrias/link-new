@@ -7,8 +7,10 @@ import { AdminUserRow } from "@/features/admin/components/AdminUserRow";
 import type { AdminUserFilters } from "@/features/admin/types/admin-users.types";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useTranslation } from "@/i18n";
 
 export function AdminUsersPanel() {
+  const { t } = useTranslation();
   const [searchDraft, setSearchDraft] = useState("");
   const [filters, setFilters] = useState<AdminUserFilters>({});
   const { users, status, error, hasMore, loadingMore, loadMore, totalCount, refetch } = useAdminUsers(filters);
@@ -27,31 +29,32 @@ export function AdminUsersPanel() {
     <div className="flex h-full w-full flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
-          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Usuarios</h2>
+          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">{t("admin.users.title")}</h2>
 
           <div className="flex items-start gap-2 rounded-lg bg-brand-blue/10 px-3 py-2 text-sm text-brand-blue dark:bg-brand-blue/20">
             <IconInfoCircle size={16} className="mt-0.5 shrink-0" />
             <span>
-              Este panel es de solo lectura. Para actualizar el nombre, la foto o cualquier otro dato de un usuario,
-              hacelo desde EXTERNAL_AUTH.
+              {t("admin.users.readOnlyNotice")}
             </span>
           </div>
 
           <form onSubmit={handleApplyFilters} className="flex gap-2">
             <Input
-              placeholder="Buscar por nombre, email o usuario"
+              placeholder={t("admin.users.searchPlaceholder")}
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
               className="max-w-sm"
             />
-            <Button type="submit">Buscar</Button>
+            <Button type="submit">{t("admin.users.search")}</Button>
             <Button type="button" variant="ghost" onClick={handleClearFilters}>
-              Limpiar
+              {t("admin.users.clear")}
             </Button>
           </form>
 
           {status !== "error" && (status !== "loading" || users.length > 0) && (
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">{totalCount} usuario(s)</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              {t("admin.users.count", { count: totalCount })}
+            </p>
           )}
 
           {(status === "loading" || status === "idle") && users.length === 0 && (
@@ -65,14 +68,14 @@ export function AdminUsersPanel() {
               <IconAlertCircle size={16} className="shrink-0" />
               <span>{error}</span>
               <Button type="button" variant="ghost" onClick={refetch}>
-                Reintentar
+                {t("admin.users.retry")}
               </Button>
             </div>
           )}
 
           {status === "ready" && users.length === 0 && (
             <p className="py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-              No se encontraron usuarios con estos filtros.
+              {t("admin.users.empty")}
             </p>
           )}
 
@@ -88,7 +91,7 @@ export function AdminUsersPanel() {
             <div className="flex justify-center py-3">
               <Button type="button" variant="ghost" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore && <IconLoader2 className="animate-spin" size={16} />}
-                Cargar más
+                {t("admin.users.loadMore")}
               </Button>
             </div>
           )}

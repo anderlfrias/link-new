@@ -4,6 +4,7 @@ import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { IconHelpCircle, IconPlus, IconX } from "@tabler/icons-react";
 import { FILE_TYPE_CATEGORIES } from "@/features/admin/constants/file-type-categories.constant";
 import { FILE_TYPE_EXTENSION_ALIASES } from "@/features/admin/constants/file-type-extension-aliases.constant";
+import { useTranslation } from "@/i18n";
 import { isValidMimeTypePattern } from "@/utils/mime-type-pattern";
 import { cn } from "@/utils/cn";
 
@@ -57,6 +58,7 @@ function sameMembers(a: string[], b: string[]): boolean {
 }
 
 export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSelectProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
@@ -97,7 +99,6 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
     : undefined;
 
   const showCustomOption = trimmedQuery.length > 0 && !exactCategoryMatch && (matchingCategory != null || newPatterns.length > 0);
-  const customIsValid = showCustomOption;
   const customRowIndex = filteredCategories.length;
   const rowCount = filteredCategories.length + (showCustomOption ? 1 : 0);
 
@@ -179,16 +180,16 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
           <button
             type="button"
             onClick={() => setHelpOpen((prev) => !prev)}
-            aria-label="Cómo especificar un tipo manualmente"
+            aria-label={t("admin.fileTypeSelect.helpAria")}
             className="flex h-4 w-4 items-center justify-center rounded-full text-neutral-400 hover:text-brand-blue dark:hover:text-brand-blue-light"
           >
             <IconHelpCircle size={16} stroke={1.75} />
           </button>
           {helpOpen && (
             <div className="absolute left-0 top-full z-30 mt-1 w-72 rounded-lg border border-black/5 bg-white p-3 text-xs text-neutral-600 shadow-lg dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300">
-              <p className="mb-1.5 font-medium text-brand-ink dark:text-white">Cómo especificar un tipo a mano</p>
+              <p className="mb-1.5 font-medium text-brand-ink dark:text-white">{t("admin.fileTypeSelect.helpTitle")}</p>
               <p className="mb-1.5">
-                Podés escribir una extensión conocida (se traduce sola al mime type real):
+                {t("admin.fileTypeSelect.helpKnownExt")}
               </p>
               <ul className="mb-1.5 list-inside list-disc space-y-0.5">
                 <li>
@@ -198,7 +199,7 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
                 </li>
               </ul>
               <p className="mb-1.5">
-                O un mime type completo, con la forma{" "}
+                {t("admin.fileTypeSelect.helpMimeFormat")}{" "}
                 <code className="rounded bg-black/5 px-1 dark:bg-white/10">tipo/subtipo</code>:
               </p>
               <ul className="mb-1.5 list-inside list-disc space-y-0.5">
@@ -206,14 +207,11 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
                   <code className="rounded bg-black/5 px-1 dark:bg-white/10">application/pdf</code>
                 </li>
                 <li>
-                  <code className="rounded bg-black/5 px-1 dark:bg-white/10">audio/*</code> (todos los de audio)
+                  <code className="rounded bg-black/5 px-1 dark:bg-white/10">audio/*</code> {t("admin.fileTypeSelect.helpAudioDesc")}
                 </li>
               </ul>
               <p>
-                Algunos binarios poco comunes (ej. <code className="rounded bg-black/5 px-1 dark:bg-white/10">.bat</code>,{" "}
-                <code className="rounded bg-black/5 px-1 dark:bg-white/10">.msi</code>) suelen llegar del navegador
-                como <code className="rounded bg-black/5 px-1 dark:bg-white/10">application/octet-stream</code> en
-                vez de un mime específico — agregá ese mime a mano si necesitás cubrirlos también.
+                {t("admin.fileTypeSelect.helpBinaryDesc")}
               </p>
             </div>
           )}
@@ -238,7 +236,7 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
                   event.stopPropagation();
                   removeItem(item);
                 }}
-                aria-label={`Quitar ${itemLabel(item)}`}
+                aria-label={t("admin.fileTypeSelect.removeChipAria", { name: itemLabel(item) })}
                 className="flex h-3.5 w-3.5 items-center justify-center rounded-full hover:bg-brand-blue/20 dark:hover:bg-white/10"
               >
                 <IconX size={11} stroke={2.5} />
@@ -251,7 +249,7 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
             onChange={(event) => setQuery(event.target.value)}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder={value.length === 0 ? "Buscar, o escribir una extensión / mime type..." : ""}
+            placeholder={value.length === 0 ? t("admin.fileTypeSelect.inputPlaceholder") : ""}
             className="min-w-[160px] flex-1 bg-transparent text-sm text-brand-ink outline-none placeholder:text-neutral-400 dark:text-white"
           />
         </div>
@@ -285,17 +283,16 @@ export function FileTypeMultiSelect({ label, value, onChange }: FileTypeMultiSel
                 <IconPlus size={14} stroke={2} className="shrink-0" />
                 <span className="truncate">
                   {matchingCategory
-                    ? `Agregar "${trimmedQuery}" (${matchingCategory.label})`
+                    ? t("admin.fileTypeSelect.addCategoryMatch", { query: trimmedQuery, category: matchingCategory.label })
                     : resolvedFromExtension
-                      ? `Agregar "${trimmedQuery}" → ${newPatterns.join(", ")}`
-                      : `Agregar "${trimmedQuery}" como tipo personalizado`}
+                      ? t("admin.fileTypeSelect.addExtensionMatch", { query: trimmedQuery, patterns: newPatterns.join(", ") })
+                      : t("admin.fileTypeSelect.addCustomMatch", { query: trimmedQuery })}
                 </span>
               </button>
             )}
             {!showCustomOption && trimmedQuery.length > 0 && filteredCategories.length === 0 && (
               <p className="px-3 py-2 text-xs text-neutral-400 dark:text-neutral-500">
-                &quot;{trimmedQuery}&quot; no es una extensión conocida ni un mime type válido — tocá el{" "}
-                <IconHelpCircle size={12} className="inline" stroke={1.75} /> de arriba.
+                {t("admin.fileTypeSelect.invalidPatternNotice", { query: trimmedQuery })}
               </p>
             )}
           </div>

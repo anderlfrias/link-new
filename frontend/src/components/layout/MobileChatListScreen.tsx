@@ -13,6 +13,7 @@ import { ProfileSettingsPanel } from "@/features/profile/components/ProfileSetti
 import { useOpenSelfChat } from "@/features/conversations/hooks/use-open-self-chat";
 import type { ConversationsStatus } from "@/features/conversations/hooks/use-conversations";
 import type { ConversationFilter, ConversationListItem } from "@/features/conversations/types/conversation.types";
+import { useTranslation } from "@/i18n";
 
 interface MobileChatListScreenProps {
   conversations: ConversationListItem[];
@@ -25,6 +26,7 @@ export function MobileChatListScreen({
   status,
   currentUserId,
 }: MobileChatListScreenProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -42,14 +44,15 @@ export function MobileChatListScreen({
         <div className="flex items-center gap-3">
           <UserMenu onOpenProfileSettings={() => setView("profileSettings")} />
           <h1 className="font-display text-2xl font-semibold text-brand-ink dark:text-white">
-            Chats
+            {t("chat.chatsTitle")}
           </h1>
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <button
             type="button"
-            title="Mensajes guardados"
+            title={t("chatList.savedMessages")}
+            aria-label={t("chatList.savedMessages")}
             disabled={openingSelfChat}
             onClick={() => void openSelfChat()}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
@@ -62,7 +65,8 @@ export function MobileChatListScreen({
           </button>
           <button
             type="button"
-            title="Chat nuevo"
+            title={t("modals.newChatTitle")}
+            aria-label={t("modals.newChatTitle")}
             onClick={() => setShowNewChat(true)}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 hover:bg-black/5 hover:text-brand-ink dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
           >
@@ -73,7 +77,7 @@ export function MobileChatListScreen({
       <div className="flex flex-col gap-2 px-4 pb-2">
         <Input
           icon={<IconSearch size={16} stroke={1.75} />}
-          placeholder="Buscar"
+          placeholder={t("common.search")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -91,14 +95,15 @@ export function MobileChatListScreen({
       />
       <button
         type="button"
-        title="Chat nuevo"
+        title={t("modals.newChatTitle")}
+        aria-label={t("modals.newChatTitle")}
         onClick={() => setShowNewChat(true)}
         className="absolute bottom-5 right-5 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue text-white shadow-lg transition-colors hover:bg-brand-blue-dark"
       >
         <IconMessage2Plus size={24} stroke={1.75} />
       </button>
       {showNewChat && (
-        <Modal onClose={() => setShowNewChat(false)} aria-label="Chat nuevo">
+        <Modal onClose={() => setShowNewChat(false)} aria-label={t("modals.newChatTitle")}>
           <NewChatModal onClose={() => setShowNewChat(false)} />
         </Modal>
       )}

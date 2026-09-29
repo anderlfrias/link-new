@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { useTranslation } from "@/i18n";
 
 interface DraftState {
   maxUploadSizeMb: string;
@@ -146,81 +147,82 @@ function toDraft(settings: AdminSettings): DraftState {
 
 type FieldErrors = Partial<Record<keyof DraftState, string>>;
 
-function validate(draft: DraftState): FieldErrors {
+function validate(draft: DraftState, t?: (key: string) => string): FieldErrors {
   const errors: FieldErrors = {};
+  const tr = (k: string, defaultVal: string) => (t ? t(k) : defaultVal);
 
   const uploadSize = Number(draft.maxUploadSizeMb);
   if (!Number.isInteger(uploadSize) || uploadSize < 1) {
-    errors.maxUploadSizeMb = "Debe ser un número entero mayor a 0.";
+    errors.maxUploadSizeMb = tr("admin.settings.positiveIntegerError", "Debe ser un número entero mayor a 0.");
   }
 
   const voiceDuration = Number(draft.maxVoiceNoteDurationSeconds);
   if (!Number.isInteger(voiceDuration) || voiceDuration < 1) {
-    errors.maxVoiceNoteDurationSeconds = "Debe ser un número entero mayor a 0.";
+    errors.maxVoiceNoteDurationSeconds = tr("admin.settings.positiveIntegerError", "Debe ser un número entero mayor a 0.");
   }
 
   const groupMax = Number(draft.maxGroupMembers);
   if (!Number.isInteger(groupMax) || groupMax < 2) {
-    errors.maxGroupMembers = "Debe ser un número entero mayor a 1.";
+    errors.maxGroupMembers = tr("admin.settings.greaterThanOneIntegerError", "Debe ser un número entero mayor a 1.");
   }
 
   if (draft.maxFilesPerMessage.trim() !== "") {
     const filesLimit = Number(draft.maxFilesPerMessage);
     if (!Number.isInteger(filesLimit) || filesLimit < 1) {
-      errors.maxFilesPerMessage = "Debe ser un número entero mayor a 0, o vacío para sin límite.";
+      errors.maxFilesPerMessage = tr("admin.settings.filesPerMessageError", "Debe ser un número entero mayor a 0, o vacío para sin límite.");
     }
   }
 
   if (draft.messageRetentionDays.trim() !== "") {
     const retention = Number(draft.messageRetentionDays);
     if (!Number.isInteger(retention) || retention < 0) {
-      errors.messageRetentionDays = "Debe ser un número entero mayor o igual a 0, o vacío para deshabilitar.";
+      errors.messageRetentionDays = tr("admin.settings.messageRetentionError", "Debe ser un número entero mayor o igual a 0, o vacío para deshabilitar.");
     }
   }
 
   if (draft.auditLogRetentionDays.trim() !== "") {
     const retention = Number(draft.auditLogRetentionDays);
     if (!Number.isInteger(retention) || retention < 1) {
-      errors.auditLogRetentionDays = "Debe ser un número entero mayor a 0, o vacío para conservar para siempre.";
+      errors.auditLogRetentionDays = tr("admin.settings.auditRetentionError", "Debe ser un número entero mayor a 0, o vacío para conservar para siempre.");
     }
   }
 
   if (draft.messageEditTimeLimitMinutes.trim() !== "") {
     const limit = Number(draft.messageEditTimeLimitMinutes);
     if (!Number.isInteger(limit) || limit < 1) {
-      errors.messageEditTimeLimitMinutes = "Debe ser un número entero mayor a 0, o vacío para sin límite.";
+      errors.messageEditTimeLimitMinutes = tr("admin.settings.filesPerMessageError", "Debe ser un número entero mayor a 0, o vacío para sin límite.");
     }
   }
 
   if (draft.messageDeleteForEveryoneTimeLimitMinutes.trim() !== "") {
     const limit = Number(draft.messageDeleteForEveryoneTimeLimitMinutes);
     if (!Number.isInteger(limit) || limit < 1) {
-      errors.messageDeleteForEveryoneTimeLimitMinutes = "Debe ser un número entero mayor a 0, o vacío para sin límite.";
+      errors.messageDeleteForEveryoneTimeLimitMinutes = tr("admin.settings.filesPerMessageError", "Debe ser un número entero mayor a 0, o vacío para sin límite.");
     }
   }
 
   if (draft.orphanFileRetentionHours.trim() !== "") {
     const hours = Number(draft.orphanFileRetentionHours);
     if (!Number.isInteger(hours) || hours < 1) {
-      errors.orphanFileRetentionHours = "Debe ser un número entero mayor a 0, o vacío para deshabilitar.";
+      errors.orphanFileRetentionHours = tr("admin.settings.orphanRetentionError", "Debe ser un número entero mayor a 0, o vacío para deshabilitar.");
     }
   }
 
   if (draft.softDeletedFilePurgeDays.trim() !== "") {
     const days = Number(draft.softDeletedFilePurgeDays);
     if (!Number.isInteger(days) || days < 1) {
-      errors.softDeletedFilePurgeDays = "Debe ser un número entero mayor a 0, o vacío para deshabilitar.";
+      errors.softDeletedFilePurgeDays = tr("admin.settings.purgeRetentionError", "Debe ser un número entero mayor a 0, o vacío para deshabilitar.");
     }
   }
 
   const batchSize = Number(draft.fileMigrationBatchSize);
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) {
-    errors.fileMigrationBatchSize = "Debe ser un número entero entre 1 y 500.";
+    errors.fileMigrationBatchSize = tr("admin.settings.migrationBatchError", "Debe ser un número entero entre 1 y 500.");
   }
 
   const intervalMinutes = Number(draft.fileMigrationIntervalMinutes);
   if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1) {
-    errors.fileMigrationIntervalMinutes = "Debe ser un número entero mayor a 0.";
+    errors.fileMigrationIntervalMinutes = tr("admin.settings.migrationIntervalError", "Debe ser un número entero mayor a 0.");
   }
 
   return errors;
@@ -280,6 +282,8 @@ interface GroupPermissionFieldProps {
   overrideAllowed?: boolean;
   onOverrideChange?: (value: boolean) => void;
   disabled?: boolean;
+  optionLabels?: Record<GroupPermissionLevel, string>;
+  overrideLabel?: string;
 }
 
 function GroupPermissionField({
@@ -290,6 +294,8 @@ function GroupPermissionField({
   overrideAllowed,
   onOverrideChange,
   disabled,
+  optionLabels = GROUP_PERMISSION_LABELS,
+  overrideLabel = "El grupo puede cambiar esto",
 }: GroupPermissionFieldProps) {
   return (
     <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
@@ -301,7 +307,7 @@ function GroupPermissionField({
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {GROUP_PERMISSION_LABELS[option]}
+            {optionLabels[option] ?? GROUP_PERMISSION_LABELS[option]}
           </option>
         ))}
       </Select>
@@ -311,7 +317,7 @@ function GroupPermissionField({
           checked={overrideAllowed ?? false}
           onChange={(event) => onOverrideChange(event.target.checked)}
           disabled={disabled}
-          label="El grupo puede cambiar esto"
+          label={overrideLabel}
         />
       )}
     </label>
@@ -319,6 +325,7 @@ function GroupPermissionField({
 }
 
 export function AdminSettingsPanel() {
+  const { t } = useTranslation();
   const { settings, status, error: loadError, refetch } = useAdminSettings();
   const { save, pending, error: saveError } = useUpdateAdminSettings();
 
@@ -341,16 +348,16 @@ export function AdminSettingsPanel() {
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
         <div className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
           <IconAlertCircle size={18} className="shrink-0" />
-          <span>{loadError || "No se pudo cargar la configuración."}</span>
+          <span>{loadError || t("admin.settings.loadError")}</span>
         </div>
         <Button type="button" variant="ghost" onClick={refetch}>
-          Reintentar
+          {t("admin.retry")}
         </Button>
       </div>
     );
   }
 
-  const errors = validate(draft);
+  const errors = validate(draft, (key) => t(key as any));
   const hasErrors = Object.keys(errors).length > 0;
   const isDirty = JSON.stringify(draft) !== JSON.stringify(toDraft(settings));
 
@@ -364,11 +371,20 @@ export function AdminSettingsPanel() {
     if (updated) setDraft(toDraft(updated));
   }
 
+  const groupPermissionLabels: Record<GroupPermissionLevel, string> = {
+    ALL_MEMBERS: t("admin.settings.permAllMembers"),
+    GROUP_ADMINS_ONLY: t("admin.settings.permGroupAdminsOnly"),
+    APP_ADMINS_ONLY: t("admin.settings.permAppAdminsOnly"),
+    CREATOR_ONLY: t("admin.settings.permCreatorOnly"),
+  };
+
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-lg flex-col gap-8">
-          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">Configuración global</h2>
+          <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">
+            {t("admin.settings.title")}
+          </h2>
 
           {saveError && (
             <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
@@ -378,10 +394,12 @@ export function AdminSettingsPanel() {
           )}
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Archivos adjuntos</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.attachmentsTitle")}
+            </h3>
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                Tamaño máximo (MB)
+                {t("admin.settings.maxUploadSizeMb")}
                 <Input
                   type="number"
                   min={1}
@@ -391,7 +409,7 @@ export function AdminSettingsPanel() {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                Máximo de archivos por mensaje (vacío = sin límite)
+                {t("admin.settings.maxFilesPerMessage")}
                 <Input
                   type="number"
                   min={1}
@@ -401,21 +419,21 @@ export function AdminSettingsPanel() {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                Restricción de tipo de archivo
+                {t("admin.settings.fileTypeRestrictionMode")}
                 <Select
                   value={draft.fileTypeRestrictionMode}
                   onChange={(event) =>
                     updateField("fileTypeRestrictionMode", event.target.value as FileTypeRestrictionMode)
                   }
                 >
-                  <option value="DISABLED">Sin restricción</option>
-                  <option value="ALLOWLIST">Solo permitir estos tipos</option>
-                  <option value="BLOCKLIST">Bloquear estos tipos</option>
+                  <option value="DISABLED">{t("admin.settings.restrictionDisabled")}</option>
+                  <option value="ALLOWLIST">{t("admin.settings.restrictionAllowlist")}</option>
+                  <option value="BLOCKLIST">{t("admin.settings.restrictionBlocklist")}</option>
                 </Select>
               </label>
               {draft.fileTypeRestrictionMode !== "DISABLED" && (
                 <FileTypeMultiSelect
-                  label={draft.fileTypeRestrictionMode === "ALLOWLIST" ? "Tipos permitidos" : "Tipos bloqueados"}
+                  label={draft.fileTypeRestrictionMode === "ALLOWLIST" ? t("admin.settings.allowedTypes") : t("admin.settings.blockedTypes")}
                   value={draft.fileTypeSelection}
                   onChange={(next) => updateField("fileTypeSelection", next)}
                 />
@@ -425,28 +443,28 @@ export function AdminSettingsPanel() {
 
           <section>
             <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
-              Limpieza y ciclo de vida de archivos
+              {t("admin.settings.cleanupTitle")}
             </h3>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
                 <Checkbox
                   checked={draft.uploadCleanupEnabled}
                   onChange={(event) => updateField("uploadCleanupEnabled", event.target.checked)}
-                  label="Habilitar worker automático de limpieza de archivos"
+                  label={t("admin.settings.uploadCleanupEnabled")}
                 />
                 <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                  Barre sesiones de subida expiradas, archivos huérfanos sin vincular y purga física de eliminados.
+                  {t("admin.settings.uploadCleanupDesc")}
                 </p>
               </div>
 
               {draft.uploadCleanupEnabled && (
                 <div className="flex flex-col gap-3 border-l-2 border-brand-accent/30 pl-4">
                   <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                    Retención de archivos huérfanos sin vincular (horas)
+                    {t("admin.settings.orphanFileRetentionHours")}
                     <Input
                       type="number"
                       min={1}
-                      placeholder="24 (vacío = no borrar)"
+                      placeholder={t("admin.settings.orphanRetentionPlaceholder")}
                       value={draft.orphanFileRetentionHours}
                       onChange={(event) => updateField("orphanFileRetentionHours", event.target.value)}
                       error={errors.orphanFileRetentionHours}
@@ -454,11 +472,11 @@ export function AdminSettingsPanel() {
                   </label>
 
                   <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                    Purga física de archivos eliminados (días tras borrado lógico)
+                    {t("admin.settings.softDeletedFilePurgeDays")}
                     <Input
                       type="number"
                       min={1}
-                      placeholder="Ej. 30 (vacío = no purgar)"
+                      placeholder={t("admin.settings.softDeletedPurgePlaceholder")}
                       value={draft.softDeletedFilePurgeDays}
                       onChange={(event) => updateField("softDeletedFilePurgeDays", event.target.value)}
                       error={errors.softDeletedFilePurgeDays}
@@ -468,7 +486,7 @@ export function AdminSettingsPanel() {
                   <Checkbox
                     checked={draft.uploadCleanupDryRun}
                     onChange={(event) => updateField("uploadCleanupDryRun", event.target.checked)}
-                    label="Modo simulación (Dry Run: registrar en logs sin borrar)"
+                    label={t("admin.settings.uploadCleanupDryRun")}
                   />
                 </div>
               )}
@@ -477,24 +495,24 @@ export function AdminSettingsPanel() {
 
           <section>
             <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
-              Migración progresiva a S3 (SeaweedFS)
+              {t("admin.settings.migrationTitle")}
             </h3>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
                 <Checkbox
                   checked={draft.fileMigrationEnabled}
                   onChange={(event) => updateField("fileMigrationEnabled", event.target.checked)}
-                  label="Habilitar worker de migración progresiva a S3"
+                  label={t("admin.settings.fileMigrationEnabled")}
                 />
                 <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                  Transfiere periódicamente archivos almacenados en disco local al storage S3 de manera segura e idempotente.
+                  {t("admin.settings.fileMigrationDesc")}
                 </p>
               </div>
 
               {draft.fileMigrationEnabled && (
                 <div className="flex flex-col gap-3 border-l-2 border-brand-accent/30 pl-4">
                   <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                    Tamaño del lote de migración (archivos por ciclo)
+                    {t("admin.settings.fileMigrationBatchSize")}
                     <Input
                       type="number"
                       min={1}
@@ -506,7 +524,7 @@ export function AdminSettingsPanel() {
                   </label>
 
                   <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                    Intervalo de ejecución (minutos)
+                    {t("admin.settings.fileMigrationIntervalMinutes")}
                     <Input
                       type="number"
                       min={1}
@@ -522,10 +540,10 @@ export function AdminSettingsPanel() {
                       onChange={(event) =>
                         updateField("fileMigrationDeleteLocalAfterCommit", event.target.checked)
                       }
-                      label="Eliminar archivo local tras confirmar subida a S3"
+                      label={t("admin.settings.fileMigrationDeleteLocalAfterCommit")}
                     />
                     <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                      Libera espacio en el disco local una vez que el archivo fue verificado e indexado en S3. Si está desactivado, el archivo local se conserva como respaldo.
+                      {t("admin.settings.fileMigrationDeleteLocalDesc")}
                     </p>
                   </div>
                 </div>
@@ -534,22 +552,25 @@ export function AdminSettingsPanel() {
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Conversaciones privadas</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.privateChatsTitle")}
+            </h3>
             <Checkbox
               checked={draft.allowConversationDelete}
               onChange={(event) => updateField("allowConversationDelete", event.target.checked)}
-              label="Los usuarios pueden eliminar sus chats privados"
+              label={t("admin.settings.allowConversationDelete")}
             />
             <p className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
-              El chat se elimina solo para quien lo borra — reaparece si la otra persona escribe de nuevo, o si vos
-              le volvés a escribir.
+              {t("admin.settings.allowConversationDeleteDesc")}
             </p>
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Notas de voz</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.voiceNotesTitle")}
+            </h3>
             <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-              Duración máxima (segundos)
+              {t("admin.settings.maxVoiceNoteDurationSeconds")}
               <Input
                 type="number"
                 min={1}
@@ -561,10 +582,12 @@ export function AdminSettingsPanel() {
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Grupos</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.groupsTitle")}
+            </h3>
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                Máximo de miembros
+                {t("admin.settings.maxGroupMembers")}
                 <Input
                   type="number"
                   min={2}
@@ -576,71 +599,84 @@ export function AdminSettingsPanel() {
                   className="mt-1"
                   checked={draft.allowGroupOverrideMaxGroupMembers}
                   onChange={(event) => updateField("allowGroupOverrideMaxGroupMembers", event.target.checked)}
-                  label="El grupo puede cambiar esto"
+                  label={t("admin.settings.groupOverrideCheckbox")}
                 />
               </label>
               <GroupPermissionField
-                label="¿Quién puede crear grupos?"
+                label={t("admin.settings.whoCanCreateGroups")}
                 value={draft.whoCanCreateGroups}
                 options={CREATE_GROUPS_OPTIONS}
                 onChange={(value) => updateField("whoCanCreateGroups", value)}
+                optionLabels={groupPermissionLabels}
               />
               <GroupPermissionField
-                label="¿Quién puede agregar miembros?"
+                label={t("admin.settings.whoCanAddMembers")}
                 value={draft.whoCanAddMembers}
                 options={MEMBER_ACTION_OPTIONS}
                 onChange={(value) => updateField("whoCanAddMembers", value)}
                 overrideAllowed={draft.allowGroupOverrideAddMembers}
                 onOverrideChange={(value) => updateField("allowGroupOverrideAddMembers", value)}
+                optionLabels={groupPermissionLabels}
+                overrideLabel={t("admin.settings.groupOverrideCheckbox")}
               />
               <GroupPermissionField
-                label="¿Quién puede quitar miembros?"
+                label={t("admin.settings.whoCanRemoveMembers")}
                 value={draft.whoCanRemoveMembers}
                 options={MEMBER_ACTION_OPTIONS}
                 onChange={(value) => updateField("whoCanRemoveMembers", value)}
                 overrideAllowed={draft.allowGroupOverrideRemoveMembers}
                 onOverrideChange={(value) => updateField("allowGroupOverrideRemoveMembers", value)}
+                optionLabels={groupPermissionLabels}
+                overrideLabel={t("admin.settings.groupOverrideCheckbox")}
               />
               <GroupPermissionField
-                label="¿Quién puede renombrar o cambiar la foto del grupo?"
+                label={t("admin.settings.whoCanChangeGroupInfo")}
                 value={draft.whoCanChangeGroupInfo}
                 options={MEMBER_ACTION_OPTIONS}
                 onChange={(value) => updateField("whoCanChangeGroupInfo", value)}
                 overrideAllowed={draft.allowGroupOverrideChangeGroupInfo}
                 onOverrideChange={(value) => updateField("allowGroupOverrideChangeGroupInfo", value)}
+                optionLabels={groupPermissionLabels}
+                overrideLabel={t("admin.settings.groupOverrideCheckbox")}
               />
               <GroupPermissionField
-                label="¿Quién puede salir del grupo?"
+                label={t("admin.settings.whoCanLeaveGroup")}
                 value={draft.whoCanLeaveGroup}
                 options={MEMBER_ACTION_OPTIONS}
                 onChange={(value) => updateField("whoCanLeaveGroup", value)}
                 overrideAllowed={draft.allowGroupOverrideLeaveGroup}
                 onOverrideChange={(value) => updateField("allowGroupOverrideLeaveGroup", value)}
+                optionLabels={groupPermissionLabels}
+                overrideLabel={t("admin.settings.groupOverrideCheckbox")}
               />
               <div className="flex flex-col gap-1">
                 <Checkbox
                   checked={draft.allowGroupDelete}
                   onChange={(event) => updateField("allowGroupDelete", event.target.checked)}
-                  label="Los grupos se pueden eliminar"
+                  label={t("admin.settings.allowGroupDelete")}
                 />
                 <GroupPermissionField
-                  label="¿Quién puede eliminar el grupo?"
+                  label={t("admin.settings.whoCanDeleteGroup")}
                   value={draft.whoCanDeleteGroup}
                   options={DELETE_GROUP_OPTIONS}
                   onChange={(value) => updateField("whoCanDeleteGroup", value)}
                   overrideAllowed={draft.allowGroupOverrideDeleteGroup}
                   onOverrideChange={(value) => updateField("allowGroupOverrideDeleteGroup", value)}
                   disabled={!draft.allowGroupDelete}
+                  optionLabels={groupPermissionLabels}
+                  overrideLabel={t("admin.settings.groupOverrideCheckbox")}
                 />
               </div>
             </div>
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Retención de mensajes y auditoría</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.retentionTitle")}
+            </h3>
             <div className="flex flex-col gap-4">
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                Retención de mensajes: días antes de eliminar automáticamente (vacío = deshabilitado)
+                {t("admin.settings.messageRetentionDays")}
                 <Input
                   type="number"
                   min={0}
@@ -650,7 +686,7 @@ export function AdminSettingsPanel() {
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                Retención de registros de auditoría: días antes de purgar (vacío = conservar para siempre)
+                {t("admin.settings.auditLogRetentionDays")}
                 <Input
                   type="number"
                   min={1}
@@ -659,23 +695,25 @@ export function AdminSettingsPanel() {
                   error={errors.auditLogRetentionDays}
                 />
                 <span className="text-xs text-amber-600 dark:text-amber-400">
-                  Advertencia: vacío conserva los registros indefinidamente. Reducir este valor purga registros de auditoría más antiguos de forma irreversible.
+                  {t("admin.settings.auditRetentionWarning")}
                 </span>
               </label>
             </div>
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">Edición y borrado de mensajes</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.editAndDeleteTitle")}
+            </h3>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <Checkbox
                   checked={draft.allowMessageEdit}
                   onChange={(event) => updateField("allowMessageEdit", event.target.checked)}
-                  label="Los usuarios pueden editar sus propios mensajes"
+                  label={t("admin.settings.allowMessageEdit")}
                 />
                 <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                  Tiempo límite para editar, en minutos (vacío = sin límite)
+                  {t("admin.settings.messageEditTimeLimitMinutes")}
                   <Input
                     type="number"
                     min={1}
@@ -690,10 +728,10 @@ export function AdminSettingsPanel() {
                 <Checkbox
                   checked={draft.allowMessageDeleteForEveryone}
                   onChange={(event) => updateField("allowMessageDeleteForEveryone", event.target.checked)}
-                  label="Los usuarios pueden eliminar sus propios mensajes para todos"
+                  label={t("admin.settings.allowMessageDeleteForEveryone")}
                 />
                 <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                  Tiempo límite para eliminar para todos, en minutos (vacío = sin límite)
+                  {t("admin.settings.messageDeleteForEveryoneTimeLimitMinutes")}
                   <Input
                     type="number"
                     min={1}
@@ -705,23 +743,23 @@ export function AdminSettingsPanel() {
                 </label>
               </div>
               <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                El creador de la conversación siempre puede eliminar mensajes ajenos como moderador, sin importar
-                esta configuración.
+                {t("admin.settings.moderatorDeleteNotice")}
               </p>
             </div>
           </section>
 
           <section>
-            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">GIFs y stickers</h3>
+            <h3 className="mb-3 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.stickersTitle")}
+            </h3>
             <div className="flex flex-col gap-1">
               <Checkbox
                 checked={draft.allowStickersAndGifs}
                 onChange={(event) => updateField("allowStickersAndGifs", event.target.checked)}
-                label="Los usuarios pueden buscar y enviar GIFs y stickers (Giphy)"
+                label={t("admin.settings.allowStickersAndGifs")}
               />
               <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                Requiere además una API key de Giphy configurada en el servidor (GIPHY_API_KEY) — sin eso, el
-                buscador responde error aunque esta opción esté activada.
+                {t("admin.settings.stickersDesc")}
               </p>
             </div>
           </section>
@@ -732,7 +770,7 @@ export function AdminSettingsPanel() {
         <div className="mx-auto max-w-lg">
           <Button type="button" disabled={!isDirty || hasErrors || pending} onClick={handleSave} className="w-full">
             {pending && <IconLoader2 className="animate-spin" size={16} />}
-            Guardar cambios
+            {t("admin.saveChanges")}
           </Button>
         </div>
       </div>

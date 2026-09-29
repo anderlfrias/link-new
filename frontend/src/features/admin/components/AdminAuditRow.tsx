@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { getAuditActionLabel } from "@/features/admin/constants/audit-action-labels.constant";
+import { useTranslation } from "@/i18n";
 import type { AdminAuditLogListItem } from "@/features/admin/types/admin-audit.types";
 
 interface AdminAuditRowProps {
@@ -10,19 +11,24 @@ interface AdminAuditRowProps {
 }
 
 export function AdminAuditRow({ item }: AdminAuditRowProps) {
+  const { t, locale } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  const actionLabel = getAuditActionLabel(item.action);
+  const translatedAction = t(`admin.audit.actions.${item.action}`);
+  const actionLabel =
+    translatedAction !== `admin.audit.actions.${item.action}`
+      ? translatedAction
+      : getAuditActionLabel(item.action);
 
   const actorLabel = item.actor.name
     ? `${item.actor.name} · ${item.actor.email ?? ""}`
-    : (item.actor.email ?? "Sistema");
+    : (item.actor.email ?? t("admin.audit.systemActor"));
 
   let resourceLabel = "—";
   if (item.conversationName) {
-    resourceLabel = `Grupo: ${item.conversationName}`;
+    resourceLabel = t("admin.audit.groupResource", { name: item.conversationName });
   } else if (item.conversationId) {
-    resourceLabel = `Conversación: ${item.conversationId.slice(0, 8)}…`;
+    resourceLabel = t("admin.audit.conversationResource", { id: item.conversationId.slice(0, 8) });
   } else if (item.targetType) {
     resourceLabel = `${item.targetType}${item.targetId ? ` (${item.targetId.slice(0, 8)}…)` : ""}`;
   }
@@ -38,14 +44,15 @@ export function AdminAuditRow({ item }: AdminAuditRowProps) {
               {actionLabel}
             </span>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
-              {new Date(item.createdAt).toLocaleString("es-AR")}
+              {new Date(item.createdAt).toLocaleString(locale === "en" ? "en-US" : "es-AR")}
             </span>
           </div>
           <p className="mt-1 truncate font-medium text-brand-ink dark:text-white">
             {actorLabel}
           </p>
           <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
-            Recurso: <span className="font-mono text-neutral-700 dark:text-neutral-300">{resourceLabel}</span>
+            {t("admin.audit.resource")}{" "}
+            <span className="font-mono text-neutral-700 dark:text-neutral-300">{resourceLabel}</span>
             {item.ip && ` · IP: ${item.ip}`}
           </p>
         </div>
@@ -54,10 +61,10 @@ export function AdminAuditRow({ item }: AdminAuditRowProps) {
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            aria-label={expanded ? "Ocultar detalle" : "Ver detalle"}
+            aria-label={expanded ? t("admin.audit.hideDetails") : t("admin.audit.viewDetails")}
             className="flex items-center gap-1 rounded-lg border border-black/10 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-white/15 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            <span>{expanded ? "Ocultar detalle" : "Ver detalle"}</span>
+            <span>{expanded ? t("admin.audit.hideDetails") : t("admin.audit.viewDetails")}</span>
             {expanded ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
           </button>
         )}
@@ -65,7 +72,7 @@ export function AdminAuditRow({ item }: AdminAuditRowProps) {
 
       {expanded && hasMetadata && (
         <div className="mt-3 rounded-lg bg-neutral-100/70 p-3 text-xs dark:bg-neutral-900/60" data-testid="metadata-detail">
-          <p className="mb-1 font-semibold text-neutral-700 dark:text-neutral-300">Metadatos:</p>
+          <p className="mb-1 font-semibold text-neutral-700 dark:text-neutral-300">{t("admin.audit.metadata")}</p>
           <pre className="max-h-60 overflow-x-auto whitespace-pre-wrap break-all rounded bg-neutral-50 p-2 font-mono text-[11px] text-neutral-800 dark:bg-neutral-950 dark:text-neutral-200">
             {JSON.stringify(item.metadata, null, 2)}
           </pre>
