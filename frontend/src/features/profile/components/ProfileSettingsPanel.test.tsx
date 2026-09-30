@@ -136,4 +136,9 @@ describe("ProfileSettingsPanel", () => {
 
     expect(mockChangeLanguage).toHaveBeenCalledWith("en");
   });
+
+  it("renderiza la versión de la aplicación", () => {
+    render(<ProfileSettingsPanel onClose={onClose} />);
+    expect(screen.getByText(/Link • v1\.0\.0/i)).toBeInTheDocument();
+  });
 });

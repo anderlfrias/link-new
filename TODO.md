@@ -36,7 +36,7 @@ Sistema y Configuración
 
 [x] Multi-idioma: Soporte para múltiples idiomas.
 
-[ ] Versionamiento: Versionar la aplicación.
+[x] Versionamiento: Versionar la aplicación.
 
 [x] Mandar ip a external-auth para evitar bloqueos generales.
 

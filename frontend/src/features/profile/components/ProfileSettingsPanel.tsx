@@ -26,6 +26,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
+import { APP_VERSION } from "@/constants/app-version.constant";
 
 interface ProfileSettingsPanelProps {
   onClose: () => void;
@@ -281,6 +282,11 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             disabled={updatingLanguage}
             onLanguageChange={(locale) => void changeLanguage(locale)}
           />
+        </div>
+
+        {/* Versión de la aplicación */}
+        <div className="mt-8 border-t border-black/5 pt-4 text-center text-xs text-neutral-400 dark:border-white/5 dark:text-neutral-500">
+          Link • v{APP_VERSION}
         </div>
       </div>
 
