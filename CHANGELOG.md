@@ -7,7 +7,14 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-02
+
+### Corregido
+- **Manejo de llamadas y señalización WebRTC**: Incorporación del estado transitorio de conexión (`connecting`) tras la aceptación de llamada, descarte de señales WebRTC para llamadas finalizadas y prevención de conexiones huérfanas.
+- **Retroalimentación de errores en llamadas**: Notificación al usuario ante fallos de acceso a micrófono o cámara (`mediaError`), detección y advertencia de contexto no seguro sin HTTPS (`insecureContext`), y fallos irrecuperables en la negociación SDP (`connectionFailed`).
+
 ## [1.0.0] - 2026-09-30
+
 
 ### Añadido
 - **Reacciones a mensajes**: Reacción con emojis flotantes a mensajes en tiempo real con recuento dinámico.

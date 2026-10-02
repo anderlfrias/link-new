@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProfileSettingsPanel } from "./ProfileSettingsPanel";
+import { APP_VERSION } from "@/constants/app-version.constant";
 
 const mockUseAuth = vi.fn();
 vi.mock("@/providers/auth-provider", () => ({
@@ -139,6 +140,6 @@ describe("ProfileSettingsPanel", () => {
 
   it("renderiza la versión de la aplicación", () => {
     render(<ProfileSettingsPanel onClose={onClose} />);
-    expect(screen.getByText(/Link • v1\.0\.0/i)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Link • v${APP_VERSION.replace(/\\./g, "\\\\.")}`, "i"))).toBeInTheDocument();
   });
 });
