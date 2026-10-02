@@ -155,4 +155,30 @@ describe("ActiveCallOverlay", () => {
     fireEvent.click(screen.getByText("OK"));
     expect(clearCallError).toHaveBeenCalled();
   });
+
+  it("sin micrófono/cámara: muestra el aviso y deshabilita mute y cámara", () => {
+    vi.mocked(UseCallModule.useCall).mockReturnValue({
+      ...baseCall,
+      callState: "connected",
+      activeCall: { id: "c", receiverName: "X", type: "VIDEO" },
+      mediaWarning: "no-devices",
+    } as any);
+
+    render(<ActiveCallOverlay />);
+    expect(screen.getByRole("status")).toHaveTextContent("No se detectó micrófono ni cámara");
+    expect(screen.getByLabelText("Silenciar micrófono")).toBeDisabled();
+    expect(screen.getByLabelText("Apagar cámara")).toBeDisabled();
+  });
+
+  it("muestra mensaje específico para permiso denegado", () => {
+    vi.mocked(UseCallModule.useCall).mockReturnValue({
+      callState: "idle",
+      activeCall: null,
+      callError: "denied",
+      clearCallError: vi.fn(),
+    } as any);
+
+    render(<ActiveCallOverlay />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Permiso denegado");
+  });
 });

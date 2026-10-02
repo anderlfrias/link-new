@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   IconMicrophone,
   IconMicrophoneOff,
+  IconVolume,
   IconPhoneOff,
   IconVideo,
   IconVideoOff,
@@ -11,6 +12,21 @@ import {
 import { Avatar } from "@/components/ui/Avatar";
 import { useTranslation } from "@/i18n";
 import { useCall } from "../hooks/use-call";
+import { useAudioRoute } from "../hooks/use-audio-route";
+
+const CALL_ERROR_KEYS = {
+  media: "calls.mediaError",
+  denied: "calls.permissionDenied",
+  "in-use": "calls.deviceInUse",
+  insecure: "calls.insecureContext",
+  connection: "calls.connectionFailed",
+} as const;
+
+const MEDIA_WARNING_KEYS = {
+  "no-mic": "calls.noMicWarning",
+  "no-camera": "calls.noCameraWarning",
+  "no-devices": "calls.noDevicesWarning",
+} as const;
 
 function formatSeconds(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -31,6 +47,7 @@ export function ActiveCallOverlay() {
     callDuration,
     callError,
     clearCallError,
+    mediaWarning,
     endCall,
     toggleMute,
     toggleVideo,
@@ -74,6 +91,18 @@ export function ActiveCallOverlay() {
     };
   }, [localStream, isVideo, isVisible]);
 
+  const getRemoteElement = useCallback(
+    () => (isVideo ? remoteVideoRef.current : remoteAudioRef.current),
+    [isVideo],
+  );
+  const [outputMenuOpen, setOutputMenuOpen] = useState(false);
+  const audioRoute = useAudioRoute({
+    active: attachRemote,
+    isVideoCall: !!isVideo,
+    getElement: getRemoteElement,
+    streamKey: remoteStream,
+  });
+
   if (!isVisible || !activeCall) {
     if (!callError) return null;
     return (
@@ -82,11 +111,7 @@ export function ActiveCallOverlay() {
         className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm text-white shadow-xl"
       >
         <span>
-          {callError === "media"
-            ? t("calls.mediaError")
-            : callError === "insecure"
-              ? t("calls.insecureContext")
-              : t("calls.connectionFailed")}
+          {t(CALL_ERROR_KEYS[callError])}
         </span>
         <button type="button" onClick={clearCallError} className="font-semibold underline">
           OK
@@ -98,6 +123,8 @@ export function ActiveCallOverlay() {
   const peerName = peerNameFromCall || "Contacto";
   const isConnected = callState === "connected";
   const isConnecting = callState === "connecting";
+  const micMissing = mediaWarning === "no-mic" || mediaWarning === "no-devices";
+  const cameraMissing = mediaWarning === "no-camera" || mediaWarning === "no-devices";
 
   return (
     <div
@@ -125,6 +152,12 @@ export function ActiveCallOverlay() {
         </div>
       </div>
 
+      {mediaWarning && (
+        <p role="status" className="z-20 w-full max-w-2xl rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-200">
+          {t(MEDIA_WARNING_KEYS[mediaWarning])}
+        </p>
+      )}
+
       {/* Contenido Central: Video o Avatar */}
       <div className="relative flex flex-1 w-full max-w-4xl items-center justify-center overflow-hidden my-4 rounded-2xl bg-neutral-900 border border-white/10">
         {isVideo && remoteStream ? (
@@ -146,7 +179,7 @@ export function ActiveCallOverlay() {
         )}
 
         {/* Video local en miniatura (Picture in Picture) */}
-        {isVideo && localStream && (
+        {isVideo && localStream && !cameraMissing && (
           <div className="absolute bottom-4 right-4 h-36 w-24 sm:h-48 sm:w-32 overflow-hidden rounded-xl border-2 border-white/20 bg-neutral-950 shadow-2xl z-20">
             <video
               ref={localVideoRef}
@@ -170,8 +203,9 @@ export function ActiveCallOverlay() {
         <button
           type="button"
           onClick={toggleMute}
+          disabled={micMissing}
           aria-label={isMuted ? t("calls.unmuteMic") : t("calls.muteMic")}
-          className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
+          className={`flex h-12 w-12 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
             isMuted
               ? "bg-red-500/20 text-red-400 border border-red-500/40"
               : "bg-white/10 text-white hover:bg-white/20 border border-white/10"
@@ -185,8 +219,9 @@ export function ActiveCallOverlay() {
           <button
             type="button"
             onClick={toggleVideo}
+            disabled={cameraMissing}
             aria-label={isVideoOff ? t("calls.turnOnCamera") : t("calls.turnOffCamera")}
-            className={`flex h-12 w-12 items-center justify-center rounded-full transition-all ${
+            className={`flex h-12 w-12 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
               isVideoOff
                 ? "bg-red-500/20 text-red-400 border border-red-500/40"
                 : "bg-white/10 text-white hover:bg-white/20 border border-white/10"
@@ -194,6 +229,57 @@ export function ActiveCallOverlay() {
           >
             {isVideoOff ? <IconVideoOff size={22} /> : <IconVideo size={22} />}
           </button>
+        )}
+
+        {/* Salida de audio: auricular / altavoz / Bluetooth (solo celulares donde el navegador permite elegir) */}
+        {audioRoute.available && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOutputMenuOpen((open) => !open)}
+              aria-label={t("calls.audioOutput")}
+              aria-haspopup="menu"
+              aria-expanded={outputMenuOpen}
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white transition-all hover:bg-white/20"
+            >
+              <IconVolume size={22} />
+            </button>
+            {outputMenuOpen && (
+              <div
+                role="menu"
+                aria-label={t("calls.audioOutput")}
+                className="absolute bottom-14 left-1/2 w-48 -translate-x-1/2 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 text-sm shadow-2xl"
+              >
+                {audioRoute.devices.map((device) => {
+                  const selected = device.id === audioRoute.selectedId;
+                  return (
+                    <button
+                      key={device.id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      onClick={() => {
+                        audioRoute.select(device.id);
+                        setOutputMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-white/10 ${
+                        selected ? "font-semibold text-white" : "text-neutral-300"
+                      }`}
+                    >
+                      <span className="truncate">
+                        {device.kind === "earpiece"
+                          ? t("calls.earpiece")
+                          : device.kind === "speaker"
+                            ? t("calls.speaker")
+                            : device.label}
+                      </span>
+                      {selected && <span aria-hidden>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Colgar / Finalizar llamada */}

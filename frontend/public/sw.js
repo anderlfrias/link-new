@@ -24,7 +24,13 @@ self.addEventListener("push", (event) => {
     return;
   }
 
-  const { title, body, url, tag } = payload;
+  const { title, body, url, tag, kind } = payload;
+
+  if (kind === "call") {
+    event.waitUntil(showCallNotification({ title, body, url, tag }));
+    return;
+  }
+
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
@@ -34,6 +40,32 @@ self.addEventListener("push", (event) => {
     }),
   );
 });
+
+// Cuánto se deja visible una llamada entrante. El backend ya no la considera
+// "sonando" mucho después (y una notificación de llamada vieja engaña).
+const CALL_NOTIFICATION_MS = 30000;
+
+async function showCallNotification({ title, body, url, tag }) {
+  // App en primer plano: el modal de llamada entrante ya la anuncia con tono,
+  // una notificación del sistema encima sería duplicada.
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (clients.some((client) => client.focused)) return;
+
+  await self.registration.showNotification(title, {
+    body,
+    tag,
+    icon: "/icons/icon-192.png",
+    data: { url },
+    requireInteraction: true,
+    renotify: true,
+    vibrate: [300, 150, 300, 150, 300],
+  });
+
+  // Mantiene vivo el SW y retira la notificación si nadie la atendió.
+  await new Promise((resolve) => setTimeout(resolve, CALL_NOTIFICATION_MS));
+  const stale = await self.registration.getNotifications({ tag });
+  stale.forEach((notification) => notification.close());
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

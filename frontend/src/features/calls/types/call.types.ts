@@ -10,7 +10,7 @@ export type CallStatus = "RINGING" | "ACCEPTED" | "REJECTED" | "MISSED" | "COMPL
 export type CallState = "idle" | "outgoing" | "incoming" | "connecting" | "connected" | "ended";
 
 /** Errores de llamada que la UI debe mostrar al usuario. */
-export type CallError = "media" | "insecure" | "connection";
+export type CallError = "media" | "denied" | "in-use" | "insecure" | "connection";
 
 export interface Call {
   id: string;
@@ -39,6 +39,8 @@ export interface CallContextValue {
   callDuration: number;
   callError: CallError | null;
   clearCallError: () => void;
+  /** Dispositivo local faltante: la llamada sigue, pero sin mic y/o cámara propios. */
+  mediaWarning: "no-mic" | "no-camera" | "no-devices" | null;
   startCall: (conversationId: string, receiverId: string, receiverName: string, type: CallType) => Promise<void>;
   acceptCall: () => Promise<void>;
   rejectCall: (reason?: "declined" | "busy") => Promise<void>;

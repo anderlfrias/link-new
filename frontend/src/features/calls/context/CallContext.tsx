@@ -17,6 +17,7 @@ import {
   playOutgoingRingtone,
   stopAllTones,
 } from "../utils/call-tones";
+import { acquireLocalMedia, classifyMediaError, type MediaWarning } from "../utils/call-media";
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
@@ -50,6 +51,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [callError, setCallError] = useState<CallError | null>(null);
+  const [mediaWarning, setMediaWarning] = useState<MediaWarning | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -98,6 +100,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setRemoteStream(null);
     setIsMuted(false);
     setIsVideoOff(false);
+    setMediaWarning(null);
     setCallDuration(0);
   }, []);
 
@@ -228,13 +231,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       setCallError(null);
       try {
-        // Pedir permisos de audio y video
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: type === "VIDEO",
-        });
+        // Pide micrófono/cámara; si el equipo no los tiene, sigue en modo solo-recepción
+        const { stream, warning } = await acquireLocalMedia(type);
         localStreamRef.current = stream;
         setLocalStream(stream);
+        setMediaWarning(warning);
+        if (warning) callLog("local media degraded", { warning });
 
         playOutgoingRingtone();
         setCallState("outgoing");
@@ -254,9 +256,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         );
       } catch (err) {
         // Todavia no existe la llamada en el backend: no hay a quien avisar, solo informar al usuario.
-        console.warn("[call] getUserMedia failed (caller)", err);
+        console.warn("[call] local media failed (caller)", err);
         handleCallEndedLocally();
-        setCallError(navigator.mediaDevices ? "media" : "insecure");
+        setCallError(classifyMediaError(err));
       }
     },
     [socket, currentUserId, callState, handleCallEndedLocally, updateActiveCall],
@@ -270,12 +272,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       stopAllTones();
       setCallError(null);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: activeCall.type === "VIDEO",
-      });
+      const { stream, warning } = await acquireLocalMedia(activeCall.type);
       localStreamRef.current = stream;
       setLocalStream(stream);
+      setMediaWarning(warning);
+      if (warning) callLog("local media degraded", { warning });
 
       // Crear PeerConnection
       getOrCreatePeerConnection(activeCall.callerId, activeCall.id);
@@ -293,11 +294,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       // La llamada sigue en RINGING en el backend: se rechaza para que el llamante no quede esperando.
       // (El contrato solo admite "declined"/"busy"; no distingue error de medios.)
-      console.warn("[call] getUserMedia failed (callee)", err);
+      console.warn("[call] local media failed (callee)", err);
       socket.emit(SOCKET_EVENTS.call.reject, { callId: activeCall.id, reason: "declined" });
       playEndCallTone();
       handleCallEndedLocally();
-      setCallError(navigator.mediaDevices ? "media" : "insecure");
+      setCallError(classifyMediaError(err));
     }
   }, [socket, activeCall, getOrCreatePeerConnection, handleCallEndedLocally, updateActiveCall]);
 
@@ -368,6 +369,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       // Si somos el llamante, creamos la oferta WebRTC
       if (payload.call.callerId === currentUserId) {
         const pc = getOrCreatePeerConnection(payload.call.receiverId, payload.call.id);
+        // Sin micrófono/cámara locales no hay tracks que ofrecer: se pide recibir igualmente
+        // (sin esto la oferta no tendría m-lines y el otro lado no podría enviar media).
+        const local = localStreamRef.current;
+        if (!local?.getAudioTracks().length) pc.addTransceiver("audio", { direction: "recvonly" });
+        if (payload.call.type === "VIDEO" && !local?.getVideoTracks().length) {
+          pc.addTransceiver("video", { direction: "recvonly" });
+        }
         try {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
@@ -487,6 +495,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     callDuration,
     callError,
     clearCallError,
+    mediaWarning,
     startCall,
     acceptCall,
     rejectCall,
@@ -509,6 +518,7 @@ const defaultCallContext: CallContextValue = {
   callDuration: 0,
   callError: null,
   clearCallError: () => {},
+  mediaWarning: null,
   startCall: async () => {},
   acceptCall: async () => {},
   rejectCall: async () => {},

@@ -4,6 +4,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/erro
 import * as AuditService from "../audit/audit.service";
 import * as ConversationService from "../conversations/conversation.service";
 import * as MessageService from "../messages/message.service";
+import * as PushService from "../push/push.service";
 import * as CallRepository from "./call.repository";
 import {
   acceptCall,
@@ -25,6 +26,7 @@ vi.mock("./call.repository");
 vi.mock("../conversations/conversation.service");
 vi.mock("../audit/audit.service");
 vi.mock("../messages/message.service");
+vi.mock("../push/push.service");
 
 describe("call.service", () => {
   const callerId = "user-caller-1";
@@ -111,6 +113,41 @@ describe("call.service", () => {
         type: CallType.AUDIO,
       });
       expect(AuditService.record).toHaveBeenCalled();
+      expect(PushService.notifyUsers).toHaveBeenCalledWith(
+        [receiverId],
+        expect.objectContaining({
+          title: "Llamante",
+          body: "Llamada de voz entrante",
+          tag: `call-${callId}`,
+          kind: "call",
+        }),
+      );
+    });
+
+    it("un fallo del push no impide iniciar la llamada", async () => {
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue({
+        id: conversationId,
+        members: [{ userId: callerId }, { userId: receiverId }],
+      } as any);
+      vi.mocked(CallRepository.findActiveCallForUser).mockResolvedValue(null);
+      vi.mocked(CallRepository.createCall).mockResolvedValue({
+        id: callId,
+        conversationId,
+        callerId,
+        receiverId,
+        type: CallType.VIDEO,
+        status: CallStatus.RINGING,
+        startedAt: new Date(),
+        caller: { name: "Llamante" },
+      } as any);
+      vi.mocked(PushService.notifyUsers).mockRejectedValue(new Error("push down"));
+
+      const result = await initiateCall(callerId, { conversationId, receiverId, type: CallType.VIDEO });
+      expect(result.isBusy).toBe(false);
+      expect(PushService.notifyUsers).toHaveBeenCalledWith(
+        [receiverId],
+        expect.objectContaining({ body: "Videollamada entrante" }),
+      );
     });
 
     it("lanza BadRequestError si el receptor no es miembro de la conversación", async () => {
@@ -178,6 +215,7 @@ describe("call.service", () => {
       });
 
       expect(result.isBusy).toBe(true);
+      expect(PushService.notifyUsers).not.toHaveBeenCalled();
       expect(MessageService.sendMessage).toHaveBeenCalledWith(
         callerId,
         conversationId,

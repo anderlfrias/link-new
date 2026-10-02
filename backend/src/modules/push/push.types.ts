@@ -20,4 +20,7 @@ export interface PushPayload {
   /// vez de apilarlas — igual criterio que ya usaba `showNotification` en
   /// el frontend (ver utils/browser-notifications.ts).
   tag: string;
+  /// "call": llamada entrante — el service worker la muestra con vibración/persistente y
+  /// la omite si la app ya está en primer plano (el modal de llamada ya la anuncia).
+  kind?: "message" | "call";
 }

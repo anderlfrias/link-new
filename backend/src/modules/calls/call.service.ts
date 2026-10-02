@@ -2,6 +2,7 @@ import { AuditAction, CallStatus, CallType } from "@prisma/client";
 import { assertMembership } from "../conversations/conversation.service";
 import * as ConversationRepository from "../conversations/conversation.repository";
 import * as AuditService from "../audit/audit.service";
+import * as PushService from "../push/push.service";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as CallRepository from "./call.repository";
 import { CallResponse, InitiateCallInput } from "./call.types";
@@ -35,6 +36,22 @@ export function toCallResponse(call: any): CallResponse {
     endedAt: call.endedAt instanceof Date ? call.endedAt.toISOString() : (call.endedAt ?? null),
     duration: call.duration ?? 0,
   };
+}
+
+/// Web Push de la llamada entrante: llega aunque la pestaña esté en segundo plano o cerrada.
+/// Nunca lanza ni se espera: un push caído no debe impedir que la llamada se inicie.
+async function pushIncomingCall(call: any, type: CallType): Promise<void> {
+  try {
+    await PushService.notifyUsers([call.receiverId], {
+      title: call.caller?.name ?? "Llamada entrante",
+      body: type === CallType.VIDEO ? "Videollamada entrante" : "Llamada de voz entrante",
+      url: `/conversations/${call.conversationId}`,
+      tag: `call-${call.id}`,
+      kind: "call",
+    });
+  } catch {
+    // ignorado a propósito (ver comentario de la función)
+  }
 }
 
 export async function initiateCall(
@@ -99,6 +116,8 @@ export async function initiateCall(
       callType: input.type,
     },
   });
+
+  void pushIncomingCall(call, input.type);
 
   return { call: toCallResponse(call), isBusy: false };
 }

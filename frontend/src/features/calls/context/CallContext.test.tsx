@@ -39,6 +39,7 @@ class FakePC {
   close = vi.fn(() => {
     this.signalingState = "closed";
   });
+  addTransceiver = vi.fn();
   createOffer = vi.fn(async () => ({ type: "offer", sdp: "x" }));
   setLocalDescription = vi.fn(async () => {});
   constructor() {
@@ -199,6 +200,30 @@ describe("CallContext (ciclo de vida WebRTC)", () => {
       await handlers.get("call:accepted")!({ call: named });
     });
     expect(caller.result.current.peerName).toBe("María");
+  });
+
+  it("sin micrófono ni cámara: la llamada sigue en modo solo-recepción (recvonly)", async () => {
+    const notFound = Object.assign(new Error("x"), { name: "NotFoundError" });
+    (navigator.mediaDevices.getUserMedia as any).mockRejectedValue(notFound);
+    const { result } = renderHook(() => useCall(), { wrapper });
+    await startAcceptedCall(result);
+
+    expect(result.current.callState).toBe("connecting");
+    expect(result.current.callError).toBeNull();
+    expect(result.current.mediaWarning).toBe("no-mic");
+    expect(FakePC.instances[0].addTransceiver).toHaveBeenCalledWith("audio", { direction: "recvonly" });
+  });
+
+  it("permiso denegado: error 'denied' (no degrada)", async () => {
+    (navigator.mediaDevices.getUserMedia as any).mockRejectedValueOnce(
+      Object.assign(new Error("x"), { name: "NotAllowedError" }),
+    );
+    const { result } = renderHook(() => useCall(), { wrapper });
+    await act(async () => {
+      await result.current.startCall("conv", "peer", "Peer", "AUDIO");
+    });
+    expect(result.current.callError).toBe("denied");
+    expect(result.current.callState).toBe("idle");
   });
 
   it("sin navigator.mediaDevices (contexto HTTP inseguro): expone error 'insecure'", async () => {
