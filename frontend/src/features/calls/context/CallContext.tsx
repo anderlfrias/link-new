@@ -7,6 +7,7 @@ import { SOCKET_EVENTS } from "@/constants/socket-events";
 import {
   Call,
   CallContextValue,
+  CallError,
   CallState,
   CallType,
 } from "../types/call.types";
@@ -25,6 +26,15 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
+/**
+ * Traza del ciclo de vida de una llamada (solo transiciones relevantes, no por-candidato).
+ * Secuencia esperada: accepted → pc created → offer created → answer received →
+ * ice connecting → webrtc connected.
+ */
+function callLog(step: string, detail?: Record<string, unknown>) {
+  console.debug(`[call] ${step}`, detail ?? "");
+}
+
 const CallContext = createContext<CallContextValue | null>(null);
 
 export function CallProvider({ children }: { children: React.ReactNode }) {
@@ -39,11 +49,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
+  const [callError, setCallError] = useState<CallError | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
+  // Copia síncrona de activeCall: los handlers de socket/WebRTC no pueden esperar a un re-render.
+  const activeCallRef = useRef<Call | null>(null);
+
+  const updateActiveCall = useCallback((call: Call | null) => {
+    activeCallRef.current = call;
+    setActiveCall(call);
+  }, []);
+
+  const clearCallError = useCallback(() => setCallError(null), []);
 
   // Limpieza total de conexión y medios
   const cleanupMediaAndPeer = useCallback(() => {
@@ -55,9 +75,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (pcRef.current) {
-      pcRef.current.onicecandidate = null;
-      pcRef.current.ontrack = null;
-      pcRef.current.close();
+      const pc = pcRef.current;
+      pc.onicecandidate = null;
+      pc.ontrack = null;
+      pc.onconnectionstatechange = null;
+      pc.oniceconnectionstatechange = null;
+      pc.onicegatheringstatechange = null;
+      pc.onicecandidateerror = null;
+      pc.onsignalingstatechange = null;
+      pc.close();
       pcRef.current = null;
     }
 
@@ -67,12 +93,32 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
 
     pendingCandidates.current = [];
+    activeCallRef.current = null;
     setLocalStream(null);
     setRemoteStream(null);
     setIsMuted(false);
     setIsVideoOff(false);
     setCallDuration(0);
   }, []);
+
+  // Manejo de finalización
+  const handleCallEndedLocally = useCallback(() => {
+    cleanupMediaAndPeer();
+    setCallState("idle");
+    updateActiveCall(null);
+  }, [cleanupMediaAndPeer, updateActiveCall]);
+
+  // Falla irrecuperable de la llamada: avisa al otro participante (call:end), limpia y muestra el error.
+  const failCall = useCallback(
+    (reason: CallError, detail: string, callId?: string) => {
+      callLog("call failed", { reason, detail, callId });
+      if (callId && socket) socket.emit(SOCKET_EVENTS.call.end, { callId });
+      playEndCallTone();
+      handleCallEndedLocally();
+      setCallError(reason);
+    },
+    [socket, handleCallEndedLocally],
+  );
 
   // Inicializar o crear RTCPeerConnection
   const getOrCreatePeerConnection = useCallback((targetUserId: string, callId: string) => {
@@ -82,6 +128,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
+    callLog("pc created", { callId });
 
     // Agregar tracks locales
     if (localStreamRef.current) {
@@ -92,10 +139,49 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Recibir tracks remotos
     pc.ontrack = (event) => {
+      if (pcRef.current !== pc) return;
       const [stream] = event.streams;
       if (stream) {
+        callLog("remote track", { kind: event.track.kind });
         setRemoteStream(stream);
       }
+    };
+
+    // Estados reales de WebRTC (los handlers ignoran eventos de un PC ya descartado)
+    pc.onconnectionstatechange = () => {
+      if (pcRef.current !== pc) return;
+      callLog(`pc connectionState=${pc.connectionState}`, { iceConnectionState: pc.iceConnectionState });
+      switch (pc.connectionState) {
+        case "connected":
+          callLog("webrtc connected", { callId });
+          // Solo promueve llamadas en curso; no resucita una llamada ya cerrada
+          setCallState((prev) => (prev === "connecting" || prev === "outgoing" ? "connected" : prev));
+          break;
+        case "failed":
+          failCall("connection", "RTCPeerConnection failed", callId);
+          break;
+        case "closed":
+          handleCallEndedLocally();
+          break;
+        // new / connecting: negociación en curso. disconnected: puede recuperarse solo;
+        // si no, el navegador pasa a "failed" y se maneja arriba.
+      }
+    };
+    pc.oniceconnectionstatechange = () => {
+      if (pcRef.current !== pc) return;
+      callLog(`ice connectionState=${pc.iceConnectionState}`);
+    };
+    pc.onicegatheringstatechange = () => {
+      if (pcRef.current !== pc) return;
+      callLog(`ice gatheringState=${pc.iceGatheringState}`);
+    };
+    pc.onsignalingstatechange = () => {
+      if (pcRef.current !== pc) return;
+      callLog(`signalingState=${pc.signalingState}`);
+    };
+    pc.onicecandidateerror = (event) => {
+      const e = event as RTCPeerConnectionIceErrorEvent;
+      console.warn("[call] ice candidate error", { code: e.errorCode, text: e.errorText, url: e.url });
     };
 
     // Candidatos ICE hacia el otro peer
@@ -110,14 +196,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
 
     return pc;
-  }, [socket]);
-
-  // Manejo de finalización
-  const handleCallEndedLocally = useCallback(() => {
-    cleanupMediaAndPeer();
-    setCallState("idle");
-    setActiveCall(null);
-  }, [cleanupMediaAndPeer]);
+  }, [socket, failCall, handleCallEndedLocally]);
 
   // Temporizador de duración
   useEffect(() => {
@@ -147,6 +226,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       if (!socket || !currentUserId) return;
       if (callState !== "idle") return;
 
+      setCallError(null);
       try {
         // Pedir permisos de audio y video
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -166,22 +246,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             if (!res?.ok) {
               stopAllTones();
               playEndCallTone();
-              cleanupMediaAndPeer();
-              setCallState("idle");
-              setActiveCall(null);
+              handleCallEndedLocally();
             } else if (res.call) {
-              setActiveCall({ ...res.call, receiverName });
+              updateActiveCall({ ...res.call, receiverName });
             }
           },
         );
       } catch (err) {
-        stopAllTones();
-        cleanupMediaAndPeer();
-        setCallState("idle");
-        setActiveCall(null);
+        // Todavia no existe la llamada en el backend: no hay a quien avisar, solo informar al usuario.
+        console.warn("[call] getUserMedia failed (caller)", err);
+        handleCallEndedLocally();
+        setCallError(navigator.mediaDevices ? "media" : "insecure");
       }
     },
-    [socket, currentUserId, callState, cleanupMediaAndPeer],
+    [socket, currentUserId, callState, handleCallEndedLocally, updateActiveCall],
   );
 
   // 2. Aceptar llamada entrante
@@ -190,6 +268,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     try {
       stopAllTones();
+      setCallError(null);
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -203,16 +282,24 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       socket.emit(SOCKET_EVENTS.call.accept, { callId: activeCall.id }, (res: { ok: boolean; call?: Call }) => {
         if (res?.ok && res.call) {
-          setActiveCall(res.call);
-          setCallState("connected");
+          callLog("accept acked", { callId: res.call.id });
+          updateActiveCall(res.call);
+          // "Aceptada" no es "conectada": WebRTC promueve a "connected" cuando el PC lo confirme.
+          setCallState((prev) => (prev === "connected" ? prev : "connecting"));
         } else {
           handleCallEndedLocally();
         }
       });
     } catch (err) {
+      // La llamada sigue en RINGING en el backend: se rechaza para que el llamante no quede esperando.
+      // (El contrato solo admite "declined"/"busy"; no distingue error de medios.)
+      console.warn("[call] getUserMedia failed (callee)", err);
+      socket.emit(SOCKET_EVENTS.call.reject, { callId: activeCall.id, reason: "declined" });
+      playEndCallTone();
       handleCallEndedLocally();
+      setCallError(navigator.mediaDevices ? "media" : "insecure");
     }
-  }, [socket, activeCall, getOrCreatePeerConnection, handleCallEndedLocally]);
+  }, [socket, activeCall, getOrCreatePeerConnection, handleCallEndedLocally, updateActiveCall]);
 
   // 3. Rechazar llamada
   const rejectCall = useCallback(
@@ -265,16 +352,18 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         socket.emit(SOCKET_EVENTS.call.reject, { callId: payload.call.id, reason: "busy" });
         return;
       }
-      setActiveCall(payload.call);
+      updateActiveCall(payload.call);
       setCallState("incoming");
       playIncomingRingtone();
     };
 
     // Llamada saliente aceptada por el otro peer
     const handleAccepted = async (payload: { call: Call }) => {
+      callLog("call accepted", { callId: payload.call.id });
       stopAllTones();
-      setActiveCall(payload.call);
-      setCallState("connected");
+      updateActiveCall(payload.call);
+      // Aceptada por el receptor, pero WebRTC aun no negocio: "connected" lo decide el PC.
+      setCallState((prev) => (prev === "connected" ? prev : "connecting"));
 
       // Si somos el llamante, creamos la oferta WebRTC
       if (payload.call.callerId === currentUserId) {
@@ -282,13 +371,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         try {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
+          callLog("offer created", { callId: payload.call.id });
           socket.emit(SOCKET_EVENTS.call.signal, {
             callId: payload.call.id,
             targetUserId: payload.call.receiverId,
             signal: offer,
           });
-        } catch {
-          // error
+        } catch (err) {
+          console.warn("[call] createOffer failed", err);
+          if (pcRef.current === pc) failCall("connection", "createOffer failed", payload.call.id);
         }
       }
     };
@@ -316,6 +407,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       senderUserId: string;
       signal: RTCSessionDescriptionInit | RTCIceCandidateInit | any;
     }) => {
+      // Senales de una llamada que ya termino (o ajena) no deben crear un PC nuevo
+      if (!activeCallRef.current || activeCallRef.current.id !== payload.callId) return;
       if (!pcRef.current) {
         getOrCreatePeerConnection(payload.senderUserId, payload.callId);
       }
@@ -324,6 +417,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
       try {
         if (payload.signal.type === "offer") {
+          callLog("offer received", { callId: payload.callId });
           await pc.setRemoteDescription(new RTCSessionDescription(payload.signal));
           // Procesar candidatos pendientes
           while (pendingCandidates.current.length > 0) {
@@ -337,7 +431,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             targetUserId: payload.senderUserId,
             signal: answer,
           });
+          callLog("answer created", { callId: payload.callId });
         } else if (payload.signal.type === "answer") {
+          callLog("answer received", { callId: payload.callId });
           await pc.setRemoteDescription(new RTCSessionDescription(payload.signal));
           while (pendingCandidates.current.length > 0) {
             const cand = pendingCandidates.current.shift();
@@ -350,8 +446,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             pendingCandidates.current.push(payload.signal);
           }
         }
-      } catch {
-        // error handling signal
+      } catch (err) {
+        console.warn("[call] signal handling failed", err);
+        // Un fallo de SDP deja la negociacion irrecuperable; un candidato ICE invalido no.
+        if (payload.signal.type === "offer" || payload.signal.type === "answer") {
+          if (pcRef.current === pc) failCall("connection", "SDP negotiation failed", payload.callId);
+        }
       }
     };
 
@@ -370,16 +470,23 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       socket.off(SOCKET_EVENTS.call.ended, handleEnded);
       socket.off(SOCKET_EVENTS.call.signal, handleSignal);
     };
-  }, [socket, callState, currentUserId, getOrCreatePeerConnection, handleCallEndedLocally]);
+  }, [socket, callState, currentUserId, getOrCreatePeerConnection, handleCallEndedLocally, failCall, updateActiveCall]);
+
+  const peerName = activeCall
+    ? (activeCall.callerId === currentUserId ? activeCall.receiverName : activeCall.callerName) ?? null
+    : null;
 
   const value: CallContextValue = {
     callState,
     activeCall,
+    peerName,
     localStream,
     remoteStream,
     isMuted,
     isVideoOff,
     callDuration,
+    callError,
+    clearCallError,
     startCall,
     acceptCall,
     rejectCall,
@@ -394,11 +501,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 const defaultCallContext: CallContextValue = {
   callState: "idle",
   activeCall: null,
+  peerName: null,
   localStream: null,
   remoteStream: null,
   isMuted: false,
   isVideoOff: false,
   callDuration: 0,
+  callError: null,
+  clearCallError: () => {},
   startCall: async () => {},
   acceptCall: async () => {},
   rejectCall: async () => {},

@@ -23,11 +23,14 @@ export function ActiveCallOverlay() {
   const {
     callState,
     activeCall,
+    peerName: peerNameFromCall,
     localStream,
     remoteStream,
     isMuted,
     isVideoOff,
     callDuration,
+    callError,
+    clearCallError,
     endCall,
     toggleMute,
     toggleVideo,
@@ -37,34 +40,64 @@ export function ActiveCallOverlay() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const isVisible = callState === "outgoing" || callState === "connected";
+  const isVisible =
+    callState === "outgoing" || callState === "connecting" || callState === "connected";
+  const isVideo = activeCall?.type === "VIDEO";
 
-  // Conectar remoteStream al video/audio
+  // El remoteStream se reproduce en UN solo elemento: <video> (que ya incluye el audio)
+  // en videollamadas, <audio> en llamadas de voz. Nunca en ambos a la vez (eco/doble audio).
+  const attachRemote = isVisible && !!activeCall && !!remoteStream;
   useEffect(() => {
-    if (remoteStream) {
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream;
-      }
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = remoteStream;
-      }
+    const video = remoteVideoRef.current;
+    const audio = remoteAudioRef.current;
+    const target = isVideo ? video : audio;
+    const other = isVideo ? audio : video;
+    if (other) other.srcObject = null;
+    if (target && attachRemote) {
+      target.srcObject = remoteStream;
+      // autoPlay puede ser bloqueado por el navegador; la llamada fue iniciada por un gesto del usuario.
+      void Promise.resolve(target.play?.()).catch(() => {});
     }
-  }, [remoteStream]);
+    return () => {
+      if (target) target.srcObject = null;
+    };
+  }, [remoteStream, attachRemote, isVideo]);
 
-  // Conectar localStream al video local
+  // Conectar localStream al video local (siempre muted: es el propio micrófono)
   useEffect(() => {
-    if (localStream && localVideoRef.current) {
-      localVideoRef.current.srcObject = localStream;
+    const video = localVideoRef.current;
+    if (localStream && video) {
+      video.srcObject = localStream;
     }
-  }, [localStream]);
+    return () => {
+      if (video) video.srcObject = null;
+    };
+  }, [localStream, isVideo, isVisible]);
 
   if (!isVisible || !activeCall) {
-    return null;
+    if (!callError) return null;
+    return (
+      <div
+        role="alert"
+        className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-red-600 px-4 py-3 text-sm text-white shadow-xl"
+      >
+        <span>
+          {callError === "media"
+            ? t("calls.mediaError")
+            : callError === "insecure"
+              ? t("calls.insecureContext")
+              : t("calls.connectionFailed")}
+        </span>
+        <button type="button" onClick={clearCallError} className="font-semibold underline">
+          OK
+        </button>
+      </div>
+    );
   }
 
-  const isVideo = activeCall.type === "VIDEO";
-  const peerName = activeCall.receiverName || activeCall.callerName || "Contacto";
+  const peerName = peerNameFromCall || "Contacto";
   const isConnected = callState === "connected";
+  const isConnecting = callState === "connecting";
 
   return (
     <div
@@ -72,15 +105,19 @@ export function ActiveCallOverlay() {
       aria-label={isVideo ? t("calls.activeVideoCallAria") : t("calls.activeAudioCallAria")}
       className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-neutral-950/95 p-6 text-white backdrop-blur-md animate-in fade-in"
     >
-      {/* Audio oculto para llamadas de voz */}
-      <audio ref={remoteAudioRef} autoPlay playsInline />
+      {/* Audio oculto: solo en llamadas de voz (en video el audio sale del <video> remoto) */}
+      {!isVideo && <audio ref={remoteAudioRef} autoPlay />}
 
       {/* Barra superior con información */}
       <div className="flex w-full max-w-2xl items-center justify-between z-20">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">{peerName}</h2>
           <p className="text-sm font-medium text-neutral-400">
-            {isConnected ? formatSeconds(callDuration) : t("calls.calling")}
+            {isConnected
+              ? formatSeconds(callDuration)
+              : isConnecting
+                ? t("calls.connecting")
+                : t("calls.calling")}
           </p>
         </div>
         <div className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-neutral-300">
@@ -103,7 +140,7 @@ export function ActiveCallOverlay() {
               <Avatar name={peerName} size="xl" />
             </div>
             <p className="text-base text-neutral-300">
-              {!isConnected ? "Esperando respuesta..." : "Llamada en curso"}
+              {isConnected ? "Llamada en curso" : isConnecting ? t("calls.connecting") : "Esperando respuesta..."}
             </p>
           </div>
         )}

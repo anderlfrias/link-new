@@ -245,6 +245,10 @@ export const en: TranslationSchema = {
     activeAudioCallAria: "Ongoing voice call",
     audioCallBadge: "Voice call",
     videoCallBadge: "Video call",
+    mediaError: "Could not access the microphone or camera. Check your browser permissions.",
+    insecureContext: "Calls require HTTPS (or localhost): the browser blocks the microphone and camera on HTTP connections.",
+    connectionFailed: "The call connection failed.",
+    connecting: "Connecting...",
   },
   profile: {
     myProfile: "My profile",

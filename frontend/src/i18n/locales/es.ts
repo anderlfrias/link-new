@@ -241,6 +241,10 @@ export const es = {
     activeAudioCallAria: "Llamada de voz en curso",
     audioCallBadge: "Llamada de voz",
     videoCallBadge: "Videollamada",
+    mediaError: "No se pudo acceder al micrófono o la cámara. Revisá los permisos del navegador.",
+    insecureContext: "Las llamadas requieren HTTPS (o localhost): el navegador bloquea el micrófono y la cámara en conexiones HTTP.",
+    connectionFailed: "La conexión de la llamada falló.",
+    connecting: "Conectando...",
   },
   profile: {
     myProfile: "Mi perfil",

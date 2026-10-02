@@ -22,6 +22,7 @@ describe("ActiveCallOverlay", () => {
 
     vi.mocked(UseCallModule.useCall).mockReturnValue({
       callState: "outgoing",
+      peerName: "Dra. Laura",
       activeCall: {
         id: "call-1",
         receiverName: "Dra. Laura",
@@ -57,6 +58,7 @@ describe("ActiveCallOverlay", () => {
 
     vi.mocked(UseCallModule.useCall).mockReturnValue({
       callState: "connected",
+      peerName: "Dr. Carlos",
       activeCall: {
         id: "call-2",
         callerName: "Dr. Carlos",
@@ -81,5 +83,76 @@ describe("ActiveCallOverlay", () => {
     const videoBtn = screen.getByLabelText("Apagar cámara");
     fireEvent.click(videoBtn);
     expect(toggleVideoMock).toHaveBeenCalled();
+  });
+
+  const baseCall = {
+    localStream: null,
+    remoteStream: null,
+    callDuration: 0,
+    endCall: vi.fn(),
+    toggleMute: vi.fn(),
+    toggleVideo: vi.fn(),
+  };
+
+  it("llamada de voz: reproduce el stream remoto solo en <audio>", () => {
+    const remoteStream = {} as MediaStream;
+    vi.mocked(UseCallModule.useCall).mockReturnValue({
+      ...baseCall,
+      callState: "connected",
+      activeCall: { id: "c", receiverName: "X", type: "AUDIO" },
+      remoteStream,
+    } as any);
+
+    const { container } = render(<ActiveCallOverlay />);
+    expect(container.querySelectorAll("video")).toHaveLength(0);
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    expect(audio.srcObject).toBe(remoteStream);
+  });
+
+  it("videollamada: stream remoto solo en <video> (sin <audio>) y el local va muted", () => {
+    const remoteStream = {} as MediaStream;
+    const localStream = {} as MediaStream;
+    vi.mocked(UseCallModule.useCall).mockReturnValue({
+      ...baseCall,
+      callState: "connected",
+      activeCall: { id: "c", receiverName: "X", type: "VIDEO" },
+      localStream,
+      remoteStream,
+    } as any);
+
+    const { container } = render(<ActiveCallOverlay />);
+    expect(container.querySelectorAll("audio")).toHaveLength(0);
+    const videos = Array.from(container.querySelectorAll("video"));
+    expect(videos).toHaveLength(2);
+    const remote = videos.find((v) => v.srcObject === remoteStream)!;
+    const local = videos.find((v) => v.srcObject === localStream)!;
+    expect(remote.muted).toBe(false);
+    expect(local.muted).toBe(true);
+  });
+
+  it("muestra 'Conectando...' mientras WebRTC negocia (callState connecting)", () => {
+    vi.mocked(UseCallModule.useCall).mockReturnValue({
+      ...baseCall,
+      callState: "connecting",
+      activeCall: { id: "c", receiverName: "X", type: "AUDIO" },
+    } as any);
+
+    render(<ActiveCallOverlay />);
+    expect(screen.getAllByText("Conectando...").length).toBeGreaterThan(0);
+  });
+
+  it("muestra el error de la llamada aunque ya no haya llamada activa", () => {
+    const clearCallError = vi.fn();
+    vi.mocked(UseCallModule.useCall).mockReturnValue({
+      callState: "idle",
+      activeCall: null,
+      callError: "media",
+      clearCallError,
+    } as any);
+
+    render(<ActiveCallOverlay />);
+    expect(screen.getByRole("alert")).toHaveTextContent("No se pudo acceder al micrófono");
+    fireEvent.click(screen.getByText("OK"));
+    expect(clearCallError).toHaveBeenCalled();
   });
 });
