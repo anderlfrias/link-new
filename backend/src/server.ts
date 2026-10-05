@@ -1,6 +1,6 @@
 import http from "http";
 import app from "./app";
-import env from "./config/env";
+import env, { envWarnings } from "./config/env";
 import { logger } from "./config/logger";
 import { initSocket } from "./socket";
 import { startMessageRetentionWorker } from "./workers/message-retention.worker";
@@ -31,6 +31,11 @@ startUploadCleanupWorker();
 startFileMigrationWorker();
 startAuditRetentionWorker();
 
+// env.ts no puede loguearlos: cuando valida el .env todavía no existe el logger.
+envWarnings.forEach((warning) => logger.warn(warning));
+
 httpServer.listen(PORT, () => {
-  logger.info({ port: PORT }, "server listening");
+  // El modo de autenticación se deduce del .env (LOCAL_AUTH_PLAN.md, D1): así
+  // queda a la vista al arrancar, sin tener que deducirlo leyendo el .env.
+  logger.info({ port: PORT, authMode: env.auth.mode }, "server listening");
 });

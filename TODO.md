@@ -43,3 +43,7 @@ Sistema y Configuración
 Otros
 
 [x] Al seleccionar varios para reenviar algun archivo se pierden si cambio los parametros de busqueda. Si ya estan seleccionados deben aparecer siempre.
+
+Bugs
+
+[ ] No sale la opcion de eliminar integrantes de un grupo aunque la configuracion lo permita.

@@ -1,5 +1,7 @@
+import { createHmac } from "crypto";
 import { FileTypeRestrictionMode } from "@prisma/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import env from "../../config/env";
 import { logger } from "../../config/logger";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 
@@ -124,6 +126,52 @@ describe("file.service", () => {
 
       expect(response.size).toBe(Number(threeGib));
       expect(() => JSON.stringify(response)).not.toThrow();
+    });
+  });
+
+  // Respaldo cuando no hay FILE_URL_SIGNING_SECRET (LOCAL_AUTH_PLAN.md §6):
+  // antes era siempre EXTERNAL_AUTH_JWT_SECRET, que en modo local no existe.
+  describe("generateFileToken — secreto de firma", () => {
+    const originalSigningSecret = env.FILE_URL_SIGNING_SECRET;
+    const originalAuth = env.auth;
+
+    afterEach(() => {
+      env.FILE_URL_SIGNING_SECRET = originalSigningSecret;
+      env.auth = originalAuth;
+    });
+
+    function isSignedWith(secret: string, fileId: string, token: string): boolean {
+      const [payloadB64, sig] = token.split(".");
+      const { u, e } = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
+      return createHmac("sha256", secret).update(`${fileId}:${u}:${e}`).digest("base64url") === sig;
+    }
+
+    it("con FILE_URL_SIGNING_SECRET definido, firma con ese secreto", () => {
+      env.FILE_URL_SIGNING_SECRET = "dedicated-file-secret";
+
+      const token = generateFileToken("file-1", "u-user");
+
+      expect(isSignedWith("dedicated-file-secret", "file-1", token)).toBe(true);
+    });
+
+    it("sin FILE_URL_SIGNING_SECRET, en modo external-auth firma con EXTERNAL_AUTH_JWT_SECRET", () => {
+      env.FILE_URL_SIGNING_SECRET = undefined;
+      env.auth = { mode: "external-auth", external-auth: { apiUrl: "https://external-auth.test", appCode: "app", jwtSecret: "external-auth-secret" } };
+
+      const token = generateFileToken("file-1", "u-user");
+
+      expect(isSignedWith("external-auth-secret", "file-1", token)).toBe(true);
+    });
+
+    it("sin FILE_URL_SIGNING_SECRET, en modo local firma con LOCAL_AUTH_JWT_SECRET y el token verifica", () => {
+      const localSecret = "l".repeat(32);
+      env.FILE_URL_SIGNING_SECRET = undefined;
+      env.auth = { mode: "local", local: { jwtSecret: localSecret } };
+
+      const token = generateFileToken("file-1", "u-user");
+
+      expect(isSignedWith(localSecret, "file-1", token)).toBe(true);
+      expect(verifyFileToken("file-1", token).userId).toBe("u-user");
     });
   });
 

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { requireExternalUserConfig } from "../../config/auth-config";
 import env from "../../config/env";
 import { MappedUser, ExternalUserRole, ExternalUserTokenPayload } from "./auth.types";
 
@@ -34,6 +35,9 @@ export function mapTokenToUser(payload: ExternalUserTokenPayload): MappedUser {
   };
 }
 
+/// En modo local tira (`requireExternalUserConfig`): ahí ningún token de EXTERNAL_AUTH es
+/// válido, por más bien firmado que esté con el secreto que EXTERNAL_AUTH usaba.
 export function verifyToken(token: string): ExternalUserTokenPayload {
-  return jwt.verify(token, env.EXTERNAL_AUTH_JWT_SECRET, { algorithms: ["HS256"] }) as ExternalUserTokenPayload;
+  const { jwtSecret } = requireExternalUserConfig(env.auth);
+  return jwt.verify(token, jwtSecret, { algorithms: ["HS256"] }) as ExternalUserTokenPayload;
 }

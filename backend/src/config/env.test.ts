@@ -1,0 +1,111 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AuthEnvVars } from "./auth-config";
+
+// env.ts valida process.env una sola vez al importarse, así que cada caso
+// resetea el registro de módulos y lo reimporta (mismo patrón que
+// cors-origins.test.ts). Las cuatro variables de autenticación se fijan
+// siempre de forma explícita (vacía = "no definida"): así el resultado no
+// depende del .env local de quien corre los tests, porque dotenv no pisa
+// variables que ya existen.
+function stubAuthEnv(vars: AuthEnvVars) {
+  vi.stubEnv("EXTERNAL_AUTH_API_URL", vars.EXTERNAL_AUTH_API_URL ?? "");
+  vi.stubEnv("APP_CODE_EXTERNAL_AUTH", vars.APP_CODE_EXTERNAL_AUTH ?? "");
+  vi.stubEnv("EXTERNAL_AUTH_JWT_SECRET", vars.EXTERNAL_AUTH_JWT_SECRET ?? "");
+  vi.stubEnv("LOCAL_AUTH_JWT_SECRET", vars.LOCAL_AUTH_JWT_SECRET ?? "");
+}
+
+async function importFreshEnv() {
+  vi.resetModules();
+  return import("./env");
+}
+
+/// env.ts corta el arranque con process.exit(1): acá se reemplaza por un throw
+/// para poder verificar qué imprimió sin matar el proceso de test.
+function spyOnFatalExit() {
+  const exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
+    throw new Error(`process.exit(${code})`);
+  });
+  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  return { exitSpy, consoleErrorSpy };
+}
+
+const EXTERNAL_AUTH_VARS = {
+  EXTERNAL_AUTH_API_URL: "https://external-auth.test.local",
+  APP_CODE_EXTERNAL_AUTH: "test-app-code",
+  EXTERNAL_AUTH_JWT_SECRET: "test-jwt-secret",
+};
+
+const LOCAL_SECRET = "l".repeat(32);
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  vi.resetModules();
+});
+
+describe("config/env — modo de autenticación", () => {
+  it("con las tres EXTERNAL_AUTH_* -> modo external-auth, sin exponer las variables de auth sueltas", async () => {
+    stubAuthEnv(EXTERNAL_AUTH_VARS);
+
+    const { default: env, envWarnings } = await importFreshEnv();
+
+    expect(env.auth).toEqual({
+      mode: "external-auth",
+      external-auth: { apiUrl: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL, appCode: EXTERNAL_AUTH_VARS.APP_CODE_EXTERNAL_AUTH, jwtSecret: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_JWT_SECRET },
+    });
+    expect(env).not.toHaveProperty("EXTERNAL_AUTH_API_URL");
+    expect(env).not.toHaveProperty("APP_CODE_EXTERNAL_AUTH");
+    expect(env).not.toHaveProperty("EXTERNAL_AUTH_JWT_SECRET");
+    expect(env).not.toHaveProperty("LOCAL_AUTH_JWT_SECRET");
+    expect(env.PORT).toBe(4000);
+    expect(envWarnings).toEqual([]);
+  });
+
+  it("con las EXTERNAL_AUTH_* vacías y LOCAL_AUTH_JWT_SECRET -> modo local (vacía cuenta como no definida)", async () => {
+    stubAuthEnv({ LOCAL_AUTH_JWT_SECRET: LOCAL_SECRET });
+
+    const { default: env } = await importFreshEnv();
+
+    expect(env.auth).toEqual({ mode: "local", local: { jwtSecret: LOCAL_SECRET } });
+  });
+
+  it("LOCAL_AUTH_JWT_SECRET sobrante en modo external-auth -> sigue en external-auth y deja un aviso en envWarnings", async () => {
+    stubAuthEnv({ ...EXTERNAL_AUTH_VARS, LOCAL_AUTH_JWT_SECRET: LOCAL_SECRET });
+
+    const { default: env, envWarnings } = await importFreshEnv();
+
+    expect(env.auth.mode).toBe("external-auth");
+    expect(envWarnings).toHaveLength(1);
+    expect(envWarnings[0]).toContain("LOCAL_AUTH_JWT_SECRET");
+  });
+
+  it("EXTERNAL_AUTH a medias -> imprime el motivo y corta el arranque", async () => {
+    stubAuthEnv({ EXTERNAL_AUTH_API_URL: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL });
+    const { exitSpy, consoleErrorSpy } = spyOnFatalExit();
+
+    await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Incomplete EXTERNAL_AUTH configuration: missing APP_CODE_EXTERNAL_AUTH, EXTERNAL_AUTH_JWT_SECRET."),
+    );
+  });
+
+  it("sin EXTERNAL_AUTH_* ni LOCAL_AUTH_JWT_SECRET -> imprime que falta el secreto local y corta el arranque", async () => {
+    stubAuthEnv({});
+    const { consoleErrorSpy } = spyOnFatalExit();
+
+    await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("LOCAL_AUTH_JWT_SECRET is required"));
+  });
+
+  it("EXTERNAL_AUTH_API_URL que no es una URL -> lo sigue rechazando el schema", async () => {
+    stubAuthEnv({ ...EXTERNAL_AUTH_VARS, EXTERNAL_AUTH_API_URL: "not-a-url" });
+    const { consoleErrorSpy } = spyOnFatalExit();
+
+    await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("EXTERNAL_AUTH_API_URL must be a valid URL"));
+  });
+});

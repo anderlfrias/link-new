@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { User } from "@prisma/client";
+import { requireExternalUserConfig } from "../../config/auth-config";
 import env from "../../config/env";
 import { getLogger, getRequestMeta } from "../../config/request-context";
 import {
@@ -22,9 +23,12 @@ import { MappedUser, ExternalUserLoginResponse } from "./auth.types";
 import { buildFullName } from "./jwt";
 
 /// Mismo timeout para toda llamada a EXTERNAL_AUTH (login, foto de perfil, lo que se agregue después).
+/// En las tres, `requireExternalUserConfig` va antes de armar el timeout: en modo
+/// local tira, y así no queda un timer colgado.
 const EXTERNAL_AUTH_REQUEST_TIMEOUT_MS = 5000;
 
 export async function login(user: string, password: string, clientIp?: string): Promise<string> {
+  const { apiUrl, appCode } = requireExternalUserConfig(env.auth);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), EXTERNAL_AUTH_REQUEST_TIMEOUT_MS);
 
@@ -39,10 +43,10 @@ export async function login(user: string, password: string, clientIp?: string): 
 
   let response: Response;
   try {
-    response = await fetch(`${env.EXTERNAL_AUTH_API_URL}/v1/login`, {
+    response = await fetch(`${apiUrl}/v1/login`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ user, password, app: env.APP_CODE_EXTERNAL_AUTH }),
+      body: JSON.stringify({ user, password, app: appCode }),
       signal: controller.signal,
     });
     getLogger().debug({ status: response.status }, "external-auth login responded");
@@ -104,14 +108,15 @@ export interface ProfilePicture {
 
 /// Body compartido por `GET /v1/profile/picture` (propia) y
 /// `GET /v1/profile/picture/:username` (de un tercero) — mismo formato de
-/// respuesta y mismo mapeo de errores, solo cambia la URL/el identificador.
-async function fetchExternalUserProfilePicture(url: string, token: string): Promise<ProfilePicture> {
+/// respuesta y mismo mapeo de errores, solo cambia la ruta/el identificador.
+async function fetchExternalUserProfilePicture(path: string, token: string): Promise<ProfilePicture> {
+  const { apiUrl } = requireExternalUserConfig(env.auth);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), EXTERNAL_AUTH_REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetch(`${apiUrl}${path}`, {
       // EXTERNAL_AUTH decodifica el header tal cual con jwt-decode (sin esperar el
       // prefijo "Bearer "); mandarlo rompe el decode y EXTERNAL_AUTH cae a su catch (500).
       headers: { Authorization: token },
@@ -156,7 +161,7 @@ async function fetchExternalUserProfilePicture(url: string, token: string): Prom
 /// token (no recibe ningún id) — por diseño de EXTERNAL_AUTH, esto solo puede traer
 /// la foto de quien está autenticado, nunca la de otro usuario.
 export function getProfilePicture(token: string): Promise<ProfilePicture> {
-  return fetchExternalUserProfilePicture(`${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture`, token);
+  return fetchExternalUserProfilePicture("/v1/profile/picture", token);
 }
 
 /// GET /api/v1/profile/picture/:username de EXTERNAL_AUTH — a diferencia del endpoint
@@ -165,10 +170,7 @@ export function getProfilePicture(token: string): Promise<ProfilePicture> {
 /// cualquier contacto de la app sin depender de que esa persona haya iniciado
 /// sesión antes acá (ver `syncContactAvatar` y `user.service.ts`).
 export function getProfilePictureByUsername(token: string, username: string): Promise<ProfilePicture> {
-  return fetchExternalUserProfilePicture(
-    `${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture/${encodeURIComponent(username)}`,
-    token,
-  );
+  return fetchExternalUserProfilePicture(`/v1/profile/picture/${encodeURIComponent(username)}`, token);
 }
 
 /// Guarda una foto ya obtenida (de EXTERNAL_AUTH, o de subirla nosotros mismos) como
@@ -319,13 +321,14 @@ export interface ExternalUserAppUser {
 /// entrado acá o no — es la fuente para poblar la lista de contactos completa
 /// (ver `syncAppUsers`, usado por `user.service.ts`).
 export async function getAppUsers(token: string): Promise<ExternalUserAppUser[]> {
+  const { apiUrl, appCode } = requireExternalUserConfig(env.auth);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), EXTERNAL_AUTH_REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
     response = await fetch(
-      `${env.EXTERNAL_AUTH_API_URL}/v1/apps/users/by-codes?codes=${encodeURIComponent(env.APP_CODE_EXTERNAL_AUTH)}`,
+      `${apiUrl}/v1/apps/users/by-codes?codes=${encodeURIComponent(appCode)}`,
       { headers: { Authorization: token }, signal: controller.signal },
     );
   } catch (error) {

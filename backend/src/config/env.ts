@@ -1,12 +1,30 @@
 import "dotenv/config";
 import * as yup from "yup";
+import { AuthConfig, AuthConfigError, resolveAuthConfig } from "./auth-config";
+
+/// Un string vacío (`EXTERNAL_AUTH_API_URL=""`) cuenta como "no definida": es la forma
+/// natural de apagar una variable en un .env sin borrar la línea. Sin esto,
+/// `url()` lo rechazaría como URL inválida en vez de tratarlo como ausente.
+function optionalString() {
+  return yup
+    .string()
+    .transform((value, originalValue) =>
+      typeof originalValue === "string" && originalValue.trim() === "" ? undefined : value,
+    )
+    .optional();
+}
 
 const schema = yup.object({
   DATABASE_URL: yup.string().required(),
   PORT: yup.number().default(4000),
-  EXTERNAL_AUTH_API_URL: yup.string().url().required(),
-  APP_CODE_EXTERNAL_AUTH: yup.string().required(),
-  EXTERNAL_AUTH_JWT_SECRET: yup.string().required(),
+  // Autenticación (LOCAL_AUTH_PLAN.md, D1): con las tres EXTERNAL_AUTH_* la
+  // instalación usa EXTERNAL_AUTH; sin ninguna, cuentas locales (requiere
+  // LOCAL_AUTH_JWT_SECRET); con una o dos, no arranca. La combinación la
+  // valida `resolveAuthConfig` (auth-config.ts), no este schema.
+  EXTERNAL_AUTH_API_URL: optionalString().url(),
+  APP_CODE_EXTERNAL_AUTH: optionalString(),
+  EXTERNAL_AUTH_JWT_SECRET: optionalString(),
+  LOCAL_AUTH_JWT_SECRET: optionalString(),
   // Solo semilla de AppSettings.maxUploadSizeMb en el primer arranque (ver
   // settings.repository.ts#getOrCreate) — después la fila en la base manda.
   // 2048 (antes 25): techo que un admin puede habilitar una vez completado
@@ -26,7 +44,8 @@ const schema = yup.object({
   // restart con esta variable siempre presente.
   GIPHY_API_KEY: yup.string().optional(),
   // Secreto para firmar tokens HMAC en URLs de archivos (/v1/files/:id/content?t=...).
-  // Si no se define, se utiliza EXTERNAL_AUTH_JWT_SECRET como fallback seguro.
+  // Si no se define, se usa el secreto JWT del modo activo (EXTERNAL_AUTH_JWT_SECRET
+  // o LOCAL_AUTH_JWT_SECRET, ver getAuthJwtSecret en auth-config.ts).
   FILE_URL_SIGNING_SECRET: yup.string().optional(),
   // Almacenamiento S3 (SeaweedFS / MinIO / AWS S3) — LARGE_FILES_PLAN.md Fase 3
   STORAGE_WRITE_PROVIDER: yup.string().oneOf(["LOCAL", "S3"]).default("LOCAL"),
@@ -59,12 +78,34 @@ const schema = yup.object({
     .default(false),
 });
 
-let env: yup.InferType<typeof schema>;
+type ParsedEnv = yup.InferType<typeof schema>;
+type AuthEnvKey = "EXTERNAL_AUTH_API_URL" | "APP_CODE_EXTERNAL_AUTH" | "EXTERNAL_AUTH_JWT_SECRET" | "LOCAL_AUTH_JWT_SECRET";
+
+/// Las variables de autenticación no se exponen sueltas, solo ya resueltas en
+/// `auth`: así ningún módulo puede leer `EXTERNAL_AUTH_API_URL` sin pasar por el modo
+/// activo (ver `requireExternalUserConfig` en auth-config.ts).
+export type Env = Omit<ParsedEnv, AuthEnvKey> & { auth: AuthConfig };
+
+let env: Env;
+
+/// Avisos no fatales de la configuración. Los loguea server.ts al arrancar,
+/// porque acá todavía no existe el logger (ver el comentario del catch).
+export const envWarnings: string[] = [];
 
 try {
-  env = schema.validateSync(process.env, { abortEarly: false, stripUnknown: true });
+  const { EXTERNAL_AUTH_API_URL, APP_CODE_EXTERNAL_AUTH, EXTERNAL_AUTH_JWT_SECRET, LOCAL_AUTH_JWT_SECRET, ...rest } =
+    schema.validateSync(process.env, { abortEarly: false, stripUnknown: true });
+  const { config, warnings } = resolveAuthConfig({
+    EXTERNAL_AUTH_API_URL,
+    APP_CODE_EXTERNAL_AUTH,
+    EXTERNAL_AUTH_JWT_SECRET,
+    LOCAL_AUTH_JWT_SECRET,
+  });
+  env = { ...rest, auth: config };
+  envWarnings.push(...warnings);
 } catch (error) {
-  const messages = error instanceof yup.ValidationError ? error.errors : [String(error)];
+  const messages =
+    error instanceof yup.ValidationError || error instanceof AuthConfigError ? error.errors : [String(error)];
   // Única excepción a la prohibición de console.* en este backend (ver
   // LOGGING_PLAN.md y src/no-console.test.ts): logger.ts importa este archivo
   // para leer LOG_LEVEL, así que acá todavía no existe un logger que usar — y

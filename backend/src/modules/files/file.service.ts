@@ -4,6 +4,7 @@ import { parseBuffer } from "music-metadata";
 import { AuditAction, FileTypeRestrictionMode, StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
+import { getAuthJwtSecret } from "../../config/auth-config";
 import env from "../../config/env";
 import { prisma } from "../../config/prisma";
 import { getLogger } from "../../config/request-context";
@@ -64,7 +65,7 @@ export function safeExtension(originalName: string, mimeType: string): string {
 }
 
 function getSigningSecret(): string {
-  return env.FILE_URL_SIGNING_SECRET || env.EXTERNAL_AUTH_JWT_SECRET;
+  return env.FILE_URL_SIGNING_SECRET || getAuthJwtSecret(env.auth);
 }
 
 /// Genera un token HMAC con expiración para acceder a un archivo específico (TTL default 1 hora).

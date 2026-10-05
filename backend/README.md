@@ -228,14 +228,16 @@ La **identidad** del usuario (quién es, cómo se autentica, sus credenciales) e
 
 ## Proveedor de Autenticación
 
-La aplicación soportará dos modos de autenticación, definidos por el enum `AuthProvider` (`prisma/schema.prisma`):
+Cada instalación autentica con **un** proveedor, que se deduce del `.env` al arrancar (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../LOCAL_AUTH_PLAN.md)):
 
-* **`LOCAL`** — la propia aplicación administra sus propios usuarios (sin depender de ningún sistema externo).
-* **`EXTERNAL`** — la aplicación utiliza un proveedor externo (por ejemplo el ERP u otro sistema de identidad) para autenticar y sincronizar usuarios.
+* **`external-auth`** — con las tres variables `EXTERNAL_AUTH_*` definidas: un proveedor externo (EXTERNAL_AUTH) autentica a los usuarios y el chat sincroniza su perfil. Es el modo de las instalaciones actuales.
+* **`local`** — sin ninguna `EXTERNAL_AUTH_*`: la propia aplicación administra sus usuarios y sus credenciales (requiere `LOCAL_AUTH_JWT_SECRET`). El inicio de sesión local todavía está en desarrollo.
 
-La selección del proveedor se realiza **una única vez, durante la instalación** del sistema, y permanece fija durante toda la vida de esa instalación.
+Con solo una o dos `EXTERNAL_AUTH_*`, el servidor no arranca. El modo activo se loguea al arrancar (`authMode` en la línea `server listening`).
 
-En este punto del proyecto, `AuthProvider` solo está declarado en el esquema de Prisma: todavía no se lee desde variables de entorno, no hay lógica que dependa de su valor, ni servicios, middlewares o endpoints de autenticación. Esta sección documenta la intención de la arquitectura para pasos posteriores.
+El modo es de la instalación, no de cada cuenta: `User` es el perfil dentro del chat y no sabe con qué proveedor se autentica (ver "Identidad vs. perfil dentro del chat"). Por eso una instalación va a poder cambiar de modo conservando el historial de sus usuarios (LOCAL_AUTH_PLAN.md §10).
+
+El enum `AuthProvider` de `prisma/schema.prisma` es de una etapa anterior, en la que el proveedor se iba a guardar en la base. No lo usa nada, y se elimina en la Fase 2 de LOCAL_AUTH_PLAN.md.
 
 ---
 

@@ -1,8 +1,13 @@
 import jwt from "jsonwebtoken";
 import { describe, expect, it } from "vitest";
+import { requireExternalUserConfig } from "../../config/auth-config";
 import env from "../../config/env";
+import { ServiceUnavailableError } from "../../utils/errors";
 import { ExternalUserTokenPayload } from "./auth.types";
 import { buildFullName, mapTokenToUser, verifyToken } from "./jwt";
+
+// vitest.config.ts define las tres EXTERNAL_AUTH_*, así que estos tests corren en modo external-auth.
+const EXTERNAL_AUTH_JWT_SECRET = requireExternalUserConfig(env.auth).jwtSecret;
 
 function createValidPayload(overrides: Partial<ExternalUserTokenPayload> = {}): ExternalUserTokenPayload {
   return {
@@ -98,7 +103,7 @@ describe("jwt module", () => {
   describe("verifyToken", () => {
     it("decodifica y valida un token firmado con el secret correcto", () => {
       const payload = createValidPayload();
-      const token = jwt.sign(payload, env.EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
+      const token = jwt.sign(payload, EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
 
       const decoded = verifyToken(token);
 
@@ -119,13 +124,25 @@ describe("jwt module", () => {
       const expiredPayload = createValidPayload({
         exp: Math.floor(Date.now() / 1000) - 60,
       });
-      const token = jwt.sign(expiredPayload, env.EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
+      const token = jwt.sign(expiredPayload, EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
 
       expect(() => verifyToken(token)).toThrow(jwt.TokenExpiredError);
     });
 
     it("lanza error si el token es inválido o corrupto", () => {
       expect(() => verifyToken("not-a-valid-token")).toThrow(jwt.JsonWebTokenError);
+    });
+
+    it("en modo local rechaza un token de EXTERNAL_AUTH aunque esté firmado con el secreto que EXTERNAL_AUTH usaba", () => {
+      const token = jwt.sign(createValidPayload(), EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
+      const originalAuth = env.auth;
+      env.auth = { mode: "local", local: { jwtSecret: "l".repeat(32) } };
+
+      try {
+        expect(() => verifyToken(token)).toThrow(ServiceUnavailableError);
+      } finally {
+        env.auth = originalAuth;
+      }
     });
   });
 });

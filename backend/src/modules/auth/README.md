@@ -2,17 +2,20 @@
 
 Este módulo no administra usuarios ni contraseñas: reenvía credenciales al microservicio **EXTERNAL_AUTH**, verifica el JWT que este emite y sincroniza el perfil local (`User`) con lo que EXTERNAL_AUTH devuelve. El backend nunca emite su propio token: el que usa el cliente en cada request es siempre el de EXTERNAL_AUTH.
 
-## Variables de entorno requeridas
+## Variables de entorno
 
-Definidas y validadas en `src/config/env.ts` (el servidor no arranca si falta alguna):
+Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el modo de autenticación de la instalación (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../../../../LOCAL_AUTH_PLAN.md)): con las tres definidas, modo `external-auth` (todo lo que describe este README); sin ninguna, modo `local`; con una o dos, el servidor no arranca.
 
 | Variable | Descripción |
 |---|---|
-| `DATABASE_URL` | Cadena de conexión a PostgreSQL |
-| `EXTERNAL_AUTH_API_URL` | URL base de EXTERNAL_AUTH, **sin** el sufijo `/v1/login` (ej. `https://external-auth.midominio.com`) |
-| `APP_CODE_EXTERNAL_AUTH` | Código de esta aplicación registrado en EXTERNAL_AUTH |
-| `EXTERNAL_AUTH_JWT_SECRET` | Secreto compartido para verificar (HS256) los JWT que emite EXTERNAL_AUTH |
+| `DATABASE_URL` | Cadena de conexión a PostgreSQL (siempre requerida) |
+| `EXTERNAL_AUTH_API_URL` | Modo external-auth: URL base de EXTERNAL_AUTH, **sin** el sufijo `/v1/login` (ej. `https://external-auth.midominio.com`) |
+| `APP_CODE_EXTERNAL_AUTH` | Modo external-auth: código de esta aplicación registrado en EXTERNAL_AUTH |
+| `EXTERNAL_AUTH_JWT_SECRET` | Modo external-auth: secreto compartido para verificar (HS256) los JWT que emite EXTERNAL_AUTH |
+| `LOCAL_AUTH_JWT_SECRET` | Modo local: secreto para firmar los tokens de las cuentas locales, de 32 caracteres o más. El inicio de sesión local todavía está en desarrollo |
 | `PORT` | Opcional, puerto del servidor (default `4000`) |
+
+El código de este módulo no lee esas variables sueltas: pide la config a `requireExternalUserConfig(env.auth)`. En modo local esa función tira `503` (`external-auth_not_configured`), así que ningún camino que pegue contra EXTERNAL_AUTH (login, fotos, contactos) llega a llamar a una URL `undefined`.
 
 ## Levantar el servidor
 

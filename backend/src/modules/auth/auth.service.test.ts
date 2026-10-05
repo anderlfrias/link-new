@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { requireExternalUserConfig } from "../../config/auth-config";
 import env from "../../config/env";
 import { logger } from "../../config/logger";
 import { runWithContext } from "../../config/request-context";
@@ -52,6 +53,9 @@ import {
   upsertUsuario,
 } from "./auth.service";
 
+// vitest.config.ts define las tres EXTERNAL_AUTH_*, así que estos tests corren en modo external-auth.
+const external-auth = requireExternalUserConfig(env.auth);
+
 describe("auth.service", () => {
   const originalConsoleError = console.error;
   const originalConsoleLog = console.log;
@@ -82,14 +86,14 @@ describe("auth.service", () => {
 
       expect(token).toBe("valid-jwt-token");
       expect(fetch).toHaveBeenCalledWith(
-        `${env.EXTERNAL_AUTH_API_URL}/v1/login`,
+        `${external-auth.apiUrl}/v1/login`,
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user: "validuser",
             password: "correctpassword",
-            app: env.APP_CODE_EXTERNAL_AUTH,
+            app: external-auth.appCode,
           }),
         }),
       );
@@ -108,7 +112,7 @@ describe("auth.service", () => {
 
       expect(token).toBe("token-with-ip");
       expect(fetch).toHaveBeenCalledWith(
-        `${env.EXTERNAL_AUTH_API_URL}/v1/login`,
+        `${external-auth.apiUrl}/v1/login`,
         expect.objectContaining({
           method: "POST",
           headers: {
@@ -119,7 +123,7 @@ describe("auth.service", () => {
           body: JSON.stringify({
             user: "validuser",
             password: "correctpassword",
-            app: env.APP_CODE_EXTERNAL_AUTH,
+            app: external-auth.appCode,
           }),
         }),
       );
@@ -141,7 +145,7 @@ describe("auth.service", () => {
 
       expect(token).toBe("token-context-ip");
       expect(fetch).toHaveBeenCalledWith(
-        `${env.EXTERNAL_AUTH_API_URL}/v1/login`,
+        `${external-auth.apiUrl}/v1/login`,
         expect.objectContaining({
           method: "POST",
           headers: {
@@ -512,7 +516,7 @@ describe("auth.service", () => {
       expect(result.contentType).toBe("image/jpeg");
       expect(result.buffer).toEqual(buffer);
       expect(fetch).toHaveBeenCalledWith(
-        `${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture`,
+        `${external-auth.apiUrl}/v1/profile/picture`,
         expect.objectContaining({ headers: { Authorization: "token-abc" } }),
       );
     });
@@ -540,7 +544,7 @@ describe("auth.service", () => {
       await getProfilePictureByUsername("token-abc", "juan.perez");
 
       expect(fetch).toHaveBeenCalledWith(
-        `${env.EXTERNAL_AUTH_API_URL}/v1/profile/picture/juan.perez`,
+        `${external-auth.apiUrl}/v1/profile/picture/juan.perez`,
         expect.anything(),
       );
     });
@@ -789,6 +793,39 @@ describe("auth.service", () => {
         expect.objectContaining({ err: expect.any(Error), username: "juan" }),
         "failed to sync contact from external-auth",
       );
+    });
+  });
+
+  // Sin EXTERNAL_AUTH_* en el .env la instalación está en modo local: ningún camino
+  // de este servicio debe llegar a llamar a EXTERNAL_AUTH (con una URL "undefined").
+  describe("en modo local (EXTERNAL_AUTH sin configurar)", () => {
+    const originalAuth = env.auth;
+
+    beforeEach(() => {
+      env.auth = { mode: "local", local: { jwtSecret: "l".repeat(32) } };
+      vi.stubGlobal("fetch", vi.fn());
+    });
+
+    afterEach(() => {
+      env.auth = originalAuth;
+    });
+
+    it("login rechaza con ServiceUnavailableError sin llamar a EXTERNAL_AUTH", async () => {
+      await expect(login("validuser", "correctpassword")).rejects.toThrow(ServiceUnavailableError);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("getAppUsers y las fotos rechazan sin llamar a EXTERNAL_AUTH", async () => {
+      await expect(getAppUsers("token")).rejects.toThrow(ServiceUnavailableError);
+      await expect(getProfilePicture("token")).rejects.toThrow(ServiceUnavailableError);
+      await expect(getProfilePictureByUsername("token", "juan.perez")).rejects.toThrow(ServiceUnavailableError);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("syncAppUsers no rompe (sigue siendo fail-soft) y no llama a EXTERNAL_AUTH", async () => {
+      await expect(syncAppUsers("token")).resolves.toBeUndefined();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(upsertUserFromExternalUser).not.toHaveBeenCalled();
     });
   });
 });
