@@ -1,24 +1,44 @@
 import { Router } from "express";
 import multer from "multer";
-import { authenticate } from "../../middlewares/auth.middleware";
+import { authenticate, authenticateForPasswordChange, requireAuthMode } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import { validateBody } from "../../middlewares/validate.middleware";
-import { loginIpRateLimiter, loginUserRateLimiter } from "../../middlewares/rate-limit.middleware";
+import {
+  loginIpRateLimiter,
+  loginUserRateLimiter,
+  passwordChangeRateLimiter,
+} from "../../middlewares/rate-limit.middleware";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { BadRequestError } from "../../utils/errors";
 import {
+  changePassword,
   deleteProfilePicture,
+  getAuthConfig,
   getProfilePicture,
   login,
   updatePreferences,
   updateProfile,
   updateProfilePicture,
 } from "./auth.controller";
-import { updatePreferencesSchema, updateProfileSchema } from "./auth.validator";
+import { changePasswordSchema, updatePreferencesSchema, updateProfileSchema } from "./auth.validator";
 
 const router = Router();
 
 router.post("/login", loginIpRateLimiter, loginUserRateLimiter, login);
+// Público: el frontend lo necesita antes de tener sesión, o con un token
+// restringido que no puede leer /settings/public (LOCAL_AUTH_PLAN.md, D14).
+router.get("/config", getAuthConfig);
+// Solo modo local (404 en external-auth). Único lugar donde sirve un token restringido
+// (`pcr`, D13): por eso `authenticateForPasswordChange` y no `authenticate`.
+router.patch(
+  "/password",
+  requireAuthMode("local"),
+  authenticateForPasswordChange,
+  attachInternalUser,
+  passwordChangeRateLimiter,
+  validateBody(changePasswordSchema),
+  changePassword,
+);
 // GET ahora sí necesita attachInternalUser: lee la foto ya cacheada en la
 // base local (`getOwnProfilePictureUrl`), ya no proxea a ningún proveedor externo.
 router.get("/profile/picture", authenticate, attachInternalUser, getProfilePicture);

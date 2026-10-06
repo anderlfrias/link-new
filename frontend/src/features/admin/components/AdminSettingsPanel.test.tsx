@@ -5,10 +5,30 @@ import { AdminSettingsPanel } from "./AdminSettingsPanel";
 import { useAdminSettings } from "@/features/admin/hooks/use-admin-settings";
 import { useUpdateAdminSettings } from "@/features/admin/hooks/use-update-admin-settings";
 import type { AdminSettings } from "@/features/admin/types/admin-settings.types";
+import type { AuthMode } from "@/features/auth/types/auth.types";
+import { useAuth } from "@/providers/auth-provider";
+import { createMockSession } from "@/test/test-utils";
 
 vi.mock("@/features/admin/hooks/use-admin-settings", () => ({
   useAdminSettings: vi.fn(),
 }));
+
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: vi.fn(),
+}));
+
+/** Sin `authProvider` la sesión es de modo external-auth, como las guardadas antes del modo local. */
+function mockSessionMode(mode?: AuthMode) {
+  vi.mocked(useAuth).mockReturnValue({
+    session: createMockSession({ user: { ...createMockSession().user, authProvider: mode } }),
+    status: "authenticated",
+    login: vi.fn(),
+    logout: vi.fn(),
+    updateSessionUser: vi.fn(),
+    expireSession: vi.fn(),
+    completePasswordChange: vi.fn(),
+  });
+}
 
 vi.mock("@/features/admin/hooks/use-update-admin-settings", () => ({
   useUpdateAdminSettings: vi.fn(),
@@ -60,10 +80,21 @@ describe("AdminSettingsPanel", () => {
     fileMigrationBatchSize: 50,
     fileMigrationIntervalMinutes: 60,
     fileMigrationDeleteLocalAfterCommit: false,
+    localSessionTtlHours: 12,
+    passwordMinLength: 12,
+    passwordRequireUppercase: false,
+    passwordRequireLowercase: false,
+    passwordRequireNumber: false,
+    passwordRequireSymbol: false,
+    passwordExpirationDays: null,
+    passwordHistoryCount: 0,
+    maxFailedLoginAttempts: null,
+    lockoutDurationMinutes: 15,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSessionMode();
     vi.mocked(useUpdateAdminSettings).mockReturnValue({
       save: mockSave,
       pending: false,
@@ -325,5 +356,148 @@ describe("AdminSettingsPanel", () => {
         whoCanLeaveGroup: "GROUP_ADMINS_ONLY",
       }),
     );
+  });
+
+  describe("Sesión y contraseñas", () => {
+    function renderWith(settings: AdminSettings = defaultSettings) {
+      vi.mocked(useAdminSettings).mockReturnValue({
+        settings,
+        status: "ready",
+        error: null,
+        refetch: mockRefetch,
+      });
+      mockSave.mockResolvedValueOnce(settings);
+      return { user: userEvent.setup(), ...render(<AdminSettingsPanel />) };
+    }
+
+    async function replace(user: ReturnType<typeof userEvent.setup>, label: RegExp, value: string) {
+      const input = screen.getByLabelText(label);
+      await user.clear(input);
+      if (value) await user.type(input, value);
+    }
+
+    it("no aparece en modo external-auth ni envía sus campos", async () => {
+      const { user } = renderWith();
+      expect(screen.queryByTestId("security-settings")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("checkbox", { name: "Los grupos se pueden eliminar" }));
+      await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      const payload = mockSave.mock.calls[0][0];
+      expect(payload).not.toHaveProperty("localSessionTtlHours");
+      expect(payload).not.toHaveProperty("passwordMinLength");
+      expect(payload).not.toHaveProperty("maxFailedLoginAttempts");
+    });
+
+    it("aparece en modo local con los valores guardados", () => {
+      mockSessionMode("local");
+      renderWith({ ...defaultSettings, passwordMinLength: 14, passwordRequireSymbol: true, maxFailedLoginAttempts: 5 });
+
+      expect(screen.getByRole("heading", { name: "Sesión y contraseñas" })).toBeInTheDocument();
+      expect(screen.getByLabelText(/Duración de la sesión/)).toHaveValue(12);
+      expect(screen.getByLabelText(/Largo mínimo de la contraseña/)).toHaveValue(14);
+      expect(screen.getByRole("checkbox", { name: "Un símbolo" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Una mayúscula" })).not.toBeChecked();
+      expect(screen.getByLabelText(/Vencimiento de la contraseña/)).toHaveValue(null);
+      expect(screen.getByLabelText(/Intentos fallidos seguidos/)).toHaveValue(5);
+      expect(screen.getByText(/puede deducir que una cuenta existe/)).toBeInTheDocument();
+      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [/Duración de la sesión/, "0", "Debe ser un número entero entre 1 y 720."],
+      [/Duración de la sesión/, "721", "Debe ser un número entero entre 1 y 720."],
+      [/Largo mínimo de la contraseña/, "7", "Debe ser un número entero entre 8 y 128."],
+      [/Largo mínimo de la contraseña/, "129", "Debe ser un número entero entre 8 y 128."],
+      [/Contraseñas recientes/, "13", "Debe ser un número entero entre 0 y 12."],
+      [/Vencimiento de la contraseña/, "366", "Debe ser un número entero entre 1 y 365, o vacío."],
+      [/Intentos fallidos seguidos/, "2", "Debe ser un número entero entre 3 y 50, o vacío."],
+    ])("valida el rango de %s con %s", async (label, value, message) => {
+      mockSessionMode("local");
+      const { user } = renderWith();
+
+      await replace(user, label, value);
+
+      expect(screen.getByText(message)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
+    });
+
+    it("valida la duración del bloqueo solo si el bloqueo está activo", async () => {
+      mockSessionMode("local");
+      const { user } = renderWith({ ...defaultSettings, maxFailedLoginAttempts: 5 });
+
+      await replace(user, /Duración del bloqueo/, "1441");
+      expect(screen.getByText("Debe ser un número entero entre 1 y 1440.")).toBeInTheDocument();
+
+      await replace(user, /Intentos fallidos seguidos/, "");
+      expect(screen.getByLabelText(/Duración del bloqueo/)).toBeDisabled();
+      expect(screen.queryByText("Debe ser un número entero entre 1 y 1440.")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      const payload = mockSave.mock.calls[0][0];
+      expect(payload.maxFailedLoginAttempts).toBeNull();
+      expect(payload).not.toHaveProperty("lockoutDurationMinutes");
+    });
+
+    it("guarda los campos convertidos, con vacío como null", async () => {
+      mockSessionMode("local");
+      const { user } = renderWith({ ...defaultSettings, passwordExpirationDays: 90 });
+
+      await replace(user, /Duración de la sesión/, "24");
+      await replace(user, /Vencimiento de la contraseña/, "");
+      await replace(user, /Contraseñas recientes/, "3");
+      await replace(user, /Intentos fallidos seguidos/, "10");
+      await replace(user, /Duración del bloqueo/, "30");
+      await user.click(screen.getByRole("checkbox", { name: "Un número" }));
+      await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      expect(mockSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          localSessionTtlHours: 24,
+          passwordMinLength: 12,
+          passwordRequireNumber: true,
+          passwordExpirationDays: null,
+          passwordHistoryCount: 3,
+          maxFailedLoginAttempts: 10,
+          lockoutDurationMinutes: 30,
+        }),
+      );
+    });
+
+    it("advierte que bajar la duración corta las sesiones abiertas", async () => {
+      mockSessionMode("local");
+      const { user } = renderWith();
+
+      await replace(user, /Duración de la sesión/, "24");
+      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+
+      await replace(user, /Duración de la sesión/, "4");
+      expect(screen.getByText(/también cierra las sesiones abiertas/)).toBeInTheDocument();
+    });
+
+    it("advierte que endurecer la política se aplica en el próximo inicio de sesión", async () => {
+      mockSessionMode("local");
+      const { user } = renderWith();
+
+      await user.click(screen.getByRole("checkbox", { name: "Una mayúscula" }));
+      expect(screen.getByText(/en su próximo inicio de sesión/)).toBeInTheDocument();
+
+      await user.click(screen.getByRole("checkbox", { name: "Una mayúscula" }));
+      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+
+      await replace(user, /Largo mínimo de la contraseña/, "16");
+      expect(screen.getByText(/en su próximo inicio de sesión/)).toBeInTheDocument();
+    });
+
+    it("advierte al activar o acortar el vencimiento, no al alargarlo", async () => {
+      mockSessionMode("local");
+      const { user } = renderWith({ ...defaultSettings, passwordExpirationDays: 90 });
+
+      await replace(user, /Vencimiento de la contraseña/, "180");
+      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+
+      await replace(user, /Vencimiento de la contraseña/, "30");
+      expect(screen.getByText(/más antiguas que el vencimiento/)).toBeInTheDocument();
+    });
   });
 });

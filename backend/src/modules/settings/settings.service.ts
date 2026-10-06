@@ -1,12 +1,14 @@
 import { AppSettings, AuditAction, ConversationGroupSettings } from "@prisma/client";
 import env from "../../config/env";
 import { prisma } from "../../config/prisma";
+import { effectiveMinLength } from "../auth/password";
 import * as AuditRepository from "../audit/audit.repository";
 import * as AuditService from "../audit/audit.service";
 import * as SettingsRepository from "./settings.repository";
 import {
   EffectiveGroupSettings,
   GroupOverrideAllowedFlags,
+  LocalAuthPolicy,
   PublicAppSettingsDTO,
   UpdateSettingsInput,
 } from "./settings.types";
@@ -65,6 +67,40 @@ export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
     // desactivado la opción. GIPHY queda así deshabilitado por configuración
     // (ver modules/giphy/README.md, "Requisitos de GIPHY").
     allowStickersAndGifs: settings.allowStickersAndGifs && Boolean(env.GIPHY_API_KEY),
+  };
+}
+
+const LOCAL_SESSION_TTL_HOURS_MIN = 1;
+const LOCAL_SESSION_TTL_HOURS_MAX = 720;
+/// Tope del historial (D15): verificar cada contraseña anterior cuesta un
+/// scrypt, y se hace en cada cambio.
+const PASSWORD_HISTORY_MAX = 12;
+const MIN_FAILED_LOGIN_ATTEMPTS = 3;
+
+/// Política del modo local con los pisos ya aplicados: aunque la fila tenga un
+/// valor fuera de rango (escrito a mano en la base, o de antes de una
+/// validación), nunca rige un largo menor a 8 ni una sesión de 0 horas.
+export async function getLocalAuthPolicy(): Promise<LocalAuthPolicy> {
+  const settings = await getSettings();
+  return {
+    sessionTtlHours: Math.min(
+      Math.max(settings.localSessionTtlHours, LOCAL_SESSION_TTL_HOURS_MIN),
+      LOCAL_SESSION_TTL_HOURS_MAX,
+    ),
+    minLength: effectiveMinLength(settings.passwordMinLength),
+    requireUppercase: settings.passwordRequireUppercase,
+    requireLowercase: settings.passwordRequireLowercase,
+    requireNumber: settings.passwordRequireNumber,
+    requireSymbol: settings.passwordRequireSymbol,
+    expirationDays: settings.passwordExpirationDays,
+    historyCount: Math.min(Math.max(settings.passwordHistoryCount, 0), PASSWORD_HISTORY_MAX),
+    // Un valor por debajo de 3 (escrito a mano en la base) bloquearía cuentas
+    // ante el primer typo: rige el mínimo del validador.
+    maxFailedLoginAttempts:
+      settings.maxFailedLoginAttempts === null
+        ? null
+        : Math.max(settings.maxFailedLoginAttempts, MIN_FAILED_LOGIN_ATTEMPTS),
+    lockoutDurationMinutes: Math.max(settings.lockoutDurationMinutes, 1),
   };
 }
 

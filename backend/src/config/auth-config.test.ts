@@ -5,6 +5,7 @@ import {
   AuthConfigError,
   getAuthJwtSecret,
   LOCAL_AUTH_JWT_SECRET_MIN_LENGTH,
+  requireLocalConfig,
   requireExternalUserConfig,
   resolveAuthConfig,
 } from "./auth-config";
@@ -140,5 +141,24 @@ describe("getAuthJwtSecret", () => {
     const { config } = resolveAuthConfig({ LOCAL_AUTH_JWT_SECRET: VALID_LOCAL_SECRET });
 
     expect(getAuthJwtSecret(config)).toBe(VALID_LOCAL_SECRET);
+  });
+});
+
+describe("requireLocalConfig", () => {
+  it("devuelve la config local en modo local", () => {
+    expect(requireLocalConfig({ mode: "local", local: { jwtSecret: "s".repeat(32) } })).toEqual({
+      jwtSecret: "s".repeat(32),
+    });
+  });
+
+  it("en modo external-auth tira ServiceUnavailableError con code local_auth_not_enabled", () => {
+    const config = { mode: "external-auth" as const, external-auth: { apiUrl: "https://x.test", appCode: "app", jwtSecret: "x" } };
+
+    expect(() => requireLocalConfig(config)).toThrow(ServiceUnavailableError);
+    try {
+      requireLocalConfig(config);
+    } catch (error) {
+      expect((error as ServiceUnavailableError).code).toBe("local_auth_not_enabled");
+    }
   });
 });

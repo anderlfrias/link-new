@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
 import * as AuthService from "../auth/auth.service";
 import * as UserRepository from "./user.repository";
 import { listUsers, listUsersForAdmin } from "./user.service";
@@ -141,6 +142,30 @@ describe("user.service", () => {
           },
         },
       ]);
+    });
+  });
+
+  describe("modo local (LOCAL_AUTH_PLAN.md, punto 8 del mapa)", () => {
+    useAuthMode(LOCAL_AUTH_CONFIG);
+
+    it("el directorio no llama a EXTERNAL_AUTH", async () => {
+      vi.mocked(UserRepository.search).mockResolvedValue([] as any);
+
+      await listUsers("u-1", "local-token");
+
+      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
+      expect(UserRepository.search).toHaveBeenCalledWith("u-1", undefined);
+    });
+
+    it("el panel de usuarios tampoco", async () => {
+      vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue([]);
+      vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(0);
+      vi.mocked(UserRepository.sumStorageForUsers).mockResolvedValue([]);
+      vi.mocked(UserRepository.countGroupAdminForUsers).mockResolvedValue([]);
+
+      await listUsersForAdmin("local-token", {}, {});
+
+      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
     });
   });
 });

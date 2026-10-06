@@ -2,7 +2,7 @@ import express from "express";
 import { MulterError } from "multer";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NotFoundError, ServiceUnavailableError } from "../utils/errors";
+import { ForbiddenError, NotFoundError, ServiceUnavailableError } from "../utils/errors";
 import { createMockRequest, createMockResponse } from "../test/http-mocks";
 
 const logSpy = { warn: vi.fn(), error: vi.fn() };
@@ -32,6 +32,15 @@ describe("errorHandler", () => {
       "request rejected",
     );
     expect(logSpy.error).not.toHaveBeenCalled();
+  });
+
+  it("AppError con code -> lo devuelve junto al mensaje, para que el cliente reaccione sin leer el texto", () => {
+    const res = createMockResponse();
+
+    errorHandler(new ForbiddenError("Cambiá tu contraseña", "password_change_required"), createMockRequest(), res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: "Cambiá tu contraseña", code: "password_change_required" });
   });
 
   it("el log de un 4xx no incluye stack (solo statusCode/error/reason)", () => {

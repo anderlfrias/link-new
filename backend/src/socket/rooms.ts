@@ -29,6 +29,17 @@ export function leaveUser(socket: AppSocket, userId: string): void {
   socket.leave(userRoomName(userId));
 }
 
+/// Corta todas las conexiones de un usuario (todas sus pestañas y
+/// dispositivos): al desactivar su cuenta o revocar sus sesiones
+/// (LOCAL_AUTH_PLAN.md, D9). El socket solo se autentica en el handshake: sin
+/// esto, una cuenta desactivada seguiría recibiendo mensajes en vivo. Cada
+/// socket autenticado se une a su room personal al conectar (presence.socket.ts),
+/// así que alcanza con desconectar esa room. `true` cierra la conexión de
+/// transporte, no solo el namespace.
+export function disconnectUserSockets(io: AppServer, userId: string): void {
+  io.in(userRoomName(userId)).disconnectSockets(true);
+}
+
 /// Ids de usuario (internos) actualmente conectados a la room de una
 /// conversación — quién está "en vivo" para recibir un mensaje ahora mismo
 /// (ver `markDelivered` en conversation.service.ts). Único punto autorizado a

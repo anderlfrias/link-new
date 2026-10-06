@@ -11,6 +11,7 @@ import {
   IconPalette,
   IconPencil,
   IconPhoto,
+  IconShieldLock,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
@@ -27,6 +28,8 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { APP_VERSION } from "@/constants/app-version.constant";
+import { ChangePasswordForm } from "@/features/auth/components/ChangePasswordForm";
+import { useAuthConfig } from "@/providers/auth-config-provider";
 
 interface ProfileSettingsPanelProps {
   onClose: () => void;
@@ -34,7 +37,8 @@ interface ProfileSettingsPanelProps {
 
 export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
   const { t } = useTranslation();
-  const { session } = useAuth();
+  const { session, completePasswordChange } = useAuth();
+  const { config } = useAuthConfig();
   const { url: profilePictureUrl } = useProfilePicture();
   const { upload, remove, pending, error } = useUpdateProfilePicture();
   const { updateName, pending: updatingName, error: nameError } = useUpdateProfileName();
@@ -42,6 +46,8 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
   const { changeLanguage, pending: updatingLanguage, error: languageError } = useUpdateLanguage();
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   const currentName = session?.user.fullName || session?.user.username || "";
   const [editingName, setEditingName] = useState(false);
@@ -283,6 +289,45 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             onLanguageChange={(locale) => void changeLanguage(locale)}
           />
         </div>
+
+        {/* Seguridad: solo con cuentas locales. En modo external-auth la contraseña
+            se administra en EXTERNAL_AUTH. */}
+        {session.user.authProvider === "local" && (
+          <div className="mt-6">
+            <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">{t("password.securityTitle")}</h3>
+            <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">{t("password.changePasswordDescription")}</p>
+            {passwordChanged && (
+              <div role="status" className="mb-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <IconCheck size={16} className="shrink-0" />
+                <span>{t("password.changed")}</span>
+              </div>
+            )}
+            {changingPassword ? (
+              <ChangePasswordForm
+                policy={config?.mode === "local" ? config.passwordPolicy : null}
+                currentPasswordLabel={t("password.currentPassword")}
+                onChanged={({ token, exp }) => {
+                  completePasswordChange(token, exp);
+                  setChangingPassword(false);
+                  setPasswordChanged(true);
+                }}
+              />
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setChangingPassword(true);
+                  setPasswordChanged(false);
+                }}
+                className="w-full"
+              >
+                <IconShieldLock size={16} stroke={1.75} />
+                {t("password.submit")}
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Versión de la aplicación */}
         <div className="mt-8 border-t border-black/5 pt-4 text-center text-xs text-neutral-400 dark:border-white/5 dark:text-neutral-500">

@@ -40,7 +40,7 @@ export function UserMenu({ onOpenProfileSettings }: UserMenuProps) {
         aria-label={t("modals.userMenuAria")}
         className="flex items-center gap-2 rounded-full"
       >
-        <Avatar name={session.user.fullName || session.user.username} imageUrl={profilePictureUrl} />
+        <Avatar name={session.user.fullName || session.user.username || session.user.email} imageUrl={profilePictureUrl} />
       </button>
 
       {open && (

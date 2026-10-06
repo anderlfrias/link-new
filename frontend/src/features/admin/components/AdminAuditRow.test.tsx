@@ -74,4 +74,50 @@ describe("AdminAuditRow", () => {
     render(<AdminAuditRow item={logNoMeta} />);
     expect(screen.queryByRole("button", { name: /detalle/i })).not.toBeInTheDocument();
   });
+
+  describe("proveedor, motivo y origen", () => {
+    const row = (action: string, metadata: unknown): AdminAuditLogListItem => ({
+      ...sampleLog,
+      action,
+      metadata,
+      targetType: null,
+      targetId: null,
+    });
+
+    it("muestra el proveedor y el motivo de un login fallido", () => {
+      render(<AdminAuditRow item={row("LOGIN_FAILED", { provider: "local", reason: "account_locked" })} />);
+      expect(screen.getByText("Inicio de sesión fallido")).toBeInTheDocument();
+      expect(screen.getByText("Local")).toBeInTheDocument();
+      expect(screen.getByText("Cuenta bloqueada")).toBeInTheDocument();
+    });
+
+    it("interpreta un login sin provider (filas anteriores al modo local) como EXTERNAL_AUTH", () => {
+      render(<AdminAuditRow item={row("LOGIN", null)} />);
+      expect(screen.getByText("EXTERNAL_AUTH")).toBeInTheDocument();
+    });
+
+    it("muestra el origen de las acciones de administración de cuentas", () => {
+      render(<AdminAuditRow item={row("RESET_PASSWORD", { via: "cli" })} />);
+      expect(screen.getByText("Restablecimiento de contraseña")).toBeInTheDocument();
+      expect(screen.getByText("Desde la terminal (CLI)")).toBeInTheDocument();
+    });
+
+    it("muestra el motivo de un cambio de contraseña propio", () => {
+      render(<AdminAuditRow item={row("CHANGE_PASSWORD", { reason: "expired" })} />);
+      expect(screen.getByText("Cambio de contraseña")).toBeInTheDocument();
+      expect(screen.getByText("Por vencimiento")).toBeInTheDocument();
+      expect(screen.queryByText("EXTERNAL_AUTH")).not.toBeInTheDocument();
+    });
+
+    it("muestra crudo un motivo que todavía no tiene traducción", () => {
+      render(<AdminAuditRow item={row("LOGIN_FAILED", { provider: "external-auth", reason: "something_new" })} />);
+      expect(screen.getByText("something_new")).toBeInTheDocument();
+    });
+
+    it("no confunde el provider de almacenamiento de un archivo con el de autenticación", () => {
+      render(<AdminAuditRow item={sampleLog} />);
+      expect(screen.queryByText("Local")).not.toBeInTheDocument();
+      expect(screen.queryByText("LOCAL")).not.toBeInTheDocument();
+    });
+  });
 });

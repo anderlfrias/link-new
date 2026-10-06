@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconAlertCircle, IconLoader2 } from "@tabler/icons-react";
+import { IconAlertCircle, IconAlertTriangle, IconLoader2 } from "@tabler/icons-react";
 import { useAdminSettings } from "@/features/admin/hooks/use-admin-settings";
 import { useUpdateAdminSettings } from "@/features/admin/hooks/use-update-admin-settings";
 import type {
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { useAuth } from "@/providers/auth-provider";
 import { useTranslation } from "@/i18n";
 
 interface DraftState {
@@ -62,7 +63,30 @@ interface DraftState {
   fileMigrationBatchSize: string;
   fileMigrationIntervalMinutes: string;
   fileMigrationDeleteLocalAfterCommit: boolean;
+  localSessionTtlHours: string;
+  passwordMinLength: string;
+  passwordRequireUppercase: boolean;
+  passwordRequireLowercase: boolean;
+  passwordRequireNumber: boolean;
+  passwordRequireSymbol: boolean;
+  /** Vacío = no vencen (`null`). */
+  passwordExpirationDays: string;
+  passwordHistoryCount: string;
+  /** Vacío = sin bloqueo (`null`). */
+  maxFailedLoginAttempts: string;
+  lockoutDurationMinutes: string;
 }
+
+/** Rangos de D15 (docs/design/LOCAL_AUTH_PLAN.md), los mismos que valida
+ * `backend/src/modules/settings/settings.validator.ts`. */
+const LOCAL_AUTH_RANGES = {
+  localSessionTtlHours: { min: 1, max: 720 },
+  passwordMinLength: { min: 8, max: 128 },
+  passwordExpirationDays: { min: 1, max: 365 },
+  passwordHistoryCount: { min: 0, max: 12 },
+  maxFailedLoginAttempts: { min: 3, max: 50 },
+  lockoutDurationMinutes: { min: 1, max: 1440 },
+} as const;
 
 /** Una categoría cuenta como "marcada" si TODOS sus patterns están en la lista guardada —
  * evita mostrarla a medias marcada por una coincidencia parcial. Cualquier pattern guardado
@@ -142,14 +166,57 @@ function toDraft(settings: AdminSettings): DraftState {
     fileMigrationBatchSize: String(settings.fileMigrationBatchSize ?? 50),
     fileMigrationIntervalMinutes: String(settings.fileMigrationIntervalMinutes ?? 60),
     fileMigrationDeleteLocalAfterCommit: settings.fileMigrationDeleteLocalAfterCommit ?? false,
+    // Los `??` cubren un backend anterior a LOCAL_AUTH_PLAN.md, con sus defaults.
+    localSessionTtlHours: String(settings.localSessionTtlHours ?? 12),
+    passwordMinLength: String(settings.passwordMinLength ?? 12),
+    passwordRequireUppercase: settings.passwordRequireUppercase ?? false,
+    passwordRequireLowercase: settings.passwordRequireLowercase ?? false,
+    passwordRequireNumber: settings.passwordRequireNumber ?? false,
+    passwordRequireSymbol: settings.passwordRequireSymbol ?? false,
+    passwordExpirationDays: settings.passwordExpirationDays == null ? "" : String(settings.passwordExpirationDays),
+    passwordHistoryCount: String(settings.passwordHistoryCount ?? 0),
+    maxFailedLoginAttempts: settings.maxFailedLoginAttempts == null ? "" : String(settings.maxFailedLoginAttempts),
+    lockoutDurationMinutes: String(settings.lockoutDurationMinutes ?? 15),
   };
 }
 
 type FieldErrors = Partial<Record<keyof DraftState, string>>;
 
-function validate(draft: DraftState, t?: (key: string) => string): FieldErrors {
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+function isIntegerInRange(value: string, range: { min: number; max: number }): boolean {
+  const number = Number(value);
+  return value.trim() !== "" && Number.isInteger(number) && number >= range.min && number <= range.max;
+}
+
+/** Campos de "Sesión y contraseñas": solo se validan (y se envían) en modo local. */
+function validateLocalAuth(draft: DraftState, tr: Translate, errors: FieldErrors) {
+  const lockoutEnabled = draft.maxFailedLoginAttempts.trim() !== "";
+  const required = [
+    "localSessionTtlHours",
+    "passwordMinLength",
+    "passwordHistoryCount",
+    // Sin bloqueo, la duración no aplica: el campo queda deshabilitado y no se envía.
+    ...(lockoutEnabled ? (["lockoutDurationMinutes"] as const) : []),
+  ] as const;
+  for (const field of required) {
+    if (!isIntegerInRange(draft[field], LOCAL_AUTH_RANGES[field])) {
+      errors[field] = tr("admin.settings.rangeError", LOCAL_AUTH_RANGES[field]);
+    }
+  }
+  const optional = ["passwordExpirationDays", "maxFailedLoginAttempts"] as const;
+  for (const field of optional) {
+    if (draft[field].trim() !== "" && !isIntegerInRange(draft[field], LOCAL_AUTH_RANGES[field])) {
+      errors[field] = tr("admin.settings.optionalRangeError", LOCAL_AUTH_RANGES[field]);
+    }
+  }
+}
+
+function validate(draft: DraftState, t?: Translate, local = false): FieldErrors {
   const errors: FieldErrors = {};
   const tr = (k: string, defaultVal: string) => (t ? t(k) : defaultVal);
+
+  if (local && t) validateLocalAuth(draft, t, errors);
 
   const uploadSize = Number(draft.maxUploadSizeMb);
   if (!Number.isInteger(uploadSize) || uploadSize < 1) {
@@ -228,8 +295,57 @@ function validate(draft: DraftState, t?: (key: string) => string): FieldErrors {
   return errors;
 }
 
-function toPayload(draft: DraftState): UpdateAdminSettingsPayload {
+/** En modo external-auth la sección no se muestra y sus campos no se envían: la
+ * sesión y las contraseñas las define EXTERNAL_AUTH. */
+function toLocalAuthPayload(draft: DraftState): UpdateAdminSettingsPayload {
   return {
+    localSessionTtlHours: Number(draft.localSessionTtlHours),
+    passwordMinLength: Number(draft.passwordMinLength),
+    passwordRequireUppercase: draft.passwordRequireUppercase,
+    passwordRequireLowercase: draft.passwordRequireLowercase,
+    passwordRequireNumber: draft.passwordRequireNumber,
+    passwordRequireSymbol: draft.passwordRequireSymbol,
+    passwordExpirationDays: draft.passwordExpirationDays.trim() === "" ? null : Number(draft.passwordExpirationDays),
+    passwordHistoryCount: Number(draft.passwordHistoryCount),
+    ...(draft.maxFailedLoginAttempts.trim() === ""
+      ? { maxFailedLoginAttempts: null }
+      : {
+          maxFailedLoginAttempts: Number(draft.maxFailedLoginAttempts),
+          lockoutDurationMinutes: Number(draft.lockoutDurationMinutes),
+        }),
+  };
+}
+
+type LocalAuthWarning = "ttlLoweredWarning" | "policyHardenedWarning" | "expirationWarning";
+
+/** Efectos de D16 que el admin tiene que ver antes de guardar: bajar la
+ * duración corta sesiones abiertas; endurecer la política o el vencimiento no
+ * corta nada, pero pide cambiar la contraseña en el próximo login. */
+function localAuthWarnings(draft: DraftState, saved: DraftState): LocalAuthWarning[] {
+  const warnings: LocalAuthWarning[] = [];
+  const ttl = Number(draft.localSessionTtlHours);
+  if (draft.localSessionTtlHours.trim() !== "" && ttl < Number(saved.localSessionTtlHours)) {
+    warnings.push("ttlLoweredWarning");
+  }
+  const rules = ["passwordRequireUppercase", "passwordRequireLowercase", "passwordRequireNumber", "passwordRequireSymbol"] as const;
+  if (
+    Number(draft.passwordMinLength) > Number(saved.passwordMinLength) ||
+    rules.some((rule) => draft[rule] && !saved[rule])
+  ) {
+    warnings.push("policyHardenedWarning");
+  }
+  if (
+    draft.passwordExpirationDays.trim() !== "" &&
+    (saved.passwordExpirationDays === "" || Number(draft.passwordExpirationDays) < Number(saved.passwordExpirationDays))
+  ) {
+    warnings.push("expirationWarning");
+  }
+  return warnings;
+}
+
+function toPayload(draft: DraftState, local: boolean): UpdateAdminSettingsPayload {
+  return {
+    ...(local ? toLocalAuthPayload(draft) : {}),
     maxUploadSizeMb: Number(draft.maxUploadSizeMb),
     fileTypeRestrictionMode: draft.fileTypeRestrictionMode,
     fileTypeList: patternsFromSelection(draft.fileTypeSelection),
@@ -326,6 +442,9 @@ function GroupPermissionField({
 
 export function AdminSettingsPanel() {
   const { t } = useTranslation();
+  const { session } = useAuth();
+  // Modo de la instalación según la sesión del propio admin (ausente = external-auth).
+  const local = session?.user.authProvider === "local";
   const { settings, status, error: loadError, refetch } = useAdminSettings();
   const { save, pending, error: saveError } = useUpdateAdminSettings();
 
@@ -357,9 +476,11 @@ export function AdminSettingsPanel() {
     );
   }
 
-  const errors = validate(draft, (key) => t(key as any));
+  const errors = validate(draft, (key, params) => t(key as any, params), local);
   const hasErrors = Object.keys(errors).length > 0;
-  const isDirty = JSON.stringify(draft) !== JSON.stringify(toDraft(settings));
+  const savedDraft = toDraft(settings);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
+  const securityWarnings = local ? localAuthWarnings(draft, savedDraft) : [];
 
   function updateField<K extends keyof DraftState>(field: K, value: DraftState[K]) {
     setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
@@ -367,7 +488,7 @@ export function AdminSettingsPanel() {
 
   async function handleSave() {
     if (hasErrors || !draft) return;
-    const updated = await save(toPayload(draft));
+    const updated = await save(toPayload(draft, local));
     if (updated) setDraft(toDraft(updated));
   }
 
@@ -763,6 +884,132 @@ export function AdminSettingsPanel() {
               </p>
             </div>
           </section>
+
+          {local && (
+            <section data-testid="security-settings">
+              <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">
+                {t("admin.settings.securityTitle")}
+              </h3>
+              <p className="mb-3 text-xs text-neutral-400 dark:text-neutral-500">{t("admin.settings.securityDesc")}</p>
+              <div className="flex flex-col gap-4">
+                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  {t("admin.settings.localSessionTtlHours")}
+                  <Input
+                    type="number"
+                    min={LOCAL_AUTH_RANGES.localSessionTtlHours.min}
+                    max={LOCAL_AUTH_RANGES.localSessionTtlHours.max}
+                    value={draft.localSessionTtlHours}
+                    onChange={(event) => updateField("localSessionTtlHours", event.target.value)}
+                    error={errors.localSessionTtlHours}
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  {t("admin.settings.passwordMinLength")}
+                  <Input
+                    type="number"
+                    min={LOCAL_AUTH_RANGES.passwordMinLength.min}
+                    max={LOCAL_AUTH_RANGES.passwordMinLength.max}
+                    value={draft.passwordMinLength}
+                    onChange={(event) => updateField("passwordMinLength", event.target.value)}
+                    error={errors.passwordMinLength}
+                  />
+                </label>
+
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-300">{t("admin.settings.passwordCompositionTitle")}</p>
+                  <Checkbox
+                    checked={draft.passwordRequireUppercase}
+                    onChange={(event) => updateField("passwordRequireUppercase", event.target.checked)}
+                    label={t("admin.settings.passwordRequireUppercase")}
+                  />
+                  <Checkbox
+                    checked={draft.passwordRequireLowercase}
+                    onChange={(event) => updateField("passwordRequireLowercase", event.target.checked)}
+                    label={t("admin.settings.passwordRequireLowercase")}
+                  />
+                  <Checkbox
+                    checked={draft.passwordRequireNumber}
+                    onChange={(event) => updateField("passwordRequireNumber", event.target.checked)}
+                    label={t("admin.settings.passwordRequireNumber")}
+                  />
+                  <Checkbox
+                    checked={draft.passwordRequireSymbol}
+                    onChange={(event) => updateField("passwordRequireSymbol", event.target.checked)}
+                    label={t("admin.settings.passwordRequireSymbol")}
+                  />
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                    {t("admin.settings.passwordCompositionDesc")}
+                  </p>
+                </div>
+
+                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  {t("admin.settings.passwordExpirationDays")}
+                  <Input
+                    type="number"
+                    min={LOCAL_AUTH_RANGES.passwordExpirationDays.min}
+                    max={LOCAL_AUTH_RANGES.passwordExpirationDays.max}
+                    value={draft.passwordExpirationDays}
+                    onChange={(event) => updateField("passwordExpirationDays", event.target.value)}
+                    error={errors.passwordExpirationDays}
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                  {t("admin.settings.passwordHistoryCount")}
+                  <Input
+                    type="number"
+                    min={LOCAL_AUTH_RANGES.passwordHistoryCount.min}
+                    max={LOCAL_AUTH_RANGES.passwordHistoryCount.max}
+                    value={draft.passwordHistoryCount}
+                    onChange={(event) => updateField("passwordHistoryCount", event.target.value)}
+                    error={errors.passwordHistoryCount}
+                  />
+                </label>
+
+                <div className="flex flex-col gap-3">
+                  <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    {t("admin.settings.maxFailedLoginAttempts")}
+                    <Input
+                      type="number"
+                      min={LOCAL_AUTH_RANGES.maxFailedLoginAttempts.min}
+                      max={LOCAL_AUTH_RANGES.maxFailedLoginAttempts.max}
+                      value={draft.maxFailedLoginAttempts}
+                      onChange={(event) => updateField("maxFailedLoginAttempts", event.target.value)}
+                      error={errors.maxFailedLoginAttempts}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    {t("admin.settings.lockoutDurationMinutes")}
+                    <Input
+                      type="number"
+                      min={LOCAL_AUTH_RANGES.lockoutDurationMinutes.min}
+                      max={LOCAL_AUTH_RANGES.lockoutDurationMinutes.max}
+                      disabled={draft.maxFailedLoginAttempts.trim() === ""}
+                      value={draft.lockoutDurationMinutes}
+                      onChange={(event) => updateField("lockoutDurationMinutes", event.target.value)}
+                      error={errors.lockoutDurationMinutes}
+                    />
+                  </label>
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500">{t("admin.settings.lockoutDesc")}</p>
+                </div>
+
+                {securityWarnings.length > 0 && (
+                  <div className="flex flex-col gap-1" data-testid="security-warnings">
+                    {securityWarnings.map((warning) => (
+                      <p
+                        key={warning}
+                        className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+                      >
+                        <IconAlertTriangle size={14} className="mt-0.5 shrink-0" />
+                        <span>{t(`admin.settings.${warning}`)}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,38 @@
 import { AuditAction, ConversationType, FileProvider, MessageType } from "@prisma/client";
+import type { AuthMode } from "../../config/auth-config";
+
+/// Motivo de un `LOGIN_FAILED`, tal como el backend realmente lo puede
+/// distinguir. Los cuatro primeros son del modo external-auth. Ojo:
+/// `forbidden_by_provider` no significa "contraseña incorrecta" — EXTERNAL_AUTH
+/// devuelve 403 tanto para credenciales inválidas como para falta de acceso a
+/// la app, y no se pueden separar (ver el comentario en auth.service.ts).
+/// Nombrarlo "invalid_credentials" sería registrar una conclusión que el
+/// sistema no tiene. Los del modo local sí distinguen la causa: la respuesta
+/// HTTP es la misma a propósito (anti-enumeración, LOCAL_AUTH_PLAN.md D12),
+/// pero la auditoría la lee un admin. `account_disabled` aplica a los dos modos.
+export type LoginFailureReason =
+  | "forbidden_by_provider"
+  | "invalid_credentials"
+  | "provider_error"
+  | "provider_unreachable"
+  | "unknown_account"
+  | "wrong_password"
+  | "no_credential"
+  | "account_disabled"
+  | "account_locked";
+
+/// Desde dónde un admin administró una cuenta: el panel o el CLI
+/// `src/cli/auth-admin.ts` (LOCAL_AUTH_PLAN.md, D18).
+export type AccountAdminVia = "panel" | "cli";
+
+/// Por qué alguien cambió su propia contraseña: por decisión propia, o porque
+/// el login se lo exigió (LOCAL_AUTH_PLAN.md, D13).
+export type PasswordChangeReason = "voluntary" | "reset" | "expired" | "policy";
+
+/// Campos de una cuenta que `UPDATE_USER` diffea. Ninguno es secreto: la
+/// contraseña nunca pasa por esta acción (la cubren `RESET_PASSWORD` y
+/// `CHANGE_PASSWORD`, sin metadata de la contraseña).
+export type AuditedUserField = "name" | "email" | "username" | "status" | "roles" | "locked";
 
 /// Forma del `metadata` de cada acción. `undefined` significa "esta acción no
 /// lleva metadata" — y es distinto de `Record<string, unknown>`: dejarlo
@@ -25,16 +59,21 @@ export type AuditMetadataMap = {
   EDIT_MESSAGE: undefined;
   DELETE_MESSAGE: { deletedOwnMessage: boolean };
 
-  LOGIN: undefined;
-  /// El motivo tal como el backend REALMENTE lo puede distinguir. Ojo:
-  /// `forbidden_by_provider` no significa "contraseña incorrecta" — EXTERNAL_AUTH
-  /// devuelve 403 tanto para credenciales inválidas como para falta de acceso a
-  /// la app, y no se pueden separar (ver el comentario en auth.service.ts).
-  /// Nombrarlo "invalid_credentials" sería registrar una conclusión que el
-  /// sistema no tiene.
-  LOGIN_FAILED: {
-    reason: "forbidden_by_provider" | "invalid_credentials" | "provider_error" | "provider_unreachable";
+  /// `provider` es el modo de la instalación al momento del intento. Las filas
+  /// anteriores a LOCAL_AUTH_PLAN.md no lo traen: quien las lea tiene que
+  /// interpretar "ausente" como "external-auth".
+  LOGIN: { provider: AuthMode };
+  LOGIN_FAILED: { provider: AuthMode; reason: LoginFailureReason };
+  /// Acciones de administración de cuentas: van en la misma transacción que su
+  /// efecto. Ninguna lleva la contraseña, su hash ni su longitud, ni el token.
+  CREATE_USER: { via: AccountAdminVia; roles: string[] };
+  UPDATE_USER: {
+    via: AccountAdminVia;
+    changed: Partial<Record<AuditedUserField, { from: unknown; to: unknown }>>;
   };
+  RESET_PASSWORD: { via: AccountAdminVia };
+  /// La propia: `record` fail-soft, igual que LOGIN.
+  CHANGE_PASSWORD: { reason: PasswordChangeReason };
   /// El diff de la configuración global. `AppSettings` no tiene ningún campo
   /// secreto (son límites y flags), así que diffear todo lo que cambió es
   /// seguro — verificalo si alguna vez se agrega un campo con un secreto ahí.
@@ -49,9 +88,15 @@ export type AuditMetadataMap = {
   END_CALL: { callType: "AUDIO" | "VIDEO"; duration: number; status: string };
 };
 
+/// Lo que ve un admin si no filtra por acción: accesos, cuentas y
+/// administración, nunca actividad del chat (privacidad por omisión).
 export const DEFAULT_ADMIN_AUDIT_ACTIONS: AuditAction[] = [
   AuditAction.LOGIN,
   AuditAction.LOGIN_FAILED,
+  AuditAction.CHANGE_PASSWORD,
+  AuditAction.CREATE_USER,
+  AuditAction.UPDATE_USER,
+  AuditAction.RESET_PASSWORD,
   AuditAction.UPDATE_SETTINGS,
   AuditAction.ADMIN_DELETE_FILE,
 ];

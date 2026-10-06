@@ -10,7 +10,7 @@ Este módulo gestiona la escritura del **audit trail de cumplimiento normativo**
 - **Audit trail vs Application Logs**: El audit trail registra hechos consumados del negocio (quién creó una conversación, quién cambió la configuración, intentos de login). Solo se retiene la metadata mínima indispensable, estructurada y cerrada.
 - **Fail-soft en chat, Transaccional en admin**:
   - Para acciones cotidianas del chat (`record`), la auditoría nunca bloquea ni falla la petición principal si la base tiene un problema temporal; se registra el fallo con `logger.error`.
-  - Para acciones administrativas (`UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`), la auditoría se ejecuta **dentro de la misma transacción** (`prisma.$transaction`) que el cambio que audita.
+  - Para acciones administrativas (`UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`, `CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`), la auditoría se ejecuta **dentro de la misma transacción** (`prisma.$transaction`) que el cambio que audita.
 - **Privacidad estricta**:
   - **NUNCA** se almacena contenido de mensajes de texto en la auditoría (ver `EDIT_MESSAGE` sin metadata).
   - Nombres originales de archivos no se duplican en `metadata` (se audita `targetId` del `StoredFile`).
@@ -35,10 +35,16 @@ El contrato de `metadata` está tipado estrictamente en `audit.types.ts` mediant
 | `FORWARD_MESSAGE` | No aplica | `{ fromConversationId: string }` | Reenvío de mensaje. |
 | `EDIT_MESSAGE` | No aplica | `undefined` (sin metadata) | Edición de mensaje. No guarda contenido anterior ni nuevo por privacidad. |
 | `DELETE_MESSAGE` | No aplica | `{ deletedOwnMessage: boolean }` | Eliminación de mensaje. |
-| `LOGIN` | No aplica | `undefined` (sin metadata) | Inicio de sesión exitoso. `userId` y `actorEmail` explícitos. |
-| `LOGIN_FAILED` | No aplica | `{ reason: "forbidden_by_provider" \| "invalid_credentials" \| "provider_error" \| "provider_unreachable" }` | Intento fallido de login. `userId: null`, `actorEmail` con el usuario intentado. |
+| `LOGIN` | No aplica | `{ provider: "external-auth" \| "local" }` | Inicio de sesión exitoso. `userId` y `actorEmail` explícitos. Las filas anteriores a [LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md) no traen `provider`: se interpreta como `external-auth`. |
+| `LOGIN_FAILED` | No aplica | `{ provider, reason }`. `reason` en modo external-auth: `forbidden_by_provider`, `invalid_credentials`, `provider_error` o `provider_unreachable`. En modo local: `unknown_account`, `wrong_password`, `no_credential` o `account_locked`. En los dos: `account_disabled`. | Intento fallido de login. `userId: null`, `actorEmail` con el usuario intentado. La respuesta HTTP no distingue los motivos del modo local (anti-enumeración); la auditoría sí. |
+| `CHANGE_PASSWORD` | No aplica | `{ reason: "voluntary" \| "reset" \| "expired" \| "policy" }` | Cambio de la propia contraseña (modo local), con `record` fail-soft. Nunca lleva la contraseña ni su hash. |
+| `CREATE_USER` | `"User"` / `userId` | `{ via: "panel" \| "cli", roles: string[] }` | Alta de una cuenta local por un admin, en transacción. |
+| `UPDATE_USER` | `"User"` / `userId` | `{ via, changed: { [campo]: { from, to } } }`, con `campo` entre `name`, `email`, `username`, `status`, `roles` y `locked` | Edición, desactivación o desbloqueo de una cuenta por un admin, en transacción. |
+| `RESET_PASSWORD` | `"User"` / `userId` | `{ via: "panel" \| "cli" }` | Restablecimiento de contraseña por un admin, en transacción. Nunca lleva la contraseña temporal. |
 | `UPDATE_SETTINGS` | `"AppSettings"` / `"singleton"` | `{ changed: Record<string, { from: unknown, to: unknown }> }` | Cambio de configuración global en transacción. |
 | `ADMIN_DELETE_FILE` | `"StoredFile"` / `fileId` | `{ provider: FileProvider, sizeBytes: number, mimeType: string }` | Borrado administrativo de archivo en transacción. |
+| `START_CALL` | No aplica | `{ callType: "AUDIO" \| "VIDEO" }` | Inicio de una llamada o videollamada. |
+| `END_CALL` | No aplica | `{ callType, duration: number, status: string }` | Fin de una llamada, con su duración y su estado final. |
 
 ## Cómo agregar una nueva acción auditable
 
@@ -52,7 +58,7 @@ Los tres pasos son obligatorios.
 ## Consulta y API Administrativa
 
 El endpoint `GET /api/v1/admin/audit-logs` (ver [API.md](../../../API.md#15-auditoría-del-sistema-admin)) permite a los administradores del sistema auditar accesos y cambios:
-- **Filtro de privacidad por omisión**: Si no se indica `action`, solo se retornan `LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS` y `ADMIN_DELETE_FILE`.
+- **Filtro de privacidad por omisión**: Si no se indica `action`, solo se retornan accesos, cuentas y administración (`DEFAULT_ADMIN_AUDIT_ACTIONS`): `LOGIN`, `LOGIN_FAILED`, `CHANGE_PASSWORD`, `CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, `UPDATE_SETTINGS` y `ADMIN_DELETE_FILE`. Nunca actividad del chat.
 - **Paginación por cursor**: Utiliza `before` para paginar cronológicamente de forma estable.
 - **Privacidad de conversaciones**: El nombre de la conversación solo se expone para conversaciones grupales (`GROUP`), devolviendo `null` para chats individuales o privados.
 

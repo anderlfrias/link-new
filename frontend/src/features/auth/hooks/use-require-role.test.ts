@@ -21,6 +21,7 @@ describe("useRequireRole", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useRequireRole("ADMIN"));
@@ -35,6 +36,7 @@ describe("useRequireRole", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useRequireRole("ADMIN"));
@@ -56,6 +58,7 @@ describe("useRequireRole", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useRequireRole("ADMIN"));
@@ -77,6 +80,7 @@ describe("useRequireRole", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useRequireRole("ADMIN"));

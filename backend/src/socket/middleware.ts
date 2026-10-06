@@ -4,7 +4,7 @@ import { AppServer, SocketMiddleware } from "./types";
 
 /// Middlewares globales de Socket.IO, en el orden en que se aplican. A futuro
 /// se agregan aquí, en este mismo orden, sin tocar gateway.ts:
-///   1. autenticación (verificar el token de EXTERNAL_AUTH en el handshake) — listo,
+///   1. autenticación (verificar el token del modo activo en el handshake) — listo,
 ///      ver socket-auth.middleware.ts
 ///   2. autorización
 ///   3. validación

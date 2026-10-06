@@ -38,8 +38,37 @@ export type UpdateSettingsInput = Partial<
     | "fileMigrationBatchSize"
     | "fileMigrationIntervalMinutes"
     | "fileMigrationDeleteLocalAfterCommit"
+    | "localSessionTtlHours"
+    | "passwordMinLength"
+    | "passwordRequireUppercase"
+    | "passwordRequireLowercase"
+    | "passwordRequireNumber"
+    | "passwordRequireSymbol"
+    | "passwordExpirationDays"
+    | "passwordHistoryCount"
+    | "maxFailedLoginAttempts"
+    | "lockoutDurationMinutes"
   >
 >;
+
+/// Sesión y política de contraseñas del modo local, ya con los pisos y
+/// topes aplicados (LOCAL_AUTH_PLAN.md, D15). La lee el login local, el cambio
+/// de contraseña y `GET /auth/config`.
+export interface LocalAuthPolicy {
+  sessionTtlHours: number;
+  minLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireNumber: boolean;
+  requireSymbol: boolean;
+  /// null = las contraseñas no vencen.
+  expirationDays: number | null;
+  /// Cuántas contraseñas recientes no se pueden repetir, contando la actual.
+  historyCount: number;
+  /// null = sin bloqueo por cuenta.
+  maxFailedLoginAttempts: number | null;
+  lockoutDurationMinutes: number;
+}
 
 /// Subconjunto de `AppSettings` expuesto a cualquier usuario autenticado (no
 /// solo admins): lo que un cliente necesita para validar antes de subir un

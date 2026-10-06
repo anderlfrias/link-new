@@ -7,6 +7,7 @@ import type { LoginCredentials, Session } from "@/features/auth/types/auth.types
 import { disconnectSocket } from "@/lib/socket-client";
 import { SESSION_EXPIRED_EVENT, setUnauthorizedHandler } from "@/lib/api-client";
 import { SessionExpiredModal } from "@/features/auth/components/SessionExpiredModal";
+import { ForcedPasswordChange } from "@/features/auth/components/ForcedPasswordChange";
 import { useTranslation } from "@/i18n";
 
 const SESSION_STORAGE_KEY = "chat-interno:session";
@@ -26,6 +27,10 @@ interface AuthContextValue {
   /** Fuerza la expiración de la sesión actual, desconecta el socket, redirige a login
    * y despliega el modal informativo de sesión caducada. */
   expireSession: () => void;
+  /** Después de cambiar la propia contraseña (modo local): el token nuevo
+   * reemplaza al actual, que el backend ya revocó, y el cambio obligatorio
+   * queda resuelto. El socket reconecta solo, porque depende de `session`. */
+  completePasswordChange: (token: string, exp: number) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -158,6 +163,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const completePasswordChange = useCallback((token: string, exp: number) => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const next: Session = {
+        token,
+        user: { ...prev.user, exp, mustChangePassword: false, mustChangePasswordReason: null },
+      };
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const handleCloseSessionExpiredModal = useCallback(() => {
     setIsSessionExpiredModalOpen(false);
     try {
@@ -166,13 +183,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ session, status, login, logout, updateSessionUser, expireSession }),
-    [session, status, login, logout, updateSessionUser, expireSession],
+    () => ({ session, status, login, logout, updateSessionUser, expireSession, completePasswordChange }),
+    [session, status, login, logout, updateSessionUser, expireSession, completePasswordChange],
   );
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {/* Con un token restringido (cambio de contraseña obligatorio, LOCAL_AUTH_PLAN.md
+          D13) la app no se monta: el resto de la API y el socket lo rechazarían. */}
+      {session?.user.mustChangePassword ? <ForcedPasswordChange /> : children}
       <SessionExpiredModal
         isOpen={isSessionExpiredModalOpen}
         onClose={handleCloseSessionExpiredModal}

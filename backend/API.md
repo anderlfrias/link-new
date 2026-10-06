@@ -25,13 +25,13 @@ Todo lo demás (adjuntos, recibos, "escribiendo...", editar/borrar, grupos) se a
 
 ### Autenticación HTTP
 
-Todas las rutas salvo `POST /api/v1/auth/login` requieren:
+Todas las rutas salvo `POST /api/v1/auth/login` y `GET /api/v1/auth/config` requieren:
 
 ```
 Authorization: Bearer <token>
 ```
 
-El `token` es exactamente el que devuelve el login (emitido por EXTERNAL_AUTH, el backend nunca emite el suyo propio). Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo.
+El `token` es exactamente el que devuelve el login: en modo `external-auth`, el de EXTERNAL_AUTH reenviado tal cual; en modo `local`, uno firmado por este backend (ver sección 2). Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo. En modo local también responde `401` si la sesión fue revocada (cambio o restablecimiento de contraseña) o si la cuenta fue desactivada.
 
 ### Ids: interno vs externo
 
@@ -45,14 +45,17 @@ Cualquier error (HTTP) responde:
 { "error": "mensaje legible" }
 ```
 
-con el status code correspondiente:
+Algunos errores suman `code`, un identificador estable del motivo para que el cliente reaccione sin depender del texto (ej. `password_change_required`, `invalid_current_password`), y a veces campos propios del error (ej. `rules` en un `password_policy`).
+
+Status codes:
 
 | Status | Cuándo |
 |---|---|
 | `400` | Body/query inválido, o una regla de negocio no se cumple (ej. crear un grupo sin `name`) |
-| `401` | Falta el token, es inválido, o expiró |
-| `403` | Token válido, pero no autorizado para esa acción (ej. no sos miembro, o no sos el creador) |
+| `401` | Falta el token, es inválido, expiró, fue revocado, o la cuenta está desactivada |
+| `403` | Token válido, pero no autorizado para esa acción (ej. no sos miembro, o no sos el creador). Con `code: "password_change_required"`, el token es restringido y solo sirve para cambiar la contraseña |
 | `404` | El recurso no existe o está borrado lógicamente |
+| `429` | Rate limit |
 | `503` | EXTERNAL_AUTH (el servicio de autenticación externo) no respondió, solo en `/auth/login` |
 
 ### Fechas
@@ -73,16 +76,40 @@ Si un usuario reporta un problema o error en la interfaz, citar este valor permi
 
 ## 2. Autenticación
 
+### `GET /api/v1/auth/config`
+
+Público, sin token. Dice el modo de autenticación de la instalación y, en modo local, la política de contraseñas, para mostrar las reglas antes de que alguien elija una. En modo external-auth responde solo `{ "mode": "external-auth" }`:
+
+```json
+{
+  "mode": "local",
+  "passwordPolicy": {
+    "minLength": 12,
+    "maxLength": 128,
+    "requireUppercase": false,
+    "requireLowercase": false,
+    "requireNumber": false,
+    "requireSymbol": false,
+    "historyCount": 0
+  }
+}
+```
+
+`historyCount` es cuántas contraseñas recientes no se pueden repetir, contando la actual (la actual nunca se puede repetir).
+
 ### `POST /api/v1/auth/login`
 
-Reenvía las credenciales al microservicio EXTERNAL_AUTH; no hay usuarios ni contraseñas propias de este backend.
+Mismo request en los dos modos; `user` puede ser un nombre de usuario o un correo.
+
+- **Modo external-auth:** reenvía las credenciales al microservicio EXTERNAL_AUTH; no hay contraseñas propias de este backend.
+- **Modo local:** valida contra las cuentas locales y emite un token propio (`iss: "link-local"`). Ver [`auth/README.md`](./src/modules/auth/README.md#modo-local).
 
 Request (JSON o `application/x-www-form-urlencoded`):
 ```json
 { "user": "jdoe", "password": "secreto" }
 ```
 
-Response `200`:
+Response `200` (modo external-auth):
 ```json
 {
   "token": "<jwt emitido por EXTERNAL_AUTH, reenviado tal cual>",
@@ -96,13 +123,31 @@ Response `200`:
     "app": "chat-interno",
     "exp": 1735000000,
     "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>",
+    "authProvider": "external-auth",
+    "mustChangePassword": false,
+    "mustChangePasswordReason": null,
     "notificationSoundEnabled": true,
     "language": "es"
   }
 }
 ```
 
-Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores), `403` (EXTERNAL_AUTH devolvió `403` — puede ser credenciales incorrectas o falta de acceso a esta app; EXTERNAL_AUTH no distingue el motivo, así que el mensaje que ve el usuario es genérico a propósito, nunca "no tenés acceso"), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 5 intentos en 15 minutos para el mismo usuario, o 20 en 15 minutos desde la misma IP (ver `backend/src/modules/auth/README.md`, "Errores posibles").
+En modo local la respuesta tiene la misma forma, con `authProvider: "local"`, `app: "link"`, `permissions: []`, `id` igual a `internalUserId`, `username` que puede ser `null` y `roles` leídos de la base. Si `mustChangePassword` es `true`, el token es restringido: solo sirve para `PATCH /auth/password`, y `mustChangePasswordReason` dice por qué (`reset`: un admin la restableció; `expired`: venció; `policy`: no cumple la política vigente).
+
+Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores; en modo local, el mismo mensaje para cuenta inexistente, contraseña incorrecta y cuenta sin contraseña), `403` (en modo external-auth, EXTERNAL_AUTH devolvió `403` — puede ser credenciales incorrectas o falta de acceso a esta app; EXTERNAL_AUTH no distingue el motivo, así que el mensaje que ve el usuario es genérico a propósito, nunca "no tenés acceso"; en los dos modos, `code: "account_disabled"` si un admin desactivó la cuenta en este chat), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 5 intentos en 15 minutos para el mismo usuario, o 20 en 15 minutos desde la misma IP (en modo local, también si la cuenta quedó bloqueada por intentos fallidos, con el mismo mensaje) (ver `backend/src/modules/auth/README.md`, "Errores posibles").
+
+### `PATCH /api/v1/auth/password`
+
+Solo modo local (`404` en modo external-auth). Cambia la propia contraseña; acepta el token restringido del cambio obligatorio.
+
+Request:
+```json
+{ "currentPassword": "la-actual", "newPassword": "la-nueva" }
+```
+
+Response `200`: `{ "token": "<token nuevo>", "exp": 1735000000 }`. El token nuevo reemplaza al actual, y todos los anteriores quedan revocados (incluidos los de otras sesiones abiertas, cuyos sockets se cortan).
+
+Errores, siempre `400` con `code` y nunca `401` (que el cliente trata como sesión vencida): `invalid_current_password`, `password_policy` (con `rules`: `min_length`, `max_length`, `uppercase`, `lowercase`, `number`, `symbol`) y `password_reused` (la nueva es igual a la actual o, con historial configurado, a una de las últimas N). `429` tras 5 intentos fallidos en 15 minutos para la misma cuenta.
 
 Después del login, todo el resto del API (HTTP y socket) usa el mismo `token` — no hay un endpoint de logout ni de refresh; "cerrar sesión" en el frontend es simplemente descartar el token guardado y desconectar el socket.
 
@@ -375,7 +420,7 @@ Crear un `GROUP`, agregar/quitar miembros, renombrar/cambiar imagen y borrar el 
 
 Borrar el grupo además requiere `AppSettings.allowGroupDelete: true` (default `true`) — interruptor maestro sobre **si** la acción existe, aparte de **quién** puede hacerla (`whoCanDeleteGroup`). Borrar un chat `PRIVATE` ("para mí", ver 4.7) requiere `AppSettings.allowConversationDelete: true` (default `true`) y no tiene tabla de "quién" — cualquier miembro puede ocultar su propia vista.
 
-Los defaults reproducen el comportamiento histórico de cada endpoint — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite. `GROUP_ADMINS_ONLY` (admin de ese grupo puntual, `isAdmin`) y `APP_ADMINS_ONLY` (rol `"admin"` de EXTERNAL_AUTH) son conceptos **distintos** — uno no otorga el otro. Ver [`conversations/README.md`](./src/modules/conversations/README.md#autorización) y [`settings/README.md`](./src/modules/settings/README.md).
+Los defaults reproducen el comportamiento histórico de cada endpoint — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite. `GROUP_ADMINS_ONLY` (admin de ese grupo puntual, `isAdmin`) y `APP_ADMINS_ONLY` (rol `"admin"` de la instalación: de EXTERNAL_AUTH en modo external-auth, o asignado desde el panel en modo local) son conceptos **distintos** — uno no otorga el otro. Ver [`conversations/README.md`](./src/modules/conversations/README.md#autorización) y [`settings/README.md`](./src/modules/settings/README.md).
 
 ### 4.9 Admins de grupo y overrides por grupo
 
@@ -900,7 +945,7 @@ npm install
 npm run dev   # ts-node, puerto 4000 por default
 ```
 
-Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL` y, según el modo de autenticación, las tres `EXTERNAL_AUTH_*` (`EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`) para usar EXTERNAL_AUTH, o ninguna de ellas y `LOCAL_AUTH_JWT_SECRET` para cuentas locales (el inicio de sesión local todavía está en desarrollo, ver `LOCAL_AUTH_PLAN.md` en la raíz del repo). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
+Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL` y, según el modo de autenticación, las tres `EXTERNAL_AUTH_*` (`EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`) para usar EXTERNAL_AUTH, o ninguna de ellas y `LOCAL_AUTH_JWT_SECRET` para cuentas locales (ver [`docs/design/LOCAL_AUTH_PLAN.md`](../docs/design/LOCAL_AUTH_PLAN.md)). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
 
 Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`users`](./src/modules/users/README.md), [`settings`](./src/modules/settings/README.md), [`socket`](./src/socket/README.md).
 
@@ -938,11 +983,21 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
   "allowMessageEdit": true,
   "messageEditTimeLimitMinutes": null,
   "allowMessageDeleteForEveryone": true,
-  "messageDeleteForEveryoneTimeLimitMinutes": null
+  "messageDeleteForEveryoneTimeLimitMinutes": null,
+  "localSessionTtlHours": 12,
+  "passwordMinLength": 12,
+  "passwordRequireUppercase": false,
+  "passwordRequireLowercase": false,
+  "passwordRequireNumber": false,
+  "passwordRequireSymbol": false,
+  "passwordExpirationDays": null,
+  "passwordHistoryCount": 0,
+  "maxFailedLoginAttempts": null,
+  "lockoutDurationMinutes": 15
 }
 ```
 
-`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`. `allowStickersAndGifs` (default `true`) es el interruptor maestro del buscador de GIFs/stickers (sección 6.1.2) — `403` en `/v1/giphy/*` si está en `false`, sin importar si `GIPHY_API_KEY` está configurada.
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. Los campos de sesión y contraseñas solo aplican en modo local: `localSessionTtlHours` (1 a 720) es la duración de la sesión, y bajarla corta también las sesiones abiertas que la superan; `passwordMinLength` (8 a 128; el piso de 8 no se puede bajar) y los cuatro `passwordRequire*` son la política de contraseñas, que se aplica en el próximo login de cada cuenta. `passwordExpirationDays` (1 a 365, `null` = no vencen), `passwordHistoryCount` (0 a 12, contando la actual), `maxFailedLoginAttempts` (3 a 50, `null` = sin bloqueo) y `lockoutDurationMinutes` (1 a 1440) completan la política, todos apagados por defecto. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`. `allowStickersAndGifs` (default `true`) es el interruptor maestro del buscador de GIFs/stickers (sección 6.1.2) — `403` en `/v1/giphy/*` si está en `false`, sin importar si `GIPHY_API_KEY` está configurada.
 
 ### 12.2 `GET /settings/public` — cualquier autenticado
 
@@ -1022,7 +1077,21 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, m
 
 `storage` = archivos activos subidos por ese usuario (bytes + cantidad). `activity.groupsAdministeredCount` = en cuántos `GROUP` es admin de grupo (`ConversationMember.isAdmin`, sección 4.9), no cuántos creó. `syncProfileWithIntegration` = si el perfil sigue sincronizado desde EXTERNAL_AUTH o ya fue editado localmente.
 
-**Esta vista nunca muestra el rol de un usuario** (no hay forma de saberlo salvo para quien está logueado en ese momento — ver `users/README.md` para el porqué). Todo esto es de **solo lectura**: para cambiar nombre, foto o cualquier otro dato de un usuario hay que hacerlo desde EXTERNAL_AUTH, no desde este API.
+Filtros adicionales: `status` (`ACTIVE`/`INACTIVE`) y, solo en modo local, `hasPassword` (`true`/`false`). En modo local cada fila suma `localRoles`, `hasPassword`, `mustChangePassword` y `locked`. En modo external-auth esta vista no puede mostrar el rol de un usuario (no hay forma de saberlo salvo para quien está logueado en ese momento — ver `users/README.md` para el porqué).
+
+### 14.2 `PATCH /:id` — Editar una cuenta
+
+Modo external-auth: `{ "status": "INACTIVE" }` (o `ACTIVE`): desactiva o reactiva el acceso al chat; el resto de los datos se administra en EXTERNAL_AUTH. Modo local: `{ name?, email?, username?, roles?, status? }`. Responde la cuenta actualizada (`{ id, name, email, username, status, localRoles, hasPassword, mustChangePassword, locked }`).
+
+Errores: `409` con `code` `cannot_modify_self` (desactivarse o quitarse el rol de admin a uno mismo), `last_admin` (modo local: no puede quedar la instalación sin admin activo), `email_taken` o `username_taken`; `404` si la cuenta no existe.
+
+### 14.3 Solo modo local (`404` en modo external-auth)
+
+- `POST /` — `{ name, email, username?, roles?, password? }` → `201 { user, temporaryPassword? }`. La contraseña temporal se devuelve **una sola vez** y solo si se generó; la cuenta queda con el cambio obligatorio.
+- `POST /:id/password-reset` — `{ password? }` → `200 { temporaryPassword? }`. Deja el cambio obligatorio, desbloquea la cuenta y revoca sus sesiones.
+- `POST /:id/unlock` → `204`. Reinicia el contador de intentos fallidos.
+
+Una contraseña elegida por el admin tiene que cumplir la política (`400 password_policy` con `rules`). Todas estas acciones se auditan (`CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`) en la misma transacción que su efecto.
 
 ---
 
@@ -1035,7 +1104,7 @@ A diferencia de los logs técnicos de la aplicación, este endpoint expone el **
 ### 15.1 `GET /` — Listar eventos de auditoría
 
 Query params (todos opcionales):
-- `action`: filtro por acción de auditoría (`LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`, `CREATE_CONVERSATION`, etc.). Puede enviarse repetido o separado por comas para filtrar por múltiples acciones. **Por defecto (si se omite)**, la API aplica un filtro de privacidad que devuelve únicamente las acciones administrativas y de acceso (`LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`).
+- `action`: filtro por acción de auditoría (`LOGIN`, `LOGIN_FAILED`, `UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`, `CREATE_CONVERSATION`, etc.). Puede enviarse repetido o separado por comas para filtrar por múltiples acciones. **Por defecto (si se omite)**, la API aplica un filtro de privacidad que devuelve únicamente las acciones administrativas, de acceso y de cuentas (`LOGIN`, `LOGIN_FAILED`, `CHANGE_PASSWORD`, `CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD`, `UPDATE_SETTINGS`, `ADMIN_DELETE_FILE`).
 - `actor`: busca texto en el nombre, email o username del usuario que ejecutó la acción, o en el `actorEmail` registrado.
 - `userId`: filtra por el ID interno del usuario actor.
 - `targetType`: filtra por el tipo de entidad afectada (ej. `"AppSettings"`, `"StoredFile"`).

@@ -1,14 +1,23 @@
+import env from "../../config/env";
 import * as AuthService from "../auth/auth.service";
 import * as UserRepository from "./user.repository";
 import { AdminUserFilters, AdminUserListOptions, AdminUserListResult } from "./user.types";
 
-/// Antes de leer el directorio local, sincroniza los usuarios de EXTERNAL_AUTH con
-/// acceso a esta app (`AuthService.syncAppUsers`) — así el directorio incluye
-/// a cualquiera con acceso, no solo a quien ya inició sesión en este chat
-/// alguna vez. Si EXTERNAL_AUTH no responde, `syncAppUsers` nunca lanza: el
-/// directorio simplemente se sirve con lo que ya había local.
+/// En modo external-auth, antes de leer el directorio local sincroniza los usuarios de
+/// EXTERNAL_AUTH con acceso a esta app (`AuthService.syncAppUsers`) — así el
+/// directorio incluye a cualquiera con acceso, no solo a quien ya inició
+/// sesión en este chat alguna vez. Si EXTERNAL_AUTH no responde, `syncAppUsers` nunca
+/// lanza: el directorio simplemente se sirve con lo que ya había local. En
+/// modo local no hay a quién preguntarle: las cuentas las crea un admin acá
+/// (LOCAL_AUTH_PLAN.md, punto 8 del mapa).
+async function syncDirectoryFromProvider(token: string): Promise<void> {
+  if (env.auth.mode === "external-auth") {
+    await AuthService.syncAppUsers(token);
+  }
+}
+
 export async function listUsers(currentUserId: string, token: string, search?: string) {
-  await AuthService.syncAppUsers(token);
+  await syncDirectoryFromProvider(token);
   return UserRepository.search(currentUserId, search);
 }
 
@@ -25,7 +34,7 @@ export async function listUsersForAdmin(
   filters: AdminUserFilters,
   options: AdminUserListOptions,
 ): Promise<AdminUserListResult> {
-  await AuthService.syncAppUsers(token);
+  await syncDirectoryFromProvider(token);
   const limit = Math.min(Math.max(options.limit ?? ADMIN_USERS_DEFAULT_PAGE_SIZE, 1), ADMIN_USERS_MAX_PAGE_SIZE);
 
   const [rows, totalCount] = await Promise.all([
@@ -48,7 +57,8 @@ export async function listUsersForAdmin(
   );
   const groupAdminByUser = new Map(groupAdminRows.map((row) => [row.userId, row._count]));
 
-  const users = rows.map(({ _count, ...user }) => ({
+  const local = env.auth.mode === "local";
+  const users = rows.map(({ _count, localRoles, localCredential, ...user }) => ({
     ...user,
     storage: storageByUser.get(user.id) ?? { fileCount: 0, totalSize: 0 },
     activity: {
@@ -56,6 +66,17 @@ export async function listUsersForAdmin(
       messagesSentCount: _count.sentMessages,
       groupsAdministeredCount: groupAdminByUser.get(user.id) ?? 0,
     },
+    // En modo local la app asigna los roles y administra las contraseñas,
+    // así que el panel puede mostrarlos (LOCAL_AUTH_PLAN.md §7). En external-auth
+    // los roles vienen de EXTERNAL_AUTH y no se conocen para un tercero.
+    ...(local
+      ? {
+          localRoles,
+          hasPassword: localCredential !== null,
+          mustChangePassword: localCredential?.mustChangePassword ?? false,
+          locked: Boolean(localCredential?.lockedUntil && localCredential.lockedUntil.getTime() > Date.now()),
+        }
+      : {}),
   }));
 
   return { users, totalCount };

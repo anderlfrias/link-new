@@ -26,7 +26,9 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     } else {
       log.warn({ statusCode: err.statusCode, error: err.name, reason: err.message }, "request rejected");
     }
-    return res.status(err.statusCode).json({ error: err.message });
+    return res
+      .status(err.statusCode)
+      .json({ ...err.details, error: err.message, ...(err.code ? { code: err.code } : {}) });
   }
 
   // multer valida tamaño/cantidad de archivos antes de que file.route.ts vea el

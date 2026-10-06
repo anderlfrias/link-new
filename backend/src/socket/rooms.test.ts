@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   conversationRoomName,
+  disconnectUserSockets,
   getConnectedUserIds,
   joinConversation,
   joinUser,
@@ -77,6 +78,18 @@ describe("socket rooms", () => {
 
       const userIds = await getConnectedUserIds(io, "empty-conv");
       expect(userIds).toEqual([]);
+    });
+  });
+
+  describe("disconnectUserSockets", () => {
+    it("corta todas las conexiones de la room personal del usuario, transporte incluido", () => {
+      const disconnectSockets = vi.fn();
+      const io = { in: vi.fn().mockReturnValue({ disconnectSockets }) } as any;
+
+      disconnectUserSockets(io, "u-1");
+
+      expect(io.in).toHaveBeenCalledWith("user:u-1");
+      expect(disconnectSockets).toHaveBeenCalledWith(true);
     });
   });
 });

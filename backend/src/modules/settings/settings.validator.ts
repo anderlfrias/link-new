@@ -1,5 +1,6 @@
 import { FileTypeRestrictionMode, GroupPermissionLevel } from "@prisma/client";
 import * as yup from "yup";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH_FLOOR } from "../auth/password";
 
 // "type/subtype" o wildcard "type/*" (ver FILE_TYPE_CATEGORIES,
 // matchesFileTypePattern en file.service.ts). Sin esta validación, guardar
@@ -54,6 +55,19 @@ export const updateSettingsSchema = yup
     fileMigrationBatchSize: yup.number().integer().min(1).max(500),
     fileMigrationIntervalMinutes: yup.number().integer().min(1),
     fileMigrationDeleteLocalAfterCommit: yup.boolean(),
+    // Sesión y contraseñas del modo local (LOCAL_AUTH_PLAN.md, D15). El piso
+    // de 8 caracteres no se puede bajar ni por API.
+    localSessionTtlHours: yup.number().integer().min(1).max(720),
+    passwordMinLength: yup.number().integer().min(PASSWORD_MIN_LENGTH_FLOOR).max(PASSWORD_MAX_LENGTH),
+    passwordRequireUppercase: yup.boolean(),
+    passwordRequireLowercase: yup.boolean(),
+    passwordRequireNumber: yup.boolean(),
+    passwordRequireSymbol: yup.boolean(),
+    // null = las contraseñas no vencen; null = sin bloqueo por cuenta.
+    passwordExpirationDays: yup.number().integer().min(1).max(365).nullable(),
+    passwordHistoryCount: yup.number().integer().min(0).max(12),
+    maxFailedLoginAttempts: yup.number().integer().min(3).max(50).nullable(),
+    lockoutDurationMinutes: yup.number().integer().min(1).max(1440),
   })
   .test(
     "at-least-one-field",
@@ -93,5 +107,15 @@ export const updateSettingsSchema = yup
       value.fileMigrationEnabled !== undefined ||
       value.fileMigrationBatchSize !== undefined ||
       value.fileMigrationIntervalMinutes !== undefined ||
-      value.fileMigrationDeleteLocalAfterCommit !== undefined,
+      value.fileMigrationDeleteLocalAfterCommit !== undefined ||
+      value.localSessionTtlHours !== undefined ||
+      value.passwordMinLength !== undefined ||
+      value.passwordRequireUppercase !== undefined ||
+      value.passwordRequireLowercase !== undefined ||
+      value.passwordRequireNumber !== undefined ||
+      value.passwordRequireSymbol !== undefined ||
+      value.passwordExpirationDays !== undefined ||
+      value.passwordHistoryCount !== undefined ||
+      value.maxFailedLoginAttempts !== undefined ||
+      value.lockoutDurationMinutes !== undefined,
   );

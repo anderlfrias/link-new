@@ -1,9 +1,8 @@
 import { NextFunction, Request, Response } from "express";
 import { FileProvider } from "@prisma/client";
-import { prisma } from "../../config/prisma";
 import { getProvider, LocalDiskStorage, S3Storage } from "../../storage";
-import { BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
-import { mapTokenToUser, verifyToken } from "../auth/jwt";
+import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError } from "../../utils/errors";
+import { authenticateAccessToken } from "../auth/identity";
 import * as FileRepository from "./file.repository";
 import * as FileService from "./file.service";
 import { AdminFileFilters, StoredFileCategory, UploadKind } from "./file.types";
@@ -61,14 +60,14 @@ export async function getContent(req: Request, res: Response, next: NextFunction
     } else {
       const authHeader = req.headers.authorization;
       if (authHeader?.startsWith("Bearer ")) {
-        const rawToken = authHeader.slice("Bearer ".length);
-        const mappedUser = mapTokenToUser(verifyToken(rawToken));
-        const internalUser = await prisma.user.findUnique({ where: { email: mappedUser.email } });
-        if (!internalUser) {
-          throw new UnauthorizedError("Usuario no encontrado");
-        }
-        userId = internalUser.id;
-        userRoles = mappedUser.roles;
+        // Misma verificación y resolución que `authenticate` +
+        // `attachInternalUser` (LOCAL_AUTH_PLAN.md, D7). Un token inválido o
+        // vencido es un 401, no un error inesperado del server.
+        const resolved = await authenticateAccessToken(authHeader.slice("Bearer ".length)).catch((error) => {
+          throw error instanceof AppError ? error : new UnauthorizedError("Token inválido o expirado");
+        });
+        userId = resolved.user.internalUserId;
+        userRoles = resolved.user.roles;
       }
     }
 

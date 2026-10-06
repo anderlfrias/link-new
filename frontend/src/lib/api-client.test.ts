@@ -124,6 +124,21 @@ describe("api-client", () => {
     });
   });
 
+  it("expone el code y el body del error, para reaccionar sin leer el texto", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+      json: async () => ({ error: "No cumple", code: "password_policy", rules: ["min_length"] }),
+    });
+
+    await expect(apiRequest("/v1/auth/password", { method: "PATCH", token: "t" })).rejects.toMatchObject({
+      status: 400,
+      code: "password_policy",
+      body: { error: "No cumple", code: "password_policy", rules: ["min_length"] },
+    });
+  });
+
   it("throws ApiError with statusText when error body is not valid JSON", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,

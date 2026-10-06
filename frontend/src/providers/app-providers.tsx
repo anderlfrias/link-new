@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthConfigProvider } from "@/providers/auth-config-provider";
 import { AuthProvider } from "@/providers/auth-provider";
 import { ProfilePictureProvider } from "@/providers/profile-picture-provider";
 import { PublicSettingsProvider } from "@/providers/public-settings-provider";
@@ -14,19 +15,21 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <I18nProvider>
-        <AuthProvider>
-          <ProfilePictureProvider>
-            <PublicSettingsProvider>
-              <SocketProvider>
-                <CallProvider>
-                  {children}
-                  <IncomingCallModal />
-                  <ActiveCallOverlay />
-                </CallProvider>
-              </SocketProvider>
-            </PublicSettingsProvider>
-          </ProfilePictureProvider>
-        </AuthProvider>
+        <AuthConfigProvider>
+          <AuthProvider>
+            <ProfilePictureProvider>
+              <PublicSettingsProvider>
+                <SocketProvider>
+                  <CallProvider>
+                    {children}
+                    <IncomingCallModal />
+                    <ActiveCallOverlay />
+                  </CallProvider>
+                </SocketProvider>
+              </PublicSettingsProvider>
+            </ProfilePictureProvider>
+          </AuthProvider>
+        </AuthConfigProvider>
       </I18nProvider>
     </ThemeProvider>
   );

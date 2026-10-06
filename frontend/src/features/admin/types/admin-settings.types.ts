@@ -63,6 +63,21 @@ export interface AdminSettings {
   fileMigrationIntervalMinutes: number;
   /** Si es true, elimina el archivo local de disco tras verificar y comitear en S3. */
   fileMigrationDeleteLocalAfterCommit: boolean;
+  /** Sesión y contraseñas: solo rigen en modo local (docs/design/LOCAL_AUTH_PLAN.md, D15).
+   * Duración de la sesión en horas; bajarla corta también las sesiones abiertas (D16). */
+  localSessionTtlHours: number;
+  passwordMinLength: number;
+  passwordRequireUppercase: boolean;
+  passwordRequireLowercase: boolean;
+  passwordRequireNumber: boolean;
+  passwordRequireSymbol: boolean;
+  /** `null` = las contraseñas no vencen. */
+  passwordExpirationDays: number | null;
+  /** Cuántas contraseñas recientes no se pueden repetir, contando la actual. */
+  passwordHistoryCount: number;
+  /** `null` = sin bloqueo por intentos fallidos. */
+  maxFailedLoginAttempts: number | null;
+  lockoutDurationMinutes: number;
 }
 
 export type UpdateAdminSettingsPayload = Partial<AdminSettings>;

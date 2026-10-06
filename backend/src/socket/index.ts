@@ -17,6 +17,13 @@ export function initSocket(httpServer: HttpServer): AppServer {
   return io;
 }
 
+/// Si este proceso levantó Socket.IO. El CLI de administración
+/// (src/cli/auth-admin.ts) comparte servicios con el server pero no tiene
+/// sockets: ahí no hay conexiones que cortar.
+export function isSocketReady(): boolean {
+  return io !== null;
+}
+
 /// Expone la instancia ya inicializada para el resto del sistema (ej. un
 /// servicio que necesite emitir un evento fuera del ciclo request/response).
 export function getIO(): AppServer {

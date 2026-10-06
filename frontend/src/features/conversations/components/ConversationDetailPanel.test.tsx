@@ -189,6 +189,7 @@ describe("ConversationDetailPanel", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
     vi.mocked(usePublicSettings).mockReturnValue({
       allowConversationDelete: true,

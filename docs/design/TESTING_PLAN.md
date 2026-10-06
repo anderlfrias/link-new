@@ -105,6 +105,13 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
   acceso a la app** (`backend/src/modules/auth/auth.service.ts#login`): el mensaje al
   usuario tiene que ser genérico a propósito — un test que espere un mensaje
   "distingue el motivo" está probando lo contrario de lo que el código hace a propósito.
+- **Autenticación local (modo sin EXTERNAL_AUTH):** las invariantes de seguridad del modo local
+  (un solo verificador por modo, revocación por `tokensValidAfter`, anti-enumeración,
+  bloqueo por intentos, token restringido de cambio obligatorio, secretos que nunca quedan
+  registrados, nunca sin admin, regresión del modo external-auth) están listadas en
+  [LOCAL_AUTH_PLAN.md §8](LOCAL_AUTH_PLAN.md#8-invariantes-de-seguridad-cobertura-obligatoria).
+  Cualquier cambio en `backend/src/modules/auth/`, en los middlewares de autenticación o en
+  la administración de cuentas tiene que mantenerlas cubiertas.
 - **`importGiphyAsset()`** (`backend/src/modules/giphy/giphy.service.ts`): el
   `originalUrl` se revalida contra el host real de Giphy (`https` + `*.giphy.com`)
   antes de descargar. Un host que no matchea tiene que ser rechazado — este es

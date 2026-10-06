@@ -11,6 +11,11 @@ vi.mock("@/features/admin/hooks/use-admin-settings", () => ({
   useAdminSettings: () => mockUseAdminSettings(),
 }));
 
+// Sin sesión (o sin authProvider) el panel se comporta como en modo external-auth.
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: () => ({ session: null }),
+}));
+
 const mockSave = vi.fn();
 vi.mock("@/features/admin/hooks/use-update-admin-settings", () => ({
   useUpdateAdminSettings: () => ({
@@ -56,6 +61,16 @@ const initialSettings: AdminSettings = {
   fileMigrationBatchSize: 50,
   fileMigrationIntervalMinutes: 60,
   fileMigrationDeleteLocalAfterCommit: false,
+  localSessionTtlHours: 12,
+  passwordMinLength: 12,
+  passwordRequireUppercase: false,
+  passwordRequireLowercase: false,
+  passwordRequireNumber: false,
+  passwordRequireSymbol: false,
+  passwordExpirationDays: null,
+  passwordHistoryCount: 0,
+  maxFailedLoginAttempts: null,
+  lockoutDurationMinutes: 15,
 };
 
 describe("Flujo clave: AdminSettingsPanel", () => {

@@ -14,8 +14,8 @@ interface ProfilePictureContextValue {
 const ProfilePictureContext = createContext<ProfilePictureContextValue | null>(null);
 
 /**
- * Estado compartido de mi propia foto de perfil (traída de EXTERNAL_AUTH a través del
- * backend). Vive en un Provider — no en un hook local — porque más de un
+ * Estado compartido de mi propia foto de perfil, servida por el backend (en
+ * modo external-auth, sincronizada desde EXTERNAL_AUTH al iniciar sesión). Vive en un Provider — no en un hook local — porque más de un
  * componente la muestra a la vez (`UserMenu`, el panel de perfil) y todos
  * necesitan enterarse en el momento en que cambia, no cada uno con su propio
  * fetch independiente desincronizado del resto.

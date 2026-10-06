@@ -2,7 +2,10 @@ import rateLimit from "express-rate-limit";
 import { getClientIp } from "../config/client-ip";
 
 const WINDOW_MS = 15 * 60 * 1000;
-const TOO_MANY_ATTEMPTS_MESSAGE = {
+/// También lo usa el bloqueo por cuenta del modo local (LOCAL_AUTH_PLAN.md,
+/// D17): una cuenta bloqueada responde exactamente lo mismo que este rate
+/// limit, así no se confirma que la cuenta existe.
+export const TOO_MANY_ATTEMPTS_MESSAGE = {
   error: "Hiciste demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar.",
 };
 
@@ -45,6 +48,19 @@ export const loginIpRateLimiter = rateLimit({
 // quedan cubiertos por `loginIpRateLimiter` de todos modos, y un `user`
 // faltante de por sí corta enseguida en el controller con `BadRequestError`.
 const UNKNOWN_USER_KEY = "unknown-user";
+
+/// `PATCH /auth/password` (LOCAL_AUTH_PLAN.md §7): por cuenta, para que un
+/// token robado no sirva para probar contraseñas actuales por fuerza bruta.
+/// Mismo cupo que el login por usuario; solo cuentan los intentos fallidos.
+export const passwordChangeRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => req.user?.internalUserId ?? getClientIp(req) ?? "unknown",
+  message: { error: "Hiciste demasiados intentos de cambio de contraseña. Esperá unos minutos y volvé a intentar." },
+});
 
 export const loginUserRateLimiter = rateLimit({
   windowMs: WINDOW_MS,

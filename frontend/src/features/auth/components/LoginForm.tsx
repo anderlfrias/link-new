@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/providers/auth-provider";
+import { useAuthConfig } from "@/providers/auth-config-provider";
 import { useTranslation } from "@/i18n";
 import { ApiError } from "@/types/api.types";
 
@@ -20,6 +21,7 @@ export function LoginForm() {
   const { t } = useTranslation();
   const router = useRouter();
   const { login } = useAuth();
+  const { config } = useAuthConfig();
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -46,7 +48,10 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <Input
         type="text"
-        placeholder={t("auth.username")}
+        // EXTERNAL_AUTH también acepta el correo en este campo: misma etiqueta en los
+        // dos modos (docs/design/LOCAL_AUTH_PLAN.md, D11).
+        placeholder={t("auth.usernameOrEmail")}
+        aria-label={t("auth.usernameOrEmail")}
         autoComplete="username"
         icon={<IconUser size={18} stroke={1.75} />}
         value={user}
@@ -56,6 +61,7 @@ export function LoginForm() {
       <Input
         type={showPassword ? "text" : "password"}
         placeholder={t("auth.password")}
+        aria-label={t("auth.password")}
         autoComplete="current-password"
         icon={<IconLock size={18} stroke={1.75} />}
         rightElement={
@@ -88,6 +94,12 @@ export function LoginForm() {
         {loading && <IconLoader2 size={18} className="animate-spin" />}
         {loading ? t("auth.loggingIn") : t("auth.loginButton")}
       </Button>
+
+      {/* En modo local no hay recuperación por email (no hay SMTP): la
+          contraseña la restablece un admin. En modo external-auth eso lo maneja EXTERNAL_AUTH. */}
+      {config?.mode === "local" && (
+        <p className="text-center text-xs text-neutral-500 dark:text-neutral-400">{t("auth.forgotPasswordLocal")}</p>
+      )}
     </form>
   );
 }

@@ -12,10 +12,47 @@ vi.mock("../config/prisma", () => ({
   },
 }));
 
-vi.mock("../modules/auth/jwt", () => ({
-  verifyToken: vi.fn(),
-  mapTokenToUser: vi.fn(),
+vi.mock("../modules/auth/jwt", () => {
+  const verifyToken = vi.fn();
+  const mapTokenToUser = vi.fn();
+  return {
+    verifyToken,
+    mapTokenToUser,
+    // El socket usa el verificador único (LOCAL_AUTH_PLAN.md, Fase 4): en modo
+    // external-auth equivale a verificar el JWT de EXTERNAL_AUTH y mapearlo.
+    verifyAccessToken: vi.fn((token: string) => ({
+      mode: "external-auth",
+      user: mapTokenToUser(verifyToken(token)),
+      mustChangePassword: false,
+    })),
+  };
+});
+
+vi.mock("../modules/settings/settings.service", () => ({
+  getSettings: vi.fn().mockResolvedValue({ localSessionTtlHours: 1 }),
 }));
+
+/// Identidad como la que devuelve el verificador en modo local.
+function localIdentity(overrides: Record<string, unknown> = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    mode: "local" as const,
+    mustChangePassword: false,
+    iat: now,
+    user: {
+      id: "user-1",
+      email: "ana@example.com",
+      username: null,
+      fullName: "",
+      roles: [],
+      permissions: [],
+      app: "link",
+      exp: now + 3600,
+      authProvider: "local" as const,
+    },
+    ...overrides,
+  };
+}
 
 describe("socket-auth.middleware", () => {
   beforeEach(() => {
@@ -120,7 +157,7 @@ describe("socket-auth.middleware", () => {
     };
     vi.mocked(JwtModule.verifyToken).mockReturnValue({ id: "ext-1" } as any);
     vi.mocked(JwtModule.mapTokenToUser).mockReturnValue(mappedUser as any);
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "internal-uuid-ana" } as any);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "internal-uuid-ana", status: "ACTIVE" } as any);
 
     authenticateSocket(socket as any, next);
 
@@ -130,6 +167,71 @@ describe("socket-auth.middleware", () => {
         internalUserId: "internal-uuid-ana",
       });
       expect(next).toHaveBeenCalledWith();
+    });
+  });
+
+  describe("modo local (LOCAL_AUTH_PLAN.md, Fase 4)", () => {
+    function connect(token: string) {
+      const socket = { handshake: { auth: { token } }, data: {} as any };
+      const next = vi.fn();
+      authenticateSocket(socket as any, next);
+      return { socket, next };
+    }
+
+    it("rechaza un token restringido (pcr) sin consultar la base (invariante 8)", async () => {
+      vi.mocked(JwtModule.verifyAccessToken).mockReturnValueOnce(localIdentity({ mustChangePassword: true }) as any);
+
+      const { socket, next } = connect("pcr-token");
+
+      await vi.waitFor(() => {
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Invalid token" }));
+      });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      expect(socket.data.user).toBeUndefined();
+    });
+
+    it("una cuenta desactivada no conecta: termina la sesión como un token inválido (invariante 5)", async () => {
+      vi.mocked(JwtModule.verifyAccessToken).mockReturnValueOnce(localIdentity() as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1", status: "INACTIVE" } as any);
+
+      const { next } = connect("local-token");
+
+      await vi.waitFor(() => {
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Invalid token" }));
+      });
+    });
+
+    it("una sesión más vieja que la duración vigente responde 'Token expired'", async () => {
+      vi.mocked(JwtModule.verifyAccessToken).mockReturnValueOnce(
+        localIdentity({ iat: Math.floor(Date.now() / 1000) - 2 * 3600 }) as any,
+      );
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "user-1", status: "ACTIVE", localRoles: [] } as any);
+
+      const { next } = connect("old-token");
+
+      await vi.waitFor(() => {
+        expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Token expired" }));
+      });
+    });
+
+    it("conecta con un token local y deja los roles de la base en socket.data.user", async () => {
+      vi.mocked(JwtModule.verifyAccessToken).mockReturnValueOnce(localIdentity() as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: "user-1",
+        email: "ana@example.com",
+        name: "Ana",
+        username: "ana",
+        status: "ACTIVE",
+        localRoles: ["admin"],
+        tokensValidAfter: null,
+      } as any);
+
+      const { socket, next } = connect("local-token");
+
+      await vi.waitFor(() => {
+        expect(next).toHaveBeenCalledWith();
+      });
+      expect(socket.data.user).toMatchObject({ internalUserId: "user-1", roles: ["admin"], authProvider: "local" });
     });
   });
 });

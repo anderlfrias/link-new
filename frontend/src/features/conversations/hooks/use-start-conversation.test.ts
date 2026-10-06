@@ -31,6 +31,7 @@ describe("useStartConversation", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
     vi.mocked(useRouter).mockReturnValue({
       push: mockPush,
@@ -81,6 +82,7 @@ describe("useStartConversation", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useStartConversation());

@@ -31,6 +31,7 @@ describe("useForwardMessage", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
   });
 
@@ -125,6 +126,7 @@ describe("useForwardMessage", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useForwardMessage());

@@ -16,11 +16,17 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: vi.fn(),
 }));
 
+const mockAuthConfig = vi.fn();
+vi.mock("@/providers/auth-config-provider", () => ({
+  useAuthConfig: () => mockAuthConfig(),
+}));
+
 describe("LoginForm", () => {
   const mockLogin = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuthConfig.mockReturnValue({ config: null, refresh: vi.fn() });
     vi.mocked(useAuth).mockReturnValue({
       session: null,
       status: "unauthenticated",
@@ -28,13 +34,14 @@ describe("LoginForm", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
   });
 
   it("renders username and password inputs, and submit button", () => {
     render(<LoginForm />);
 
-    expect(screen.getByPlaceholderText("Usuario")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Usuario o correo electrónico")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Contraseña")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ingresar" })).toBeInTheDocument();
   });
@@ -46,7 +53,7 @@ describe("LoginForm", () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByPlaceholderText("Username")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Username or email")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Password")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
@@ -74,7 +81,7 @@ describe("LoginForm", () => {
 
     render(<LoginForm />);
 
-    await user.type(screen.getByPlaceholderText("Usuario"), "carlos");
+    await user.type(screen.getByPlaceholderText("Usuario o correo electrónico"), "carlos");
     await user.type(screen.getByPlaceholderText("Contraseña"), "secret123");
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
@@ -93,7 +100,7 @@ describe("LoginForm", () => {
 
     render(<LoginForm />);
 
-    await user.type(screen.getByPlaceholderText("Usuario"), "carlos");
+    await user.type(screen.getByPlaceholderText("Usuario o correo electrónico"), "carlos");
     await user.type(screen.getByPlaceholderText("Contraseña"), "wrongpass");
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
@@ -109,12 +116,38 @@ describe("LoginForm", () => {
 
     render(<LoginForm />);
 
-    await user.type(screen.getByPlaceholderText("Usuario"), "carlos");
+    await user.type(screen.getByPlaceholderText("Usuario o correo electrónico"), "carlos");
     await user.type(screen.getByPlaceholderText("Contraseña"), "pass");
     await user.click(screen.getByRole("button", { name: "Ingresar" }));
 
     expect(
       screen.getByText("No se pudo iniciar sesión. Intentá de nuevo."),
     ).toBeInTheDocument();
+  });
+
+  describe("según el modo de autenticación (LOCAL_AUTH_PLAN.md, Fase 9)", () => {
+    it("en modo external-auth pide usuario o correo, sin la ayuda de contraseña olvidada", () => {
+      mockAuthConfig.mockReturnValue({ config: { mode: "external-auth" }, refresh: vi.fn() });
+
+      render(<LoginForm />);
+
+      expect(screen.getByLabelText("Usuario o correo electrónico")).toBeInTheDocument();
+      expect(screen.queryByText(/Olvidaste tu contraseña/)).not.toBeInTheDocument();
+    });
+
+    it("en modo local suma la ayuda: la contraseña la restablece un administrador", () => {
+      mockAuthConfig.mockReturnValue({
+        config: {
+          mode: "local",
+          passwordPolicy: { minLength: 12, maxLength: 128, requireUppercase: false, requireLowercase: false, requireNumber: false, requireSymbol: false, historyCount: 0 },
+        },
+        refresh: vi.fn(),
+      });
+
+      render(<LoginForm />);
+
+      expect(screen.getByLabelText("Usuario o correo electrónico")).toBeInTheDocument();
+      expect(screen.getByText("¿Olvidaste tu contraseña? Pedile a un administrador que la restablezca.")).toBeInTheDocument();
+    });
   });
 });

@@ -4,9 +4,11 @@
 > EXTERNAL_AUTH como hoy; si no la tiene, usa **cuentas locales**, con credenciales administradas en esta
 > misma plataforma. Cada instalación usa **uno u otro**, nunca los dos a la vez.
 
-**Estado:** decisiones confirmadas el 2026-10-05 (ver [sección 11](#11-decisiones-confirmadas)). El
-modo híbrido (EXTERNAL_AUTH y cuentas locales a la vez) se evaluó y se descartó ese mismo día. No hay
-consultas abiertas: listo para arrancar la Fase 1.
+**Estado:** implementado. Las 12 fases se cerraron entre el 2026-10-05 y el 2026-10-06 (ver
+[sección 9](#9-fases)); las decisiones están en la [sección 11](#11-decisiones-confirmadas). El modo
+híbrido (EXTERNAL_AUTH y cuentas locales a la vez) se evaluó y se descartó. Este documento queda como
+referencia del diseño y de las invariantes de seguridad (§8) que cualquier cambio futuro tiene que
+mantener cubiertas.
 
 Este documento sigue el formato de [TESTING_PLAN.md](TESTING_PLAN.md) y [LOGGING_PLAN.md](LOGGING_PLAN.md):
 está pensado para que lo ejecute cualquier agente de IA (o persona) en varias sesiones separadas,
@@ -178,7 +180,7 @@ día es el largo mínimo de 12, porque acá no hay un comportamiento anterior qu
 
 ## 5. Modelo de datos
 
-Todos los cambios de esquema entran juntos en la Fase 2, con un solo `db push`:
+Todos los cambios de esquema entran juntos en la Fase 2, en una sola migración:
 
 ```prisma
 model User {
@@ -245,10 +247,11 @@ enum AuditAction {
 - **Se elimina el enum `AuthProvider`** (`schema.prisma:17-28`). Estaba reservado para esto, pero el
   modo se deduce del `.env` y no se persiste en ningún lado: dejarlo sería código muerto que describe
   un diseño distinto del implementado. Ninguna columna lo usa, así que sacarlo no toca datos.
-- Se aplica con `npm run prisma:sync`: este repo usa `prisma db push`, no carpeta de migraciones. Es un
-  cambio aditivo (columnas con default o nullable, una tabla nueva, valores de enum nuevos), sin
-  pérdida de datos. En producción, backup antes (`backend/README.md`, "Operaciones, Backup y
-  Restauración").
+- Se aplica con la migración `backend/prisma/migrations/20261006150000_local_auth` (`npm run
+  db:migrate`). Cuando se escribió este plan el repo usaba `prisma db push`; desde entonces usa
+  migraciones (ver README.md, "Base de datos y migraciones"). Es un cambio aditivo (columnas con
+  default o nullable, una tabla nueva, valores de enum nuevos), sin pérdida de datos. En producción,
+  backup antes (`backend/README.md`, "Operaciones, Backup y Restauración").
 - Comentarios que dejan de ser ciertos y hay que actualizar: `User.username` ("null cuando el usuario
   no proviene de un proveedor externo"), el comentario de `LOGIN` en `AuditAction` ("el JWT de EXTERNAL_AUTH
   es stateless": el local también lo es) y `GroupPermissionLevel` (`APP_ADMINS_ONLY` "viene de EXTERNAL_AUTH").
@@ -413,20 +416,20 @@ cubra explícitamente. No alcanza con que pase el camino feliz.
 | # | Fase | Workspace | ¿Cambia algo visible? | Estado |
 |---|---|---|---|---|
 | 1 | [Configuración: EXTERNAL_AUTH opcional](#fase-1) | backend | No, con el `.env` actual | [x] 2026-10-05 |
-| 2 | [Modelo de datos y auditoría](#fase-2) | backend | No | [ ] |
-| 3 | [Núcleo local: contraseñas y tokens](#fase-3) | backend | No | [ ] |
-| 4 | [Autenticación según el modo: HTTP, socket y archivos](#fase-4) | backend | No, en modo `external-auth` | [ ] |
-| 5 | [Login local, contraseña propia y política básica](#fase-5) | backend | Sí, en modo local | [ ] |
-| 6 | [Política avanzada: vencimiento, historial y bloqueo](#fase-6) | backend | Solo si un admin la activa | [ ] |
-| 7 | [Administración de cuentas y CLI](#fase-7) | backend | Sí (en `external-auth`: desactivar cuentas) | [ ] |
-| 8 | [Migración entre modos](#fase-8) | backend | No (corrige un 500 latente) | [ ] |
-| 9 | [Frontend: login, cambio de contraseña y perfil](#fase-9) | frontend | Sí | [ ] |
-| 10 | [Frontend: panel de usuarios](#fase-10) | frontend | Sí | [ ] |
-| 11 | [Frontend: configuración de seguridad y auditoría](#fase-11) | frontend | Sí | [ ] |
-| 12 | [Documentación, versión y cierre](#fase-12) | ambos | — | [ ] |
+| 2 | [Modelo de datos y auditoría](#fase-2) | backend | No | [x] 2026-10-06 |
+| 3 | [Núcleo local: contraseñas y tokens](#fase-3) | backend | No | [x] 2026-10-06 |
+| 4 | [Autenticación según el modo: HTTP, socket y archivos](#fase-4) | backend | No, en modo `external-auth` | [x] 2026-10-06 |
+| 5 | [Login local, contraseña propia y política básica](#fase-5) | backend | Sí, en modo local | [x] 2026-10-06 |
+| 6 | [Política avanzada: vencimiento, historial y bloqueo](#fase-6) | backend | Solo si un admin la activa | [x] 2026-10-06 |
+| 7 | [Administración de cuentas y CLI](#fase-7) | backend | Sí (en `external-auth`: desactivar cuentas) | [x] 2026-10-06 |
+| 8 | [Migración entre modos](#fase-8) | backend | No (corrige un 500 latente) | [x] 2026-10-06 |
+| 9 | [Frontend: login, cambio de contraseña y perfil](#fase-9) | frontend | Sí | [x] 2026-10-06 |
+| 10 | [Frontend: panel de usuarios](#fase-10) | frontend | Sí | [x] 2026-10-06 |
+| 11 | [Frontend: configuración de seguridad y auditoría](#fase-11) | frontend | Sí | [x] 2026-10-06 |
+| 12 | [Documentación, versión y cierre](#fase-12) | ambos | — | [x] 2026-10-06 |
 
 Las fases 1 a 4 se pueden llevar a producción en una instalación EXTERNAL_AUTH sin riesgo funcional: es el
-punto natural para un primer merge. La Fase 2 incluye un `db push`, así que conviene coordinarla con
+punto natural para un primer merge. La Fase 2 incluye una migración, así que conviene coordinarla con
 un backup. La Fase 6 es separable: si se quiere una primera versión más chica, el modo local funciona
 completo sin ella, con la duración de sesión, el largo mínimo y la complejidad configurables.
 
@@ -475,22 +478,37 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 
 ### Fase 2 — Modelo de datos y auditoría (backend)
 
-- [ ] `schema.prisma` según §5, incluida la baja del enum `AuthProvider`, con los comentarios
-      actualizados. `npm run prisma:sync`.
-- [ ] Auditoría, con los 3 pasos de `modules/audit/README.md` para todo lo de D21 de una vez: valores
+- [x] `schema.prisma` según §5, incluida la baja del enum `AuthProvider`, con los comentarios
+      actualizados. Migración `20261006150000_local_auth` (el repo pasó de `db push` a migraciones).
+- [x] Auditoría, con los 3 pasos de `modules/audit/README.md` para todo lo de D21 de una vez: valores
       de `AuditAction`, `AuditMetadataMap`, la tabla del README y `DEFAULT_ADMIN_AUDIT_ACTIONS`.
       `LOGIN` pasa a `{ provider }` y `LOGIN_FAILED` suma `provider`: el flujo EXTERNAL_AUTH actual manda
       `provider: "external-auth"`.
 
 **Tests:** el login EXTERNAL_AUTH (éxito y fallo) audita con `provider: "external-auth"`; el resto de la suite sigue igual.
 
-**Hecha cuando:** contra la base de desarrollo, `db push` corre sin pérdida de datos.
+**Hecha cuando:** la migración se aplica sin pérdida de datos sobre una base con datos.
+
+**Fase 2 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- La migración se validó en un PostgreSQL descartable: sobre `0_init` con datos previos (un usuario,
+  la configuración y una fila de auditoría) se aplica sin perder nada, los campos nuevos toman sus
+  defaults y `migrate diff --exit-code` no deja diferencia con el schema. **No** se aplicó a la base
+  de desarrollo de nadie: en una instalación existente, `npm run db:baseline` una vez (si venía de
+  `db push`) y después `npm run db:migrate`.
+- `audit.types.ts` exporta `LoginFailureReason`, `AccountAdminVia`, `PasswordChangeReason` y
+  `AuditedUserField`. `LOGIN` exige `metadata: { provider }`: TypeScript marca cualquier `record`
+  que lo olvide. El controller usa `env.auth.mode` como `provider`.
+- `DEFAULT_ADMIN_AUDIT_ACTIONS` suma `CHANGE_PASSWORD` además de las tres de admin: es un evento de
+  seguridad de la cuenta, como `LOGIN`, y no actividad del chat. Un test fija que el default nunca
+  incluya acciones del chat.
+- La tabla del README de auditoría también documenta `START_CALL` y `END_CALL`, que faltaban.
 
 <a id="fase-3"></a>
 
 ### Fase 3 — Núcleo local: contraseñas y tokens (backend, sin endpoints)
 
-- [ ] `modules/auth/password.ts`:
+- [x] `modules/auth/password.ts`:
   - `hashPassword` y `verifyPassword` → `{ valid, needsRehash }` (D4).
   - `evaluatePasswordPolicy(password, policy)` → lista de reglas incumplidas. Aplica el piso de 8 y el
     máximo de 128 aunque la política recibida diga otra cosa.
@@ -498,11 +516,11 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
   - `generateTemporaryPassword(policy)`: `crypto.randomInt` sobre un alfabeto sin caracteres
     ambiguos, de largo `max(16, minLength)`, y con al menos una mayúscula, una minúscula, un número y
     un símbolo, para que cumpla cualquier política configurable.
-- [ ] `modules/auth/jwt.ts`: `signLocalToken(user, { ttlHours, mustChangePassword })` y
+- [x] `modules/auth/jwt.ts`: `signLocalToken(user, { ttlHours, mustChangePassword })` y
       `verifyAccessToken(token)` → `AuthenticatedIdentity { mode, user: MappedUser,
       mustChangePassword, iat }`, con el verificador del modo activo (D5 y D6). `verifyToken` (EXTERNAL_AUTH)
       queda como implementación del verificador EXTERNAL_AUTH.
-- [ ] `auth.types.ts`: `MappedUser` suma `authProvider: "external-auth" | "local"` y `username` pasa a
+- [x] `auth.types.ts`: `MappedUser` suma `authProvider: "external-auth" | "local"` y `username` pasa a
       `string | null`. Documentar que en modo local `id === internalUserId` y `permissions: []`.
 
 **Tests (invariantes 1, 2 y 10):**
@@ -514,21 +532,41 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 - Verificador según el modo: en `local`, un token con forma de EXTERNAL_AUTH se rechaza aunque esté bien
   firmado; en `external-auth`, un token local se rechaza.
 
+**Fase 3 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- `password.ts` exporta `PASSWORD_MIN_LENGTH_FLOOR` (8), `PASSWORD_MAX_LENGTH` (128),
+  `effectiveMinLength`, `PasswordPolicy` y `PasswordRule` (`min_length`, `max_length`, `uppercase`,
+  `lowercase`, `number`, `symbol`), además de las funciones del plan. Los largos se cuentan en code
+  points después de NFKC. "Símbolo" es cualquier caracter que no sea letra, número ni marca
+  diacrítica (un espacio cuenta).
+- `verifyPassword` nunca tira: un hash adulterado, de formato desconocido o con parámetros que
+  pedirían más de 64 MiB da `valid: false`. Una contraseña de más de 128 caracteres también, sin
+  calcular el hash.
+- `auth-config.ts` suma `requireLocalConfig` (en modo external-auth tira 503 `local_auth_not_enabled`), que
+  usa `signLocalToken`.
+- `verifyAccessToken` en modo external-auth además rechaza tokens con `iss: "link-local"` o sin `email` y
+  `roles`: así un token local no pasa ni si alguien usó el mismo valor en `EXTERNAL_AUTH_JWT_SECRET` y
+  `LOCAL_AUTH_JWT_SECRET`. En modo local la identidad sale con `fullName: ""`, `username: null` y
+  `roles: []`: los completa `resolveInternalUser` (Fase 4) desde la base.
+- Helper de tests `src/test/auth-mode.ts`: `useAuthMode(LOCAL_AUTH_CONFIG)` dentro de un `describe`
+  pone la instalación en modo local y restaura external-auth al terminar.
+- `tsc` limpio y 885 tests en verde.
+
 <a id="fase-4"></a>
 
 ### Fase 4 — Autenticación según el modo: HTTP, socket y archivos (backend)
 
-- [ ] `resolveInternalUser(identity)` (D7), compartida, por ejemplo en `modules/auth/identity.ts`.
+- [x] `resolveInternalUser(identity)` (D7), compartida, por ejemplo en `modules/auth/identity.ts`.
       Incluye el control de antigüedad contra `localSessionTtlHours`, que se lee de `getSettings()`
       (en cache).
-- [ ] `authenticate` usa `verifyAccessToken` y aplica el gate de `pcr` (D13). `AppError` acepta un
+- [x] `authenticate` usa `verifyAccessToken` y aplica el gate de `pcr` (D13). `AppError` acepta un
       `code` opcional y `error.middleware.ts` lo serializa cuando existe.
-- [ ] `attachInternalUser`, `socket-auth.middleware.ts` (que además rechaza `pcr`) y la rama Bearer de
+- [x] `attachInternalUser`, `socket-auth.middleware.ts` (que además rechaza `pcr`) y la rama Bearer de
       `file.controller.ts#getContent` usan la función compartida. Se eliminan las dos copias.
-- [ ] Login EXTERNAL_AUTH: una cuenta `INACTIVE` → 403 `account_disabled`, auditado como `LOGIN_FAILED` (D19).
-- [ ] `user.controller.ts`/`user.service.ts`: `syncAppUsers` solo en modo `external-auth`.
-- [ ] `socket/rooms.ts`: `disconnectUserSockets(io, userId)`.
-- [ ] Actualizar los tests que mockean `verifyToken`/`mapTokenToUser` (punto 14 del mapa) al contrato
+- [x] Login EXTERNAL_AUTH: una cuenta `INACTIVE` → 403 `account_disabled`, auditado como `LOGIN_FAILED` (D19).
+- [x] `user.controller.ts`/`user.service.ts`: `syncAppUsers` solo en modo `external-auth`.
+- [x] `socket/rooms.ts`: `disconnectUserSockets(io, userId)`.
+- [x] Actualizar los tests que mockean `verifyToken`/`mapTokenToUser` (punto 14 del mapa) al contrato
       nuevo, **sin cambiar lo que esperan** en modo `external-auth`.
 
 **Tests (invariantes 1, 3, 4, 5, 8 y 14):**
@@ -543,17 +581,39 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 
 **Hecha cuando:** con el `.env` actual, todas las suites existentes pasan sin cambiar sus expectativas.
 
+**Fase 4 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- `modules/auth/identity.ts`: `resolveInternalUser`, `assertNotPasswordChangeOnly` y
+  `authenticateAccessToken` (verifica, rechaza `pcr` y resuelve; la usan el socket y
+  `/files/:id/content`). Los rechazos son `UnauthorizedError` con `code`: `account_disabled`,
+  `token_revoked` y `session_expired`. Un token restringido es `ForbiddenError`
+  `password_change_required` (403, no 401: el frontend cierra la sesión ante un 401).
+- `authenticate` deja también `req.authIdentity` (modo, `iat`, `pcr`), que lee
+  `attachInternalUser`. `authenticateForPasswordChange` es la variante que acepta tokens `pcr`:
+  la Fase 5 la monta en `PATCH /auth/password`.
+- `AppError` acepta `code`, y el error handler devuelve `{ error, code }` cuando hay. Nuevo
+  `TooManyRequestsError` (429) para el bloqueo de cuentas.
+- El socket sigue devolviendo solo `Token expired` o `Invalid token`, los dos mensajes con los que el
+  frontend cierra la sesión: una cuenta desactivada, un token revocado o un `pcr` salen como
+  `Invalid token`, y una sesión más vieja que la duración vigente como `Token expired`.
+- Cambio de comportamiento a propósito: el login de EXTERNAL_AUTH ya no reenvía `CF-Connecting-IP` sin
+  condición; usa `getClientIp` (config/client-ip.ts), igual que el rate limiting.
+- `/files/:id/content` con un Bearer inválido ahora responde 401; antes llegaba como 500.
+- Las cuentas mockeadas en los tests de rutas tienen `status: "ACTIVE"`: `resolveInternalUser`
+  rechaza cualquier otro estado (falla cerrado).
+- `tsc` limpio y 922 tests en verde.
+
 <a id="fase-5"></a>
 
 ### Fase 5 — Login local, contraseña propia y política básica (backend)
 
-- [ ] Configuración global: `settings.validator.ts` suma `localSessionTtlHours`, `passwordMinLength`
+- [x] Configuración global: `settings.validator.ts` suma `localSessionTtlHours`, `passwordMinLength`
       y los cuatro `passwordRequire*`, con los rangos de D15, también en la lista del test
       `at-least-one-field`. `settings.types.ts` (`UpdateSettingsInput`) y
       `settings.service.ts#getLocalAuthPolicy()`, con los pisos ya aplicados. Los campos de la Fase 6
       quedan afuera del validator hasta esa fase, para que nadie configure algo que todavía no se aplica.
-- [ ] `GET /v1/auth/config` (D14).
-- [ ] `AuthService.authenticateCredentials(user, password, clientIp)`: rama EXTERNAL_AUTH sin cambios. Rama
+- [x] `GET /v1/auth/config` (D14).
+- [x] `AuthService.authenticateCredentials(user, password, clientIp)`: rama EXTERNAL_AUTH sin cambios. Rama
       local, en este orden:
   1. Búsqueda por email o username (D10).
   2. Verificación, con hash ficticio si no hay cuenta o contraseña (D12).
@@ -565,13 +625,13 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
   Los errores llevan el motivo explícito para la auditoría: los tipos de error HTTP no alcanzan para
   distinguir `unknown_account` de `wrong_password`, que a propósito comparten la misma respuesta.
   `mapLoginFailureReason` se extiende para leerlo.
-- [ ] `PATCH /v1/auth/password` (solo modo local): contraseña actual y política; mueve
+- [x] `PATCH /v1/auth/password` (solo modo local): contraseña actual y política; mueve
       `tokensValidAfter` y devuelve un token nuevo; rate limiter propio por `internalUserId`; auditoría
       `CHANGE_PASSWORD` con su motivo.
-- [ ] `config/logger.ts`: `REDACT_PATHS` suma `currentPassword`, `newPassword`, `temporaryPassword`,
+- [x] `config/logger.ts`: `REDACT_PATHS` suma `currentPassword`, `newPassword`, `temporaryPassword`,
       `passwordHash` y `previousPasswordHashes`, con sus variantes `*.`.
-- [ ] `modules/auth/README.md`, `settings/README.md` (tabla "Consumidores") y `API.md` §1, §2 y §12.
-- [ ] Sacar las notas de "el inicio de sesión local todavía está en desarrollo" que dejó la Fase 1 en
+- [x] `modules/auth/README.md`, `settings/README.md` (tabla "Consumidores") y `API.md` §1, §2 y §12.
+- [x] Sacar las notas de "el inicio de sesión local todavía está en desarrollo" que dejó la Fase 1 en
       `backend/.env.example`, `modules/auth/README.md`, `backend/README.md` y `API.md` §11.
 
 **Tests (invariantes 6, 8, 9, 10 y 11):**
@@ -592,19 +652,39 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 - Privacidad: ninguna metadata de auditoría ni línea de log contiene la contraseña (assert sobre un
   logger de test, como en `logger.test.ts`).
 
+**Fase 5 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- El login local vive en `local-auth.service.ts` (`loginWithLocalAccount`, `changeOwnPassword`,
+  `getPublicAuthConfig`), no dentro de `AuthService`: la rama EXTERNAL_AUTH del controller quedó sin cambios
+  y sus tests también. `LocalLoginError` (`auth.errors.ts`) lleva el motivo para la auditoría y
+  `mapLoginFailureReason` lo lee.
+- La Fase 6 tiene que insertar el chequeo de bloqueo **antes** de `verifyPassword` en
+  `loginWithLocalAccount`, incrementar `failedLoginCount` en los tres fallos y reiniciarlo en el
+  éxito, y sumar `expired` a `mustChangePasswordReason`. `savePasswordChange` ya recibe
+  `previousPasswordHashes` (hoy pasa el array sin tocar) y ya reinicia el contador y el bloqueo.
+- Decidido en esta fase: la contraseña nueva nunca puede ser igual a la actual (`password_reused`),
+  aunque el historial esté en 0. Si no, un cambio obligatorio por vencimiento se anularía volviendo
+  a poner la misma.
+- `AppError` acepta `details` (campos extra en la respuesta, como `rules`); `BadRequestError` lo
+  expone. `requireAuthMode(mode)` responde 404 en el otro modo, decidido en cada request.
+- `passwordChangeRateLimiter`: 5 intentos fallidos cada 15 minutos por `internalUserId`.
+- Los tests del controller mockean `local-auth.service`: importarlo de verdad arrastra el socket
+  (`getIO`) y con él `web-push`, que rechaza las claves VAPID de prueba.
+- `tsc` limpio y 960 tests en verde.
+
 <a id="fase-6"></a>
 
 ### Fase 6 — Política avanzada: vencimiento, historial y bloqueo (backend)
 
-- [ ] `settings.validator.ts`: `passwordExpirationDays`, `passwordHistoryCount`,
+- [x] `settings.validator.ts`: `passwordExpirationDays`, `passwordHistoryCount`,
       `maxFailedLoginAttempts` y `lockoutDurationMinutes` (rangos de D15, también en
       `at-least-one-field`).
-- [ ] Login: bloqueo antes de verificar (D17); incremento atómico del contador si falla y reinicio si
+- [x] Login: bloqueo antes de verificar (D17); incremento atómico del contador si falla y reinicio si
       sale bien; `429` con el mensaje del rate limit; auditoría `account_locked`. Contraseña vencida →
       `pcr` con motivo `expired`.
-- [ ] `PATCH /v1/auth/password`: historial; guarda el hash saliente en `previousPasswordHashes`,
+- [x] `PATCH /v1/auth/password`: historial; guarda el hash saliente en `previousPasswordHashes`,
       podado a N.
-- [ ] `/auth/config` suma `historyCount`.
+- [x] `/auth/config` suma `historyCount`.
 
 **Tests (invariantes 7 y 10):**
 - Bloqueo con y sin la contraseña correcta, y reinicio del contador.
@@ -612,23 +692,43 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 - Repetir una de las últimas N contraseñas se rechaza; una más vieja que N se acepta.
 - Con los defaults (todo apagado), el login se comporta igual que en la Fase 5.
 
+**Fase 6 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- `historyCount` cuenta la actual: "no se pueden repetir las últimas N" incluye la vigente. La
+  saliente pasa a `previousPasswordHashes` y se poda a N-1, así que con la nueva son N. Con 0 o 1
+  solo se compara contra la actual, que nunca se puede repetir (decisión de la Fase 5).
+- El contador de fallos solo corre con el bloqueo activado: si un admin lo activa más tarde, los
+  fallos de antes no cuentan. Al bloquear, el contador vuelve a 0 (al vencer el bloqueo hay otra vez
+  N intentos). Solo cuentan las contraseñas incorrectas de cuentas con credencial.
+- Al bloquearse una cuenta queda un `warn` con su UUID (`local account locked after too many failed
+  logins`). El intento que la bloquea se audita como `wrong_password`; los siguientes, mientras dure,
+  como `account_locked`.
+- La Fase 7 tiene que implementar el desbloqueo de un admin (`POST /admin/users/:id/unlock`) con
+  `resetFailedLogins` y el `UPDATE_USER` con `locked` en el diff. `getLocalAuthPolicy()` aplica topes
+  aunque la fila tenga valores fuera de rango (bloqueo ≥ 3, historial ≤ 12, duración ≥ 1 minuto).
+- Límite conocido, aceptado por el diseño (D17): con `maxFailedLoginAttempts` por debajo del rate
+  limit por usuario (5), quien prueba muchas contraseñas puede notar que una cuenta existe porque
+  recibe el `429` antes que con una inexistente. El bloqueo está apagado por defecto; conviene
+  mencionarlo junto al campo en el panel (Fase 11).
+- `tsc` limpio y 976 tests en verde.
+
 <a id="fase-7"></a>
 
 ### Fase 7 — Administración de cuentas y CLI (backend)
 
-- [ ] Los dos modos: `PATCH /admin/users/:id` con `status`. Desactivar o reactivar, con
+- [x] Los dos modos: `PATCH /admin/users/:id` con `status`. Desactivar o reactivar, con
       auto-protección; desconecta sockets y, en modo local, mueve `tokensValidAfter`.
-- [ ] Solo modo local:
+- [x] Solo modo local:
   - Endpoints de alta, edición (nombre, email, username, roles), restablecimiento y desbloqueo (§7).
   - Reglas: formato y unicidad de email y username (D11), roles solo de una lista conocida
     (`ADMIN_ROLE`), y "último admin activo".
-- [ ] Efecto y auditoría en la misma transacción: `CREATE_USER`, `UPDATE_USER` (con un diff sin
+- [x] Efecto y auditoría en la misma transacción: `CREATE_USER`, `UPDATE_USER` (con un diff sin
       secretos) y `RESET_PASSWORD`, todas con `via`.
-- [ ] `listUsersForAdmin`: campos y filtros de §7 según el modo.
-- [ ] CLI `src/cli/auth-admin.ts` con `create-admin` (cuenta nueva o existente) y `reset-password`
+- [x] `listUsersForAdmin`: campos y filtros de §7 según el modo.
+- [x] CLI `src/cli/auth-admin.ts` con `create-admin` (cuenta nueva o existente) y `reset-password`
       (D18). Script npm: `ts-node` en desarrollo y `node dist/cli/auth-admin.js` en producción. Para la
       auditoría usa un contexto de ejecución como el de `workers/worker-context.ts`.
-- [ ] `users/README.md`: deja de decir que el módulo "nunca crea usuarios", y cambian las secciones de
+- [x] `users/README.md`: deja de decir que el módulo "nunca crea usuarios", y cambian las secciones de
       `status` y de roles. También `API.md` §14.
 
 **Tests (invariantes 5, 9 y 12):**
@@ -640,23 +740,66 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
   - `create-admin` sobre un correo existente conserva el `User.id`.
   - Se niega a correr en modo `external-auth`.
 
+**Fase 7 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- `users/account-admin.service.ts` (`updateUserAccount`, `createLocalUser`, `resetLocalPassword`,
+  `unlockLocalUser`, `bootstrapAdmin`, `resetPasswordByEmail`) y su repositorio, que usa una transacción
+  interactiva: lee, decide ("último admin", unicidad) y escribe con la auditoría en la misma
+  transacción. Un `P2002` del índice único se traduce a `409`.
+- Los `409` llevan `code`: `cannot_modify_self`, `last_admin`, `email_taken`, `username_taken`. El
+  username vacío o `null` se borra.
+- `PATCH /admin/users/:id` valida el body según el modo en cada request (`validateUpdateAccount`).
+  En external-auth solo `status`; el servicio además ignora cualquier otro campo en ese modo.
+- Una contraseña elegida por el admin (alta o restablecimiento) tiene que cumplir la política; la
+  restablecida pasa la anterior al historial, igual que un cambio propio.
+- `modules/auth/live-sessions.ts#endLiveSessions` corta sockets sin fallar en procesos sin Socket.IO
+  (`socket/index.ts#isSocketReady`). Lo usan el cambio de contraseña, el restablecimiento y la
+  desactivación. En el CLI no hay sockets que cortar: los tokens quedan revocados igual.
+- CLI: `npm run auth:admin` corre `dist/cli/auth-admin.js` (producción y Docker) y
+  `npm run auth:admin:dev` usa ts-node. `bootstrapAdmin` sin `--name` usa la parte del correo antes de
+  la "@". Sobre una cuenta existente la reactiva si estaba desactivada.
+- `ASSIGNABLE_LOCAL_ROLES` vive en `constants/roles.constant.ts`, para que el validador no arrastre
+  el socket.
+- Prueba de punta a punta contra un PostgreSQL descartable: `create-admin`, login con la temporal
+  (token `pcr`, 403 en el resto de la API), cambio de contraseña (el token viejo queda revocado),
+  acceso al panel con el token nuevo, alta y desactivación de una cuenta, y `409` al intentar
+  desactivarse a sí mismo. Sin errores en el log.
+- `tsc` limpio y 1030 tests en verde.
+
 <a id="fase-8"></a>
 
 ### Fase 8 — Migración entre modos (backend)
 
-- [ ] `auth.repository.ts#upsertUserFromExternalUser`: el username de EXTERNAL_AUTH manda (D20). Si otra fila lo
+- [x] `auth.repository.ts#upsertUserFromExternalUser`: el username de EXTERNAL_AUTH manda (D20). Si otra fila lo
       tiene, en la misma transacción se le pone `null` y queda un `warn` con los UUIDs.
-- [ ] Tests que reproducen el procedimiento de §10, con mocks:
+- [x] Tests que reproducen el procedimiento de §10, con mocks:
   - `local` → `external-auth`: un login EXTERNAL_AUTH con el correo de una cuenta local la adopta, con el mismo
     `User.id` (y su historial), aunque el correo difiera en mayúsculas. Un username repetido se
     resuelve sin 500.
   - `external-auth` → `local`: `create-admin` sobre una cuenta existente conserva su `User.id` y le da
     credencial y rol admin. Las cuentas sin contraseña reciben el 401 genérico, auditado como
     `no_credential`.
-- [ ] `backend/README.md`, "Proveedor de Autenticación": cómo se elige el modo, y un puntero al
+- [x] `backend/README.md`, "Proveedor de Autenticación": cómo se elige el modo, y un puntero al
       procedimiento de §10.
 
 **Tests:** los de arriba (invariante 13).
+
+**Fase 8 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- `upsertUserFromExternalUser` busca por correo exacto y, si no hay, sin distinguir mayúsculas. Al adoptar
+  una cuenta con el correo en otras mayúsculas, guarda el de EXTERNAL_AUTH, porque `resolveInternalUser` en
+  modo external-auth busca por el correo exacto del token.
+- Sin transacción interactiva a propósito: `syncAppUsers` llama a esta función para cada usuario de
+  la app en paralelo, en cada `GET /users`, y cientos de transacciones interactivas agotarían el pool.
+  El caso común son dos lecturas y una escritura, como antes más una lectura. Solo cuando otra cuenta
+  tiene el username de EXTERNAL_AUTH hay una transacción por lotes, que se lo quita y aplica el cambio.
+- Tests del procedimiento de §10: adopción por correo con otras mayúsculas y username repetido
+  resuelto sin 500 (`auth.repository.test.ts`); `create-admin` sobre una cuenta existente que conserva
+  su `User.id` (`account-admin.service.test.ts`); cuenta sin contraseña con el 401 genérico, auditada
+  como `no_credential` (`local-auth.service.test.ts`).
+- `backend/README.md` ya no menciona el enum `AuthProvider` (se eliminó en la Fase 2) y resume el
+  procedimiento de §10.
+- `tsc` limpio y 1033 tests en verde. **Termina la parte backend del plan.**
 
 <a id="fase-9"></a>
 
@@ -665,12 +808,12 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 Antes de escribir UI, leé [frontend/AGENTS.md](../../frontend/AGENTS.md): la versión de Next.js tiene cambios
 que rompen respecto de lo habitual.
 
-- [ ] `auth.api.ts`: `getAuthConfig` y `changePassword`. `auth.types.ts`: `authProvider`,
+- [x] `auth.api.ts`: `getAuthConfig` y `changePassword`. `auth.types.ts`: `authProvider`,
       `mustChangePassword`, `mustChangePasswordReason` y `username: string | null`. `ApiError` suma
       `code`. La config pública se pide una vez al cargar la app.
-- [ ] `LoginForm`: la etiqueta pasa a `auth.usernameOrEmail` en los dos modos. En modo local suma la
+- [x] `LoginForm`: la etiqueta pasa a `auth.usernameOrEmail` en los dos modos. En modo local suma la
       ayuda "¿Olvidaste tu contraseña? Pedile a un administrador que la restablezca".
-- [ ] `AuthProvider`:
+- [x] `AuthProvider`:
   - Con `session.user.mustChangePassword`, renderiza la pantalla de cambio obligatorio **en lugar de
     `children`**. Así `ProfilePicture`, `PublicSettings`, `Socket` y `Call`
     (`app-providers.tsx:18-28`) ni se montan con un token restringido.
@@ -678,8 +821,8 @@ que rompen respecto de lo habitual.
     reglas de `passwordPolicy`.
   - Al terminar, actualiza `token` y `exp` en la sesión; el socket reconecta solo porque depende de
     `session`.
-- [ ] `ProfileSettingsPanel`: sección "Seguridad → Cambiar contraseña", solo en modo local.
-- [ ] i18n `es` y `en`.
+- [x] `ProfileSettingsPanel`: sección "Seguridad → Cambiar contraseña", solo en modo local.
+- [x] i18n `es` y `en`.
 
 **Tests:**
 - Login: etiqueta y ayuda según el modo.
@@ -689,24 +832,43 @@ que rompen respecto de lo habitual.
 - Errores: una contraseña actual incorrecta muestra el error y **no** cierra la sesión.
 - Actualizar `test/integration/login-flow.test.tsx` y el usuario de `test/test-utils.tsx`.
 
+**Fase 9 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- `providers/auth-config-provider.tsx` pide `GET /auth/config` una vez y expone `useAuthConfig()`
+  (`{ config, refresh }`). Sin provider o si el backend no responde, `config` es `null` y los
+  componentes se comportan como en modo external-auth. Va fuera de `AuthProvider` porque el login la
+  necesita sin sesión.
+- Para saber si la sesión es local, usar `session.user.authProvider === "local"` (ausente = external-auth,
+  por las sesiones guardadas de antes). `AuthUser.username` ahora es `string | null`.
+- `ApiError` suma `code` y `body` (el body completo, para leer `rules`).
+- `AuthProvider` expone `completePasswordChange(token, exp)` y, con
+  `session.user.mustChangePassword`, renderiza `ForcedPasswordChange` en lugar de `children`. El
+  `SocketProvider` y el resto ni se montan con el token restringido: la sesión guardada se carga
+  después del primer render, y en ese render todavía no hay sesión.
+- Componentes reutilizables: `ChangePasswordForm` (pantalla obligatoria y perfil) y
+  `PasswordRulesList`; las reglas del cliente (`utils/password-rules.ts`) copian las del backend solo
+  para mostrar qué falta, la autoridad es el backend.
+- Los mocks de `useAuth` en los tests suman `completePasswordChange: vi.fn()`.
+- `tsc` limpio y 1004 tests del frontend en verde.
+
 <a id="fase-10"></a>
 
 ### Fase 10 — Frontend: panel de usuarios
 
-- [ ] `admin-users.api.ts`, tipos y hooks: estado en los dos modos; alta, edición, restablecimiento y
+- [x] `admin-users.api.ts`, tipos y hooks: estado en los dos modos; alta, edición, restablecimiento y
       desbloqueo en modo local.
-- [ ] `AdminUsersPanel`: el aviso de solo lectura de hoy (dice "hacelo desde EXTERNAL_AUTH", `es.ts:492`) se
+- [x] `AdminUsersPanel`: el aviso de solo lectura de hoy (dice "hacelo desde EXTERNAL_AUTH", `es.ts:492`) se
       reemplaza por uno según el modo:
   - En `external-auth`: los datos de cada cuenta se administran en EXTERNAL_AUTH; desde acá solo se desactiva o
     reactiva su acceso al chat.
   - En `local`: botón "Crear cuenta" y filtro "sin contraseña" (útil después de migrar).
-- [ ] `AdminUserRow`:
+- [x] `AdminUserRow`:
   - Badge de estado en los dos modos.
   - En `external-auth`: "Sincronizado con EXTERNAL_AUTH / Editado localmente".
   - En `local`: admin, bloqueada, sin contraseña y cambio pendiente.
   - Acciones según el modo.
-- [ ] Modal de alta y edición (local): username opcional, con su formato.
-- [ ] Modal que muestra la contraseña temporal **una sola vez**, con botón copiar y el aviso de que no
+- [x] Modal de alta y edición (local): username opcional, con su formato.
+- [x] Modal que muestra la contraseña temporal **una sola vez**, con botón copiar y el aviso de que no
       se vuelve a mostrar.
 
 **Tests:**
@@ -714,13 +876,29 @@ que rompen respecto de lo habitual.
 - Acciones y avisos según el modo.
 - La contraseña temporal no queda en ningún estado persistido (localStorage, borradores).
 
+**Fase 10 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- El panel saca el modo de `session.user.authProvider` (ausente = external-auth), igual que el perfil. La
+  Fase 11 puede hacer lo mismo en `AdminSettingsPanel`.
+- `hooks/use-admin-user-actions.ts` concentra alta, edición, restablecimiento y desbloqueo: cada
+  acción devuelve el resultado o `null`, y el error queda en `error`, ya traducido para los
+  `code` que conoce (`cannot_modify_self`, `last_admin`, `email_taken`, `username_taken`).
+- La contraseña temporal solo vive en el estado de `AdminUsersPanel` mientras está abierto
+  `TemporaryPasswordModal`; el hook no la guarda. Hay un test que verifica que no llega a
+  `localStorage`.
+- `AdminUserRow` sigue funcionando sin props nuevas (solo lectura, modo external-auth): las acciones
+  aparecen solo si se pasan sus handlers, y las del modo local, solo con `mode="local"`. Desactivar
+  y restablecer piden confirmación en la misma fila.
+- El filtro de estado está en los dos modos; "sin contraseña", solo en el local.
+- `tsc` limpio y 1045 tests del frontend en verde.
+
 <a id="fase-11"></a>
 
 ### Fase 11 — Frontend: configuración de seguridad y auditoría
 
-- [ ] `admin-settings.types.ts` y `AdminSettingsPanel`: sección nueva "Sesión y contraseñas", solo en
+- [x] `admin-settings.types.ts` y `AdminSettingsPanel`: sección nueva "Sesión y contraseñas", solo en
       modo local. Valida los rangos de D15 en el cliente y advierte los efectos de D16 antes de guardar.
-- [ ] `audit-action-labels.constant.ts`: etiquetas y `DEFAULT_ADMIN_ACTIONS` espejadas del backend.
+- [x] `audit-action-labels.constant.ts`: etiquetas y `DEFAULT_ADMIN_ACTIONS` espejadas del backend.
       `AdminAuditRow` muestra `provider`, `reason` y `via`.
 
 **Tests:**
@@ -729,19 +907,57 @@ que rompen respecto de lo habitual.
 - Las advertencias aparecen al bajar la duración o endurecer la política.
 - Etiquetas de las acciones nuevas.
 
+**Fase 11 cerrada 2026-10-06.** Lo que la próxima fase tiene que saber:
+
+- La sección "Sesión y contraseñas" va al final de `AdminSettingsPanel` y solo se monta con
+  `session.user.authProvider === "local"`. En modo external-auth sus campos ni se validan ni se envían: el
+  payload del `PATCH` queda igual que antes del modo local.
+- Los rangos del cliente (`LOCAL_AUTH_RANGES`) copian los de `settings.validator.ts`; la autoridad
+  sigue siendo el backend. Sin bloqueo (`maxFailedLoginAttempts` vacío), la duración del bloqueo
+  queda deshabilitada y no se envía.
+- Advertencias de D16 antes de guardar, comparando contra lo guardado: bajar la duración de sesión,
+  endurecer la política (largo mínimo mayor o una regla nueva) y activar o acortar el vencimiento.
+  Junto al bloqueo va la nota de enumeración de D17. Subir el historial no advierte nada: solo rige
+  en el próximo cambio de contraseña.
+- `AdminAuditRow` muestra proveedor, motivo y origen (`via`) como chips junto a la acción. El
+  proveedor solo se lee en `LOGIN`/`LOGIN_FAILED` (ausente = EXTERNAL_AUTH): en `ADMIN_DELETE_FILE`,
+  `provider` es el almacenamiento del archivo. Un motivo sin traducción se muestra crudo.
+- Las cuatro acciones nuevas están en `AUDIT_ACTION_LABELS` (y por eso en el filtro "Todas las
+  acciones"), en `DEFAULT_ADMIN_ACTIONS` y en `es`/`en`. El aviso del filtro por omisión ya
+  nombra contraseñas y cuentas.
+- `tsc` limpio y 1070 tests del frontend en verde.
+
 <a id="fase-12"></a>
 
 ### Fase 12 — Documentación, versión y cierre
 
-- [ ] `settings/README.md:14`, `constants/roles.constant.ts` ("este backend no define ni asigna
+- [x] `settings/README.md:14`, `constants/roles.constant.ts` ("este backend no define ni asigna
       roles") y `frontend/.../admin-role.constant.ts`: los roles vienen de EXTERNAL_AUTH o de la base, según
       el modo.
-- [ ] `LOGGING_PLAN.md` §4.2: sumar `LOCAL_AUTH_JWT_SECRET` a la lista de secretos que nunca se loguean.
-- [ ] `TESTING_PLAN.md` §4: un puntero a las invariantes de §8 de este plan.
-- [ ] `CHANGELOG.md` y versión según [VERSIONING.md](../../VERSIONING.md) (funcionalidad nueva → minor).
-- [ ] Repaso final: grep de "EXTERNAL_AUTH" en documentación y comentarios. Frases como "el backend nunca emite
+- [x] `LOGGING_PLAN.md` §4.2: sumar `LOCAL_AUTH_JWT_SECRET` a la lista de secretos que nunca se loguean.
+- [x] `TESTING_PLAN.md` §4: un puntero a las invariantes de §8 de este plan.
+- [x] `CHANGELOG.md` y versión según [VERSIONING.md](../../VERSIONING.md) (funcionalidad nueva → minor).
+- [x] Repaso final: grep de "EXTERNAL_AUTH" en documentación y comentarios. Frases como "el backend nunca emite
       su propio token", "este módulo no administra usuarios ni contraseñas" o "los roles vienen
       exclusivamente del JWT de EXTERNAL_AUTH" pasan a ser ciertas solo en modo `external-auth`, y hay que decirlo.
+
+**Fase 12 cerrada 2026-10-06. Plan completo.** Notas de cierre:
+
+- Los roles (`settings/README.md`, `roles.constant.ts`, `admin-role.constant.ts`, `API.md` (permisos de grupos) y
+  `conversations/README.md`) dicen de dónde salen en cada modo.
+- `LOGGING_PLAN.md` §4, regla 2, suma `LOCAL_AUTH_JWT_SECRET`, los hashes y las contraseñas
+  temporales. `TESTING_PLAN.md` §4 apunta a las invariantes de §8.
+- `CHANGELOG.md`: las entradas quedan en `[Unreleased]`, como pide VERSIONING.md §4 durante el
+  desarrollo. La próxima versión que las publique tiene que ser **minor** (`1.1.0` desde `1.0.1`)
+  como mínimo; numerarla y fecharla es el procedimiento de publicación de VERSIONING.md §5
+  (`npm run version:sync`), que no se hizo acá. La entrada de la Fase 1 ("el inicio de sesión local
+  todavía está en desarrollo") se reemplazó por la funcionalidad completa.
+- README raíz: el aviso de "Estado del proyecto" que decía que el modo local no permitía iniciar
+  sesión se reemplazó, y la sección "Autenticación" e "Inicio rápido" explican cómo crear el primer
+  admin (`create-admin`, con y sin Docker).
+- Repaso de "EXTERNAL_AUTH": se ajustaron los comentarios de `route.ts`, `socket/middleware.ts`,
+  `profile-picture-provider.tsx` y `socket/README.md`. Lo que sigue hablando solo de EXTERNAL_AUTH está
+  dentro de una sección o rama explícitamente del modo external-auth.
 
 ---
 
@@ -781,7 +997,7 @@ Todas el 2026-10-05:
 | Riesgo | Mitigación |
 |---|---|
 | Romper el modo `external-auth`, que hoy funciona | Las fases 1 a 4 no lo cambian; invariante 14 con test; los tests de auth existentes conservan sus expectativas. |
-| `prisma db push` en producción | Cambio aditivo (§5) y backup antes. |
+| Migración de base en producción | Cambio aditivo (§5) y backup antes. |
 | Memoria de scrypt contra el límite de PM2 | Parámetros fijos (D4), fuera del panel, siempre async. |
 | Usar el bloqueo por intentos para bloquear a alguien a propósito | Apagado por defecto, desbloqueo de admin, misma respuesta que el rate limit (D17). |
 | Un admin endurece la política sin medir el efecto | El panel advierte antes de guardar, y se aplica en el próximo login sin cortar sesiones (D16). |

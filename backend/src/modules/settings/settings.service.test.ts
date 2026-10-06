@@ -36,6 +36,7 @@ import {
   _resetCacheForTesting,
   diffSettings,
   getGroupOverrideAllowedFlags,
+  getLocalAuthPolicy,
   getPublicSettings,
   getSettings,
   resolveEffectiveGroupSettings,
@@ -80,6 +81,16 @@ describe("settings.service", () => {
     fileMigrationBatchSize: 50,
     fileMigrationIntervalMinutes: 60,
     fileMigrationDeleteLocalAfterCommit: false,
+    localSessionTtlHours: 12,
+    passwordMinLength: 12,
+    passwordRequireUppercase: false,
+    passwordRequireLowercase: false,
+    passwordRequireNumber: false,
+    passwordRequireSymbol: false,
+    passwordExpirationDays: null,
+    passwordHistoryCount: 0,
+    maxFailedLoginAttempts: null,
+    lockoutDurationMinutes: 15,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -514,6 +525,56 @@ describe("settings.service", () => {
         whoCanDeleteGroup: true,
         whoCanLeaveGroup: false,
       });
+    });
+  });
+
+  describe("getLocalAuthPolicy", () => {
+    it("devuelve la política del modo local desde la configuración", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({
+        ...defaultMockSettings,
+        localSessionTtlHours: 8,
+        passwordMinLength: 14,
+        passwordRequireNumber: true,
+      });
+
+      await expect(getLocalAuthPolicy()).resolves.toEqual({
+        sessionTtlHours: 8,
+        minLength: 14,
+        requireUppercase: false,
+        requireLowercase: false,
+        requireNumber: true,
+        requireSymbol: false,
+        expirationDays: null,
+        historyCount: 0,
+        maxFailedLoginAttempts: null,
+        lockoutDurationMinutes: 15,
+      });
+    });
+
+    it("aplica los pisos aunque la fila tenga valores fuera de rango (escritos a mano en la base)", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({
+        ...defaultMockSettings,
+        localSessionTtlHours: 0,
+        passwordMinLength: 4,
+      });
+
+      const policy = await getLocalAuthPolicy();
+
+      expect(policy.sessionTtlHours).toBe(1);
+      expect(policy.minLength).toBe(8);
+    });
+
+    it("el bloqueo nunca rige con menos de 3 intentos, y el historial nunca pasa de 12", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({
+        ...defaultMockSettings,
+        maxFailedLoginAttempts: 1,
+        passwordHistoryCount: 40,
+      });
+
+      const policy = await getLocalAuthPolicy();
+
+      expect(policy.maxFailedLoginAttempts).toBe(3);
+      expect(policy.historyCount).toBe(12);
     });
   });
 });

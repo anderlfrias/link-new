@@ -13,8 +13,8 @@ vi.mock("./settings.service", () => ({
   updateSettings: vi.fn(),
 }));
 
-vi.mock("../auth/jwt", () => ({
-  verifyToken: vi.fn((token: string) => {
+vi.mock("../auth/jwt", () => {
+  const verifyToken = vi.fn((token: string) => {
     if (token === "invalid-token") {
       throw new Error("Invalid token");
     }
@@ -25,13 +25,24 @@ vi.mock("../auth/jwt", () => ({
       return { id: "ext-user", email: "user@example.com", roles: ["user"] };
     }
     throw new Error("Unknown token");
-  }),
-  mapTokenToUser: vi.fn((payload: any) => ({
+  });
+  const mapTokenToUser = vi.fn((payload: any) => ({
     id: payload.id,
     email: payload.email,
     roles: payload.roles,
-  })),
-}));
+  }));
+  return {
+    verifyToken,
+    mapTokenToUser,
+    // Los middlewares usan el verificador único (LOCAL_AUTH_PLAN.md, Fase 4):
+    // en modo external-auth equivale a verificar el JWT de EXTERNAL_AUTH y mapearlo.
+    verifyAccessToken: vi.fn((token: string) => ({
+      mode: "external-auth",
+      user: mapTokenToUser(verifyToken(token)),
+      mustChangePassword: false,
+    })),
+  };
+});
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
@@ -39,6 +50,7 @@ vi.mock("../../config/prisma", () => ({
       findUnique: vi.fn().mockResolvedValue({
         id: "internal-uuid-1",
         email: "user@example.com",
+        status: "ACTIVE",
       }),
     },
   },

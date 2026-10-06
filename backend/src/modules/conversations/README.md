@@ -10,7 +10,7 @@ Todas las rutas requieren autenticación y devuelven el `id` **interno** (UUID d
 router.use(authenticate, attachInternalUser)
 ```
 
-`authenticate` (`src/middlewares/auth.middleware.ts`) valida el JWT de EXTERNAL_AUTH, igual que en `auth`. `attachInternalUser` (`src/middlewares/current-user.middleware.ts`) resuelve el `id` interno del usuario a partir de su email y lo agrega a `req.user.internalUserId` — todo este módulo opera exclusivamente con ese id, nunca con el externo de EXTERNAL_AUTH.
+`authenticate` (`src/middlewares/auth.middleware.ts`) valida el token del modo activo (el JWT de EXTERNAL_AUTH o el propio del modo local), igual que en `auth`. `attachInternalUser` (`src/middlewares/current-user.middleware.ts`) resuelve el `id` interno del usuario con `resolveInternalUser` (`modules/auth/identity.ts`: por email en modo external-auth, por id en modo local) y lo agrega a `req.user.internalUserId` — todo este módulo opera exclusivamente con ese id, nunca con el externo de EXTERNAL_AUTH.
 
 ## Endpoints
 
@@ -159,7 +159,7 @@ Ver [Fijar y favoritos](#fijar-y-favoritos). Respuesta: la fila `ConversationMem
 
   Eliminar el grupo además requiere `AppSettings.allowGroupDelete` en `true` — a diferencia de las 5 dimensiones de la tabla (que gobiernan **quién**), este es un interruptor maestro sobre **si** la acción existe en absoluto: en `false`, nadie puede borrar un `GROUP`, sin importar `whoCanDeleteGroup` ni el rol de quien lo intente. Default `true` (reproduce el comportamiento histórico).
 
-  `GROUP_ADMINS_ONLY` y `APP_ADMINS_ONLY` son conceptos **distintos**: el primero depende de `ConversationMember.isAdmin` (admin de ese grupo puntual), el segundo del rol `"admin"` de la app (viene de EXTERNAL_AUTH) — un admin de grupo no obtiene ningún permiso a nivel app, y viceversa.
+  `GROUP_ADMINS_ONLY` y `APP_ADMINS_ONLY` son conceptos **distintos**: el primero depende de `ConversationMember.isAdmin` (admin de ese grupo puntual), el segundo del rol `"admin"` de la app (viene de EXTERNAL_AUTH, o en modo local de `User.localRoles`) — un admin de grupo no obtiene ningún permiso a nivel app, y viceversa.
 
 Toda operación primero verifica membresía activa (`403` si el usuario no pertenece a la conversación, `404` si la conversación no existe o está borrada).
 

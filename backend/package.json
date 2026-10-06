@@ -13,6 +13,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:baseline": "prisma migrate resolve --applied 0_init",
+    "auth:admin": "node dist/cli/auth-admin.js",
+    "auth:admin:dev": "ts-node src/cli/auth-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

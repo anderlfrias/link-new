@@ -66,7 +66,7 @@ describe("Flujo clave: Login", () => {
     expect(screen.getByTestId("auth-user")).toHaveTextContent("no-user");
 
     // Escribir credenciales
-    const userInput = screen.getByPlaceholderText("Usuario");
+    const userInput = screen.getByPlaceholderText("Usuario o correo electrónico");
     const passInput = screen.getByPlaceholderText("Contraseña");
     await user.type(userInput, "rdoctor");
     await user.type(passInput, "Password123!");

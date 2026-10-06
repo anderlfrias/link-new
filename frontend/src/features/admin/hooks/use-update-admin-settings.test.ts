@@ -26,6 +26,7 @@ describe("useUpdateAdminSettings", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const { result } = renderHook(() => useUpdateAdminSettings());
@@ -48,6 +49,7 @@ describe("useUpdateAdminSettings", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     const updated = { maxUploadSizeMb: 100 } as any;
@@ -75,6 +77,7 @@ describe("useUpdateAdminSettings", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     vi.mocked(updateAdminSettings).mockRejectedValueOnce(new Error("Error al guardar"));

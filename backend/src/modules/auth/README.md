@@ -1,6 +1,11 @@
-# Auth (EXTERNAL_AUTH)
+# Auth
 
-Este módulo no administra usuarios ni contraseñas: reenvía credenciales al microservicio **EXTERNAL_AUTH**, verifica el JWT que este emite y sincroniza el perfil local (`User`) con lo que EXTERNAL_AUTH devuelve. El backend nunca emite su propio token: el que usa el cliente en cada request es siempre el de EXTERNAL_AUTH.
+Autenticación de la instalación, en uno de dos modos que se deducen del `.env` ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)):
+
+- **`external-auth`**: este módulo no administra usuarios ni contraseñas. Reenvía credenciales al microservicio **EXTERNAL_AUTH**, verifica el JWT que este emite y sincroniza el perfil local (`User`) con lo que EXTERNAL_AUTH devuelve. El backend no emite su propio token: el que usa el cliente en cada request es el de EXTERNAL_AUTH. La mayor parte de este README describe este modo.
+- **`local`**: las cuentas y sus contraseñas viven en esta base (`LocalCredential`, separada de `User`) y el backend firma su propio token. Ver [Modo local](#modo-local).
+
+En los dos modos hay un solo verificador de tokens (`verifyAccessToken`, `jwt.ts`) y una sola resolución contra la base (`resolveInternalUser`, `identity.ts`), que usan los middlewares HTTP, el socket y `/files/:id/content`. Una cuenta con `status: INACTIVE` no entra en ningún modo, aunque EXTERNAL_AUTH acepte su contraseña.
 
 ## Variables de entorno
 
@@ -12,10 +17,34 @@ Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el mo
 | `EXTERNAL_AUTH_API_URL` | Modo external-auth: URL base de EXTERNAL_AUTH, **sin** el sufijo `/v1/login` (ej. `https://external-auth.midominio.com`) |
 | `APP_CODE_EXTERNAL_AUTH` | Modo external-auth: código de esta aplicación registrado en EXTERNAL_AUTH |
 | `EXTERNAL_AUTH_JWT_SECRET` | Modo external-auth: secreto compartido para verificar (HS256) los JWT que emite EXTERNAL_AUTH |
-| `LOCAL_AUTH_JWT_SECRET` | Modo local: secreto para firmar los tokens de las cuentas locales, de 32 caracteres o más. El inicio de sesión local todavía está en desarrollo |
+| `LOCAL_AUTH_JWT_SECRET` | Modo local: secreto para firmar los tokens de las cuentas locales, de 32 caracteres o más |
 | `PORT` | Opcional, puerto del servidor (default `4000`) |
 
-El código de este módulo no lee esas variables sueltas: pide la config a `requireExternalUserConfig(env.auth)`. En modo local esa función tira `503` (`external-auth_not_configured`), así que ningún camino que pegue contra EXTERNAL_AUTH (login, fotos, contactos) llega a llamar a una URL `undefined`.
+El código de este módulo no lee esas variables sueltas: pide la config a `requireExternalUserConfig(env.auth)`. En modo local esa función tira `503` (`external-auth_not_configured`), así que ningún camino que pegue contra EXTERNAL_AUTH (login, fotos, contactos) llega a llamar a una URL `undefined`. Lo simétrico para el modo local es `requireLocalConfig(env.auth)` (`503` `local_auth_not_enabled` en modo external-auth).
+
+## Modo local
+
+Todo lo de esta sección aplica solo sin `EXTERNAL_AUTH_*` en el `.env`. Código: `local-auth.service.ts`, `password.ts`, `jwt.ts` (`signLocalToken`) e `identity.ts`.
+
+**Login** (`POST /api/v1/auth/login`, el mismo endpoint y el mismo body `{ user, password }` que en modo external-auth):
+
+- `user` es un correo si tiene "@", o un nombre de usuario si no. Se busca sin distinguir mayúsculas. Si dos cuentas difieren solo en mayúsculas (dato heredado), el login se rechaza y queda un `warn` con sus UUIDs.
+- Las contraseñas se guardan con scrypt (`N=2^14, r=8, p=5`, siempre async), normalizadas a NFKC y con un máximo de 128 caracteres. Si un hash usa parámetros viejos, se rehashea en el próximo login exitoso.
+- **Anti-enumeración:** cuenta inexistente, contraseña incorrecta y cuenta sin contraseña responden lo mismo (`401` "Usuario, correo o contraseña incorrectos.") y cuestan lo mismo: sin cuenta, se verifica igual contra un hash ficticio. Una cuenta desactivada responde `403` `account_disabled` solo si la contraseña era correcta. La auditoría (`LOGIN_FAILED`) sí distingue los motivos: `unknown_account`, `wrong_password`, `no_credential`, `account_disabled`.
+- El token es un JWT HS256 firmado con `LOCAL_AUTH_JWT_SECRET`: `sub` (id interno), `email`, `iss: "link-local"`, `aud: "link"`, `iat` y `exp` según la duración de sesión vigente. En modo local `user.id` y `user.internalUserId` son el mismo UUID, y los roles salen de `User.localRoles`.
+- **Cambio obligatorio:** si un admin restableció la contraseña, si venció, o si no cumple la política vigente, el token sale restringido (`pcr: true`) y la respuesta trae `mustChangePassword: true` con el motivo (`reset`, `expired` o `policy`, en ese orden de prioridad). Ese token solo sirve para `PATCH /auth/password`: el resto de la API responde `403` `password_change_required`, y el socket lo rechaza.
+
+- **Bloqueo por intentos fallidos** (apagado por defecto): con `maxFailedLoginAttempts` configurado, esa cantidad de contraseñas incorrectas seguidas bloquea la cuenta durante `lockoutDurationMinutes`, aunque después llegue la correcta. El contador se incrementa de forma atómica en `LocalCredential` y solo corre con el bloqueo activado; un login exitoso lo reinicia. Una cuenta bloqueada responde `429` con el mismo mensaje que el rate limit, y se audita `LOGIN_FAILED` con motivo `account_locked`.
+
+**Sesión:** no hay refresh. `resolveInternalUser` rechaza un token si la cuenta está desactivada, si es anterior a `User.tokensValidAfter` (se mueve al cambiar o restablecer la contraseña, truncado al segundo) o si es más viejo que la duración de sesión vigente: bajar la duración en la configuración corta las sesiones ya abiertas.
+
+**`GET /api/v1/auth/config`** (público): `{ mode }`, y en modo local además `passwordPolicy` (largo mínimo y máximo, y reglas de composición), lo que el frontend necesita para mostrar las reglas antes de que alguien elija una contraseña. Nunca la duración de sesión.
+
+**`PATCH /api/v1/auth/password`** (solo modo local; `404` en external-auth): `{ currentPassword, newPassword }` → `{ token, exp }`. Acepta el token restringido. Rechaza con `400` y `code` (nunca `401`, que el frontend interpreta como sesión vencida): `invalid_current_password`, `password_policy` (con `rules`, la lista de reglas que no cumple) o `password_reused` (la nueva es igual a la actual o, con historial, a una de las últimas N). La contraseña saliente pasa a `previousPasswordHashes`, podado a N-1. Revoca todos los tokens anteriores, corta los sockets abiertos y audita `CHANGE_PASSWORD` con el motivo (`voluntary`, `reset` o `policy`). Rate limit propio: 5 intentos fallidos cada 15 minutos por cuenta.
+
+**Cuentas:** las crea un admin desde el panel (`POST /api/v1/admin/users`, ver [`users`](../users/README.md)), o con el CLI para el primer admin y las emergencias: `npm run auth:admin -- create-admin --email <correo>` y `npm run auth:admin -- reset-password --email <correo>`. La contraseña temporal sale una sola vez por la terminal (nunca por el logger) y deja el cambio obligatorio.
+
+**Política de contraseñas:** la configura un admin en *Configuración global* (`settings`), no el `.env`: duración de sesión (1 a 720 horas, default 12), largo mínimo (8 a 128, default 12), cuatro reglas de composición, vencimiento (1 a 365 días), historial (0 a 12, contando la actual) y bloqueo (3 a 50 intentos, de 1 a 1440 minutos). Todo apagado por defecto salvo el largo mínimo. El piso de 8 caracteres no se puede bajar. Endurecer la política no corta sesiones: se aplica en el próximo login de cada cuenta.
 
 ## Levantar el servidor
 

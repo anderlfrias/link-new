@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockNext, createMockRequest, createMockResponse } from "../../test/http-mocks";
 
 vi.mock("./auth.service", () => ({
@@ -20,6 +20,13 @@ vi.mock("./jwt", () => ({
 
 vi.mock("../audit/audit.service");
 
+vi.mock("./local-auth.service", () => ({
+  loginWithLocalAccount: vi.fn(),
+  changeOwnPassword: vi.fn(),
+  getPublicAuthConfig: vi.fn(),
+}));
+
+import env from "../../config/env";
 import * as AuditService from "../audit/audit.service";
 import { AuditAction } from "@prisma/client";
 import {
@@ -29,6 +36,9 @@ import {
   UnauthorizedError,
 } from "../../utils/errors";
 import * as AuthService from "./auth.service";
+import { LocalLoginError } from "./auth.errors";
+import * as LocalAuthService from "./local-auth.service";
+import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
 import { mapTokenToUser, verifyToken } from "./jwt";
 import {
   deleteProfilePicture,
@@ -63,6 +73,7 @@ describe("auth.controller", () => {
         permissions: [],
         app: "chat-interno",
         exp: 123456,
+        authProvider: "external-auth" as const,
       };
       const mockInternalUser = {
         id: "internal-id-1",
@@ -71,6 +82,7 @@ describe("auth.controller", () => {
         notificationSoundEnabled: true,
         language: "es",
         syncProfileWithIntegration: true,
+        status: "ACTIVE",
       } as any;
 
       vi.mocked(AuthService.login).mockResolvedValue(mockToken);
@@ -89,6 +101,7 @@ describe("auth.controller", () => {
         action: AuditAction.LOGIN,
         userId: "internal-id-1",
         actorEmail: "test@example.com",
+        metadata: { provider: "external-auth" },
       });
 
       expect(res.json).toHaveBeenCalledWith({
@@ -99,6 +112,8 @@ describe("auth.controller", () => {
           internalUserId: "internal-id-1",
           notificationSoundEnabled: true,
           language: "es",
+          mustChangePassword: false,
+          mustChangePasswordReason: null,
         },
       });
 
@@ -122,30 +137,116 @@ describe("auth.controller", () => {
       vi.mocked(AuthService.login).mockResolvedValue("mock-token");
       vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
       vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
-      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User" } as any);
+      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User", status: "ACTIVE" } as any);
 
       await login(req, res, next);
 
       expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", "203.0.113.10");
     });
 
-    it("prioriza el header cf-connecting-ip y lo pasa a AuthService.login cuando está presente", async () => {
-      const req = createMockRequest({
-        body: { user: "testuser", password: "password123" },
-        ip: "10.0.0.1",
-        headers: { "cf-connecting-ip": "198.51.100.77" },
+    describe("IP que se reenvía a EXTERNAL_AUTH (config/client-ip.ts)", () => {
+      const originalTrustCf = env.TRUST_CF_CONNECTING_IP;
+
+      afterEach(() => {
+        env.TRUST_CF_CONNECTING_IP = originalTrustCf;
       });
+
+      async function loginWithCfHeader() {
+        const req = createMockRequest({
+          body: { user: "testuser", password: "password123" },
+          ip: "10.0.0.1",
+          headers: { "cf-connecting-ip": "198.51.100.77" },
+        });
+        vi.mocked(AuthService.login).mockResolvedValue("mock-token");
+        vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
+        vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+        vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User", status: "ACTIVE" } as any);
+        await login(req, createMockResponse(), createMockNext());
+      }
+
+      it("con TRUST_CF_CONNECTING_IP, usa el header cf-connecting-ip", async () => {
+        env.TRUST_CF_CONNECTING_IP = true;
+
+        await loginWithCfHeader();
+
+        expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", "198.51.100.77");
+      });
+
+      it("sin TRUST_CF_CONNECTING_IP, ignora el header (cualquier cliente puede mandarlo) y usa req.ip", async () => {
+        env.TRUST_CF_CONNECTING_IP = false;
+
+        await loginWithCfHeader();
+
+        expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", "10.0.0.1");
+      });
+    });
+
+    describe("modo local", () => {
+      useAuthMode(LOCAL_AUTH_CONFIG);
+
+      it("usa el login local, no EXTERNAL_AUTH, y audita LOGIN con provider local", async () => {
+        const response = { token: "local-token", user: { id: "user-1", mustChangePassword: false } };
+        vi.mocked(LocalAuthService.loginWithLocalAccount).mockResolvedValue({
+          record: { id: "user-1", email: "ana@example.com" },
+          response,
+        } as any);
+        const req = createMockRequest({ body: { user: "ana@example.com", password: "secreta-123" } });
+        const res = createMockResponse();
+
+        await login(req, res, createMockNext());
+
+        expect(AuthService.login).not.toHaveBeenCalled();
+        expect(LocalAuthService.loginWithLocalAccount).toHaveBeenCalledWith("ana@example.com", "secreta-123");
+        expect(res.json).toHaveBeenCalledWith(response);
+        expect(AuditService.record).toHaveBeenCalledWith({
+          action: AuditAction.LOGIN,
+          userId: "user-1",
+          actorEmail: "ana@example.com",
+          metadata: { provider: "local" },
+        });
+      });
+
+      it("un fallo audita LOGIN_FAILED con el motivo real, sin la contraseña (invariante 9)", async () => {
+        const failure = new LocalLoginError("Usuario, correo o contraseña incorrectos.", 401, "wrong_password");
+        vi.mocked(LocalAuthService.loginWithLocalAccount).mockRejectedValue(failure);
+        const req = createMockRequest({ body: { user: "ana@example.com", password: "secreta-123" } });
+        const next = createMockNext();
+
+        await login(req, createMockResponse(), next);
+
+        expect(next).toHaveBeenCalledWith(failure);
+        expect(AuditService.record).toHaveBeenCalledWith({
+          action: AuditAction.LOGIN_FAILED,
+          userId: null,
+          actorEmail: "ana@example.com",
+          metadata: { provider: "local", reason: "wrong_password" },
+        });
+        expect(JSON.stringify(vi.mocked(AuditService.record).mock.calls)).not.toContain("secreta-123");
+      });
+    });
+
+    it("una cuenta desactivada en el chat no inicia sesión aunque EXTERNAL_AUTH acepte la contraseña (403 account_disabled)", async () => {
+      const req = createMockRequest({ body: { user: "testuser", password: "password123" } });
       const res = createMockResponse();
       const next = createMockNext();
-
       vi.mocked(AuthService.login).mockResolvedValue("mock-token");
       vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
       vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
-      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User" } as any);
+      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User", status: "INACTIVE" } as any);
 
       await login(req, res, next);
 
-      expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", "198.51.100.77");
+      const error = next.mock.calls[0][0];
+      expect(error).toBeInstanceOf(ForbiddenError);
+      expect(error.code).toBe("account_disabled");
+      expect(res.json).not.toHaveBeenCalled();
+      expect(AuthService.syncProfilePicture).not.toHaveBeenCalled();
+      expect(AuditService.record).toHaveBeenCalledWith({
+        action: AuditAction.LOGIN_FAILED,
+        userId: null,
+        actorEmail: "testuser",
+        metadata: { provider: "external-auth", reason: "account_disabled" },
+      });
     });
 
     it("pasa BadRequestError a next si falta user o password y NO audita", async () => {
@@ -179,7 +280,7 @@ describe("auth.controller", () => {
         action: AuditAction.LOGIN_FAILED,
         userId: null,
         actorEmail: "testuser",
-        metadata: { reason: "forbidden_by_provider" },
+        metadata: { provider: "external-auth", reason: "forbidden_by_provider" },
       });
       // La contraseña nunca debe viajar a la auditoría
       const auditCall = vi.mocked(AuditService.record).mock.calls[0][0];
@@ -204,7 +305,7 @@ describe("auth.controller", () => {
         action: AuditAction.LOGIN_FAILED,
         userId: null,
         actorEmail: "testuser",
-        metadata: { reason: "invalid_credentials" },
+        metadata: { provider: "external-auth", reason: "invalid_credentials" },
       });
     });
 
@@ -228,7 +329,7 @@ describe("auth.controller", () => {
         action: AuditAction.LOGIN_FAILED,
         userId: null,
         actorEmail: "testuser",
-        metadata: { reason: "provider_unreachable" },
+        metadata: { provider: "external-auth", reason: "provider_unreachable" },
       });
       // Verificación de que la contraseña no aparece en ningún campo de la auditoría
       const auditCall = vi.mocked(AuditService.record).mock.calls[0][0];
@@ -255,7 +356,7 @@ describe("auth.controller", () => {
         action: AuditAction.LOGIN_FAILED,
         userId: null,
         actorEmail: "testuser",
-        metadata: { reason: "provider_error" },
+        metadata: { provider: "external-auth", reason: "provider_error" },
       });
     });
   });

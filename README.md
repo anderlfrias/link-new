@@ -3,10 +3,9 @@
 Chat interno para equipos y organizaciones, pensado para instalarse en infraestructura propia.
 Monorepo con un backend en Express + Socket.IO + Prisma (PostgreSQL) y un frontend en Next.js.
 
-> **Estado del proyecto:** la autenticación hoy depende de un servicio de identidad externo
-> (EXTERNAL_AUTH). El modo de cuentas locales ya se puede configurar, pero **todavía no permite iniciar
-> sesión**: está en desarrollo (ver [Autenticación](#autenticación)). Sin un servicio EXTERNAL_AUTH
-> compatible, una instalación nueva arranca pero nadie puede entrar todavía.
+> **Autenticación:** LINK funciona con cuentas propias (modo local, sin dependencias externas) o
+> delegando el login en un servicio de identidad externo compatible con EXTERNAL_AUTH. El modo se elige
+> en el `.env`; ver [Autenticación](#autenticación).
 
 ## Funcionalidades
 
@@ -19,8 +18,8 @@ Monorepo con un backend en Express + Socket.IO + Prisma (PostgreSQL) y un fronte
   ver [Requisitos de GIPHY](backend/src/modules/giphy/README.md#requisitos-de-giphy)).
 - Llamadas y videollamadas 1 a 1 (WebRTC).
 - Notificaciones push (Web Push) y PWA instalable.
-- Panel de administración: configuración global, almacenamiento, usuarios y registro de
-  auditoría.
+- Panel de administración: configuración global, almacenamiento, usuarios (en modo local, alta de
+  cuentas, contraseñas y política de sesión) y registro de auditoría.
 - Interfaz en español e inglés, con tema claro y oscuro.
 
 ## Requisitos
@@ -55,6 +54,12 @@ docker compose up -d --build
 
 - Frontend: <http://localhost:3000>
 - API: <http://localhost:4000> (Socket.IO en la misma URL)
+
+En modo local, crear el primer admin (ver [Autenticación](#autenticación)):
+
+```bash
+docker compose exec backend npm run auth:admin -- create-admin --email admin@example.com
+```
 
 Notas:
 
@@ -98,7 +103,13 @@ Notas:
    npm run db:migrate
    ```
 
-5. Levantar backend (puerto 4000) y frontend (puerto 3000) juntos:
+5. En modo local, crear el primer admin:
+
+   ```bash
+   npm run auth:admin:dev --workspace=backend -- create-admin --email admin@example.com
+   ```
+
+6. Levantar backend (puerto 4000) y frontend (puerto 3000) juntos:
 
    ```bash
    npm run dev
@@ -153,12 +164,23 @@ El modo se deduce de las variables de entorno del backend:
   externo compatible con EXTERNAL_AUTH, que emite un JWT HS256. LINK verifica ese token, crea o actualiza
   el perfil local del usuario, y toma los roles (por ejemplo `admin`) del token. Los detalles del
   contrato están en [`backend/src/modules/auth/README.md`](backend/src/modules/auth/README.md).
-- **Local** (ninguna `EXTERNAL_AUTH_*`, con `LOCAL_AUTH_JWT_SECRET`): las cuentas y sus credenciales se
-  administrarían en LINK. **Todavía no está implementado el inicio de sesión local.** Hoy este
-  modo solo permite arrancar el servidor. El diseño y su avance están en
-  [`docs/design/LOCAL_AUTH_PLAN.md`](docs/design/LOCAL_AUTH_PLAN.md).
+- **Local** (ninguna `EXTERNAL_AUTH_*`, con `LOCAL_AUTH_JWT_SECRET`): las cuentas y sus contraseñas viven
+  en la base de LINK. Se inicia sesión con el correo o el nombre de usuario.
+  - El primer admin se crea por terminal con `npm run auth:admin -- create-admin --email <correo>`
+    (con Docker, `docker compose exec backend npm run auth:admin -- …`; sin compilar,
+    `auth:admin:dev`). La contraseña temporal se muestra **una sola vez** y hay que cambiarla al
+    entrar. `reset-password --email <correo>` restablece la de cualquier cuenta, por ejemplo si el
+    único admin olvidó la suya.
+  - Desde el panel de administración, un admin crea y edita cuentas, restablece contraseñas,
+    desbloquea y desactiva cuentas, y define la duración de la sesión y la política de contraseñas
+    (largo mínimo, composición, vencimiento, historial y bloqueo por intentos fallidos).
+  - Detalles en [`backend/src/modules/auth/README.md`](backend/src/modules/auth/README.md) y en
+    [`docs/design/LOCAL_AUTH_PLAN.md`](docs/design/LOCAL_AUTH_PLAN.md).
 
-Con solo una o dos `EXTERNAL_AUTH_*`, el backend no arranca, para no caer por error en el modo local.
+En los dos modos un admin puede desactivar el acceso de una cuenta al chat. Con solo una o dos
+`EXTERNAL_AUTH_*`, el backend no arranca, para no caer por error en el modo local. Para pasar una
+instalación existente de un modo al otro, ver
+[LOCAL_AUTH_PLAN.md §10](docs/design/LOCAL_AUTH_PLAN.md#10-cambiar-de-modo-en-una-instalación-existente).
 
 ## Base de datos y migraciones
 

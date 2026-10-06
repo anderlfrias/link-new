@@ -8,6 +8,13 @@ vi.mock("./user.service", () => ({
   listUsersForAdmin: vi.fn(),
 }));
 
+vi.mock("./account-admin.service", () => ({
+  updateUserAccount: vi.fn(),
+  createLocalUser: vi.fn(),
+  resetLocalPassword: vi.fn(),
+  unlockLocalUser: vi.fn(),
+}));
+
 describe("user.controller", () => {
   beforeEach(() => {
     vi.clearAllMocks();

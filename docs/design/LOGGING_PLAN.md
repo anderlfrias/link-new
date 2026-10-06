@@ -142,8 +142,10 @@ viole se considera no terminada:
    auditoría, ni "solo en `debug`", ni truncado. Loguear `messageId` y que quien investigue vaya a
    la base si tiene derecho a hacerlo.
 2. **Nunca loguear credenciales ni tokens**: `password`, `authorization`, `Cookie`, `set-cookie`,
-   el body de una respuesta de login, `EXTERNAL_AUTH_JWT_SECRET`, `FILE_URL_SIGNING_SECRET`,
-   `S3_SECRET_ACCESS_KEY`, `VAPID_PRIVATE_KEY`.
+   el body de una respuesta de login, `EXTERNAL_AUTH_JWT_SECRET`, `LOCAL_AUTH_JWT_SECRET`,
+   `FILE_URL_SIGNING_SECRET`, `S3_SECRET_ACCESS_KEY`, `VAPID_PRIVATE_KEY`. Tampoco, en modo local,
+   los hashes de contraseña ni las contraseñas temporales: esas solo se muestran una vez al admin
+   que las generó (panel o CLI), nunca por `logger` (LOCAL_AUTH_PLAN.md, D18).
 3. **Nunca loguear un body de request completo.** Un `POST /v1/conversations/:id/messages` *es*
    contenido de mensaje. Si hace falta contexto, loguear campos puntuales y no-sensibles
    (`type`, `fileIds.length`).

@@ -14,19 +14,6 @@ datasource db {
 // Enums
 // ─────────────────────────────────────────────
 
-/// Proveedor de autenticación de la instalación.
-/// Se define una única vez al instalar la aplicación y no cambia después.
-/// Reservado para uso futuro: todavía no se lee desde variables de entorno
-/// ni se usa en ningún modelo o lógica de configuración.
-enum AuthProvider {
-  /// La propia aplicación administra sus usuarios.
-  LOCAL    @map("local")
-  /// Un sistema externo (ERP, SSO, etc.) administra y autentica a los usuarios.
-  EXTERNAL @map("external")
-
-  @@map("auth_provider")
-}
-
 /// Estado del perfil de usuario dentro del chat.
 enum UserStatus {
   ACTIVE   @map("active")
@@ -89,20 +76,26 @@ enum AuditAction {
   CHANGE_IMAGE        @map("change_image")
   SET_GROUP_ADMIN     @map("set_group_admin")
 
-  /// Autenticación. No existe LOGOUT a propósito: el JWT de EXTERNAL_AUTH es stateless
-  /// y el logout ocurre enteramente en el cliente (descarta el token) — el
-  /// backend no lo observa. Auditar un evento que no se puede detectar daría un
-  /// trail con huecos que parecen datos.
-  LOGIN               @map("login")
-  LOGIN_FAILED        @map("login_failed")
+  /// Autenticación. No existe LOGOUT a propósito: los JWT (de EXTERNAL_AUTH o los del
+  /// modo local) son stateless y el logout ocurre enteramente en el cliente
+  /// (descarta el token) — el backend no lo observa. Auditar un evento que no
+  /// se puede detectar daría un trail con huecos que parecen datos.
+  LOGIN           @map("login")
+  LOGIN_FAILED    @map("login_failed")
+  /// Gestión de cuentas (LOCAL_AUTH_PLAN.md, D21). Nunca llevan contraseña,
+  /// hash ni token en la metadata.
+  CREATE_USER     @map("create_user")
+  UPDATE_USER     @map("update_user")
+  RESET_PASSWORD  @map("reset_password")
+  CHANGE_PASSWORD @map("change_password")
 
   /// Acciones de administración de la instalación.
-  UPDATE_SETTINGS     @map("update_settings")
-  ADMIN_DELETE_FILE   @map("admin_delete_file")
+  UPDATE_SETTINGS   @map("update_settings")
+  ADMIN_DELETE_FILE @map("admin_delete_file")
 
   /// Llamadas y videollamadas
-  START_CALL          @map("start_call")
-  END_CALL            @map("end_call")
+  START_CALL @map("start_call")
+  END_CALL   @map("end_call")
 
   @@map("chat_audit_action")
 }
@@ -151,7 +144,8 @@ enum CallStatus {
 /// grupo antes de que el grupo exista); el resto de los campos admiten los
 /// cuatro valores. GROUP_ADMINS_ONLY y APP_ADMINS_ONLY son conceptos
 /// distintos: el primero depende de `ConversationMember.isAdmin` (admin de
-/// ESE grupo), el segundo del rol "admin" de la app (viene de EXTERNAL_AUTH).
+/// ESE grupo), el segundo del rol "admin" de la app (viene del JWT de EXTERNAL_AUTH
+/// en modo external-auth, o de `User.localRoles` en modo local).
 enum GroupPermissionLevel {
   ALL_MEMBERS       @map("all_members")
   GROUP_ADMINS_ONLY @map("group_admins_only")
@@ -188,9 +182,9 @@ enum FileTypeRestrictionMode {
 model User {
   id String @id @default(uuid())
 
-  /// Identificador del usuario en el sistema externo de autenticación.
-  /// Null cuando `AuthProvider` es LOCAL. Con `AuthProvider` EXTERNAL, almacena
-  /// el id con el que ese sistema identifica al usuario.
+  /// Identificador del usuario en el sistema externo de autenticación (hoy
+  /// EXTERNAL_AUTH). Null para las cuentas creadas en modo local. Ninguna relación lo
+  /// usa: todas van por `id` (ver backend/README.md).
   externalId String? @unique @map("external_id")
 
   /// Sistema externo que sincronizó este perfil por última vez (ej. "external-auth").
@@ -198,8 +192,9 @@ model User {
   /// Ver `constants/identity-provider.constant.ts`.
   identityProvider String? @map("identity_provider")
 
-  /// Nombre de usuario en el sistema externo de autenticación. Null cuando
-  /// el usuario no proviene de un proveedor externo que lo defina.
+  /// Nombre de usuario. En modo external-auth lo define EXTERNAL_AUTH; en modo local es
+  /// opcional (LOCAL_AUTH_PLAN.md, D11): `a-z 0-9 . _`, sin "@", guardado en
+  /// minúsculas. Las cuentas que vienen de EXTERNAL_AUTH conservan el suyo.
   username String? @unique
 
   name  String
@@ -231,6 +226,15 @@ model User {
   /// Idioma preferido del usuario ("es" | "en") — preferencia 100% local.
   language String @default("es") @map("language")
 
+  /// Roles en modo local (LOCAL_AUTH_PLAN.md, D8). En modo external-auth se ignora:
+  /// los roles vienen del JWT de EXTERNAL_AUTH.
+  localRoles       String[]         @default([]) @map("local_roles")
+  /// Modo local: los tokens con `iat` anterior se rechazan (D9). Se guarda
+  /// truncado al segundo, porque `iat` está en segundos.
+  tokensValidAfter DateTime?        @map("tokens_valid_after")
+  /// Credenciales del modo local, en tabla aparte a propósito (D3).
+  localCredential  LocalCredential?
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -249,6 +253,30 @@ model User {
   callsReceived           Call[]               @relation("CallReceiver")
 
   @@map("users")
+}
+
+/// Credenciales del modo local (LOCAL_AUTH_PLAN.md, D3). Tabla aparte de
+/// `User` a propósito: `attachInternalUser`, el socket y otros cargan la fila
+/// entera de `User`, y con el hash ahí alcanzaría con que algún endpoint la
+/// serializara para filtrarlo. Un `User` sin fila acá existe, pero en modo
+/// local no puede entrar hasta que un admin le asigne una contraseña (por
+/// ejemplo, las cuentas que vienen de EXTERNAL_AUTH).
+model LocalCredential {
+  userId                 String    @id @map("user_id")
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// `scrypt$N$r$p$salt$hash` (ver modules/auth/password.ts). Nunca se loguea.
+  passwordHash           String    @map("password_hash")
+  /// Para `AppSettings.passwordHistoryCount`; se poda a N en cada cambio.
+  previousPasswordHashes String[]  @default([]) @map("previous_password_hashes")
+  mustChangePassword     Boolean   @default(true) @map("must_change_password")
+  passwordChangedAt      DateTime  @default(now()) @map("password_changed_at")
+  /// Fallos de login seguidos (D17). Se incrementa de forma atómica.
+  failedLoginCount       Int       @default(0) @map("failed_login_count")
+  lockedUntil            DateTime? @map("locked_until")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  @@map("local_credentials")
 }
 
 /// Representa una conversación privada o grupal.
@@ -366,8 +394,8 @@ model Message {
   /// original: si el original se borra (borrado lógico), el puntero sigue firme y
   /// el cliente arma la cita mostrando "Mensaje eliminado" (ver `replyTo` en
   /// message.service.ts, mismo criterio que `buildLastMessagePreview`).
-  replyToId String?  @map("reply_to_id")
-  replyTo   Message? @relation("MessageReplyTo", fields: [replyToId], references: [id])
+  replyToId String?   @map("reply_to_id")
+  replyTo   Message?  @relation("MessageReplyTo", fields: [replyToId], references: [id])
   replies   Message[] @relation("MessageReplyTo")
 
   /// Mensaje original si este es un reenvío (tipo WhatsApp/Telegram) — a
@@ -518,12 +546,12 @@ model Poll {
 
 /// Opción de respuesta en una encuesta.
 model PollOption {
-  id        String     @id @default(uuid())
-  pollId    String     @map("poll_id")
-  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  text      String
-  order     Int        @default(0)
-  votes     PollVote[]
+  id     String     @id @default(uuid())
+  pollId String     @map("poll_id")
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text   String
+  order  Int        @default(0)
+  votes  PollVote[]
 
   @@index([pollId])
   @@map("poll_options")
@@ -615,7 +643,7 @@ model AppSettings {
   /// comportamiento histórico (sin ningún límite) es el que se considera el
   /// problema a resolver, así que el primer deploy de este campo ya aplica
   /// una restricción razonable en vez de esperar a que un admin la prenda.
-  maxFilesPerMessage Int? @default(10) @map("max_files_per_message")
+  maxFilesPerMessage      Int?                    @default(10) @map("max_files_per_message")
 
   // Borrado de conversaciones PRIVATE ("para mí" — ver ConversationMember.hiddenAt)
   /// Default true: cualquiera puede borrar su chat privado hasta que un admin
@@ -678,15 +706,15 @@ model AppSettings {
   // Defaults true/null: reproducen el comportamiento histórico (editar/borrar
   // sin restricción) hasta que un admin los ajuste explícitamente.
   /// Si el propio autor puede editar el contenido de un mensaje TEXT ya enviado.
-  allowMessageEdit Boolean @default(true) @map("allow_message_edit")
+  allowMessageEdit                         Boolean @default(true) @map("allow_message_edit")
   /// Minutos desde el envío durante los que un mensaje puede editarse. null = sin límite.
-  messageEditTimeLimitMinutes Int? @map("message_edit_time_limit_minutes")
+  messageEditTimeLimitMinutes              Int?    @map("message_edit_time_limit_minutes")
   /// Si el propio autor puede borrar (para todos) un mensaje ya enviado. No
   /// afecta el borrado que hace el creador de la conversación sobre mensajes
   /// ajenos (moderación) — esa vía nunca depende de esta configuración.
-  allowMessageDeleteForEveryone Boolean @default(true) @map("allow_message_delete_for_everyone")
+  allowMessageDeleteForEveryone            Boolean @default(true) @map("allow_message_delete_for_everyone")
   /// Minutos desde el envío durante los que un mensaje puede borrarse para todos. null = sin límite.
-  messageDeleteForEveryoneTimeLimitMinutes Int? @map("message_delete_for_everyone_time_limit_minutes")
+  messageDeleteForEveryoneTimeLimitMinutes Int?    @map("message_delete_for_everyone_time_limit_minutes")
 
   /// Interruptor maestro del buscador de GIFs/stickers (Giphy, ver
   /// modules/giphy/README.md) — controla tanto si el botón aparece en el
@@ -716,6 +744,26 @@ model AppSettings {
   fileMigrationIntervalMinutes        Int     @default(60) @map("file_migration_interval_minutes")
   /// Si es true, elimina físicamente el archivo local solo tras verificar y commitear en S3.
   fileMigrationDeleteLocalAfterCommit Boolean @default(false) @map("file_migration_delete_local_after_commit")
+
+  // Sesión y contraseñas del modo local (LOCAL_AUTH_PLAN.md §4.4). En modo
+  // external-auth no aplican: la sesión y las contraseñas las define EXTERNAL_AUTH. Los
+  // defaults no cambian nada hasta que un admin lo decida, salvo el largo
+  // mínimo de 12 (acá no hay un comportamiento anterior que preservar).
+  /// Duración de la sesión (token) en horas.
+  localSessionTtlHours     Int     @default(12) @map("local_session_ttl_hours")
+  /// Largo mínimo. El piso de 8 no se puede bajar ni por API (D15).
+  passwordMinLength        Int     @default(12) @map("password_min_length")
+  passwordRequireUppercase Boolean @default(false) @map("password_require_uppercase")
+  passwordRequireLowercase Boolean @default(false) @map("password_require_lowercase")
+  passwordRequireNumber    Boolean @default(false) @map("password_require_number")
+  passwordRequireSymbol    Boolean @default(false) @map("password_require_symbol")
+  /// null = las contraseñas no vencen.
+  passwordExpirationDays   Int?    @map("password_expiration_days")
+  /// 0 = se puede repetir cualquier contraseña anterior.
+  passwordHistoryCount     Int     @default(0) @map("password_history_count")
+  /// null = sin bloqueo por cuenta (queda solo el rate limit en memoria).
+  maxFailedLoginAttempts   Int?    @map("max_failed_login_attempts")
+  lockoutDurationMinutes   Int     @default(15) @map("lockout_duration_minutes")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -772,23 +820,24 @@ model PushSubscription {
 /// al completar/abortar/expirar. NUNCA es la fuente de verdad de qué partes
 /// llegaron — eso lo responde ListParts contra el storage (ver LARGE_FILES_PLAN.md §5.3).
 enum FileUploadStatus {
-  PENDING   @map("pending")     // creada, sin partes todavía
-  UPLOADING @map("uploading")   // al menos un part-urls pedido
-  COMPLETED @map("completed")   // Complete OK + StoredFile creado
-  ABORTED   @map("aborted")     // cancelada por el usuario
-  EXPIRED   @map("expired")     // barrida por upload-cleanup.worker
-  FAILED    @map("failed")      // complete rechazado (tamaño real > límite)
+  PENDING   @map("pending") // creada, sin partes todavía
+  UPLOADING @map("uploading") // al menos un part-urls pedido
+  COMPLETED @map("completed") // Complete OK + StoredFile creado
+  ABORTED   @map("aborted") // cancelada por el usuario
+  EXPIRED   @map("expired") // barrida por upload-cleanup.worker
+  FAILED    @map("failed") // complete rechazado (tamaño real > límite)
+
   @@map("file_upload_status")
 }
 
 model FileUpload {
   id String @id @default(uuid())
 
-  provider FileProvider
+  provider         FileProvider
   /// Key generada SIEMPRE por Link, nunca propuesta por el cliente.
-  objectKey String @map("object_key")
+  objectKey        String       @map("object_key")
   /// uploadId del CreateMultipartUpload. Null hasta crearlo.
-  externalUploadId String? @map("external_upload_id")
+  externalUploadId String?      @map("external_upload_id")
 
   originalName String @map("original_name")
   mimeType     String @map("mime_type")
@@ -829,31 +878,29 @@ model FileUpload {
 
 /// Registro histórico y de estado de una llamada o videollamada.
 model Call {
-  id             String     @id @default(uuid())
-  conversationId String     @map("conversation_id")
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  callerId       String     @map("caller_id")
-  caller         User       @relation("CallCaller", fields: [callerId], references: [id])
+  callerId String @map("caller_id")
+  caller   User   @relation("CallCaller", fields: [callerId], references: [id])
 
-  receiverId     String     @map("receiver_id")
-  receiver       User       @relation("CallReceiver", fields: [receiverId], references: [id])
+  receiverId String @map("receiver_id")
+  receiver   User   @relation("CallReceiver", fields: [receiverId], references: [id])
 
-  type           CallType   @default(AUDIO)
-  status         CallStatus @default(RINGING)
+  type   CallType   @default(AUDIO)
+  status CallStatus @default(RINGING)
 
-  startedAt      DateTime   @default(now()) @map("started_at")
-  answeredAt     DateTime?  @map("answered_at")
-  endedAt        DateTime?  @map("ended_at")
-  duration       Int        @default(0)
+  startedAt  DateTime  @default(now()) @map("started_at")
+  answeredAt DateTime? @map("answered_at")
+  endedAt    DateTime? @map("ended_at")
+  duration   Int       @default(0)
 
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([conversationId, createdAt])
   @@index([callerId, createdAt])
   @@index([receiverId, createdAt])
   @@map("calls")
 }
-
-

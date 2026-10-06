@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MappedUser } from "../modules/auth/auth.types";
 import { UnauthorizedError } from "../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
+import { LOCAL_AUTH_CONFIG, useAuthMode } from "../test/auth-mode";
 
 vi.mock("../config/prisma", () => ({
   prisma: { user: { findUnique: vi.fn() } },
+}));
+
+vi.mock("../modules/settings/settings.service", () => ({
+  getSettings: vi.fn().mockResolvedValue({ localSessionTtlHours: 12 }),
 }));
 
 vi.mock("../config/request-context", () => ({
@@ -26,6 +31,7 @@ function buildMappedUser(overrides: Partial<MappedUser> = {}): MappedUser {
     permissions: [],
     app: "chat-interno",
     exp: Math.floor(Date.now() / 1000) + 3600,
+    authProvider: "external-auth",
     ...overrides,
   };
 }
@@ -65,6 +71,7 @@ describe("attachInternalUser", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "internal-uuid-1",
       email: "user@example.com",
+      status: "ACTIVE",
     } as never);
     const req = createMockRequest({ user: buildMappedUser() });
     const next = createMockNext();
@@ -79,6 +86,7 @@ describe("attachInternalUser", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "internal-uuid-1",
       email: "user@example.com",
+      status: "ACTIVE",
     } as never);
     const req = createMockRequest({ user: buildMappedUser() });
     const next = createMockNext();
@@ -101,5 +109,63 @@ describe("attachInternalUser", () => {
 
     expect(next).toHaveBeenCalledWith(dbError);
     expect(bindContext).not.toHaveBeenCalled();
+  });
+
+  it("modo external-auth: cuenta desactivada -> 401 account_disabled, sin bindContext (invariante 5)", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "internal-uuid-1",
+      email: "user@example.com",
+      status: "INACTIVE",
+    } as never);
+    const req = createMockRequest({ user: buildMappedUser() });
+    const next = createMockNext();
+
+    await attachInternalUser(req, createMockResponse(), next);
+
+    const error = next.mock.calls[0][0];
+    expect(error).toBeInstanceOf(UnauthorizedError);
+    expect(error.code).toBe("account_disabled");
+    expect(bindContext).not.toHaveBeenCalled();
+  });
+
+  describe("modo local", () => {
+    useAuthMode(LOCAL_AUTH_CONFIG);
+
+    it("busca por id y deja en req.user los datos y roles de la base", async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: "user-1",
+        email: "ana@example.com",
+        name: "Ana Gómez",
+        username: null,
+        status: "ACTIVE",
+        localRoles: ["admin"],
+        tokensValidAfter: null,
+      } as never);
+      const user = buildMappedUser({ id: "user-1", email: "ana@example.com", roles: [], authProvider: "local" });
+      const req = createMockRequest({ user });
+      req.authIdentity = { mode: "local", user, mustChangePassword: false, iat: Math.floor(Date.now() / 1000) };
+      const next = createMockNext();
+
+      await attachInternalUser(req, createMockResponse(), next);
+
+      expect(next).toHaveBeenCalledWith();
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: "user-1" } });
+      expect(req.user).toMatchObject({ internalUserId: "user-1", roles: ["admin"], fullName: "Ana Gómez" });
+    });
+
+    it("sin la identidad que deja authenticate (sin iat) falla cerrado", async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        id: "user-1",
+        email: "ana@example.com",
+        status: "ACTIVE",
+        localRoles: ["admin"],
+      } as never);
+      const req = createMockRequest({ user: buildMappedUser({ id: "user-1", authProvider: "local" }) });
+      const next = createMockNext();
+
+      await attachInternalUser(req, createMockResponse(), next);
+
+      expect(next.mock.calls[0][0]).toBeInstanceOf(UnauthorizedError);
+    });
   });
 });

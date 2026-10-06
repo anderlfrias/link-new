@@ -11,7 +11,7 @@ adminSettingsRouter.use(authenticate, attachInternalUser, requireRoles("admin"))
 publicSettingsRouter.use(authenticate, attachInternalUser)
 ```
 
-`requireRoles("admin")` (`src/middlewares/auth.middleware.ts`) exige que `"admin"` esté presente en `req.user.roles` — el arreglo de roles que EXTERNAL_AUTH embebe en su JWT (ver [`../auth/README.md`](../auth/README.md)). Es la primera ruta de la app que usa este guard.
+`requireRoles("admin")` (`src/middlewares/auth.middleware.ts`) exige que `"admin"` esté presente en `req.user.roles`. De dónde salen esos roles depende del modo de autenticación: en modo external-auth, del arreglo que EXTERNAL_AUTH embebe en su JWT; en modo local, de `User.localRoles`, que completa `attachInternalUser` y asigna un admin desde el panel de usuarios o el CLI (ver [`../auth/README.md`](../auth/README.md)). Es la primera ruta de la app que usa este guard.
 
 ## Endpoints
 
@@ -40,6 +40,9 @@ publicSettingsRouter.use(authenticate, attachInternalUser)
 | `allowMessageDeleteForEveryone`, `messageDeleteForEveryoneTimeLimitMinutes` | [`messages`](../messages/README.md), `message.service.ts` (`deleteMessage`) — solo cuando el propio autor borra su mensaje, nunca cuando el creador de la conversación borra uno ajeno (moderación) |
 | `allowConversationDelete` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`deleteConversation`, rama `PRIVATE` — "Eliminar chat", borrado por-usuario vía `ConversationMember.hiddenAt`) |
 | `allowGroupDelete` | `conversations`, `conversation.service.ts` (`deleteConversation`, rama `GROUP`) — interruptor maestro que se chequea antes de `whoCanDeleteGroup`; en `false` nadie puede borrar un grupo, sin excepción |
+| `localSessionTtlHours` | Solo modo local. [`auth`](../auth/README.md#modo-local): `local-auth.service.ts` (duración del token que emite el login y el cambio de contraseña) e `identity.ts` (`resolveInternalUser` rechaza los tokens más viejos que el valor vigente) |
+| `passwordMinLength`, `passwordRequireUppercase`, `passwordRequireLowercase`, `passwordRequireNumber`, `passwordRequireSymbol` | Solo modo local. `auth`, `local-auth.service.ts` (login: si la contraseña no cumple, token restringido con motivo `policy`; cambio de contraseña) y `GET /auth/config`. Se leen con `getLocalAuthPolicy()`, que aplica el piso de 8 caracteres |
+| `passwordExpirationDays`, `passwordHistoryCount`, `maxFailedLoginAttempts`, `lockoutDurationMinutes` | Solo modo local. `auth`, `local-auth.service.ts`: vencimiento (token restringido con motivo `expired`), historial (`PATCH /auth/password`) y bloqueo por intentos fallidos en el login. `getLocalAuthPolicy()` aplica los topes (historial ≤ 12, bloqueo ≥ 3 intentos) |
 
 Las 6 quedan también en `PublicAppSettingsDTO` (`GET /api/v1/settings/public`), a diferencia del resto de la configuración administrativa: el cliente las necesita para decidir si mostrar las acciones de editar/borrar sobre los propios mensajes, y eliminar chat/grupo, de quien esté logueado, aunque no sea admin — la autoridad real sigue siendo `message.service.ts`/`conversation.service.ts`, que las vuelven a chequear en cada `PATCH`/`DELETE`.
 

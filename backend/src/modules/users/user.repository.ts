@@ -39,14 +39,24 @@ export function search(currentUserId: string, query?: string) {
 /// `search()` (directorio de contactos), no fuerza `status: ACTIVE`: acá se
 /// quiere ver todo.
 function buildAdminUserWhere(filters: AdminUserFilters): Prisma.UserWhereInput {
-  if (!filters.search) return {};
-  return {
-    OR: [
-      { name: { contains: filters.search, mode: "insensitive" } },
-      { email: { contains: filters.search, mode: "insensitive" } },
-      { username: { contains: filters.search, mode: "insensitive" } },
-    ],
-  };
+  const and: Prisma.UserWhereInput[] = [];
+  if (filters.search) {
+    and.push({
+      OR: [
+        { name: { contains: filters.search, mode: "insensitive" } },
+        { email: { contains: filters.search, mode: "insensitive" } },
+        { username: { contains: filters.search, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (filters.status) {
+    and.push({ status: filters.status });
+  }
+  if (filters.hasPassword !== undefined) {
+    and.push({ localCredential: filters.hasPassword ? { isNot: null } : { is: null } });
+  }
+  if (and.length === 0) return {};
+  return and.length === 1 ? and[0] : { AND: and };
 }
 
 const adminListSelect = {
@@ -59,6 +69,9 @@ const adminListSelect = {
   status: true,
   syncProfileWithIntegration: true,
   createdAt: true,
+  localRoles: true,
+  // Nunca el hash: solo lo que el panel necesita mostrar.
+  localCredential: { select: { mustChangePassword: true, lockedUntil: true } },
   _count: { select: { conversationMemberships: true, sentMessages: true } },
 } satisfies Prisma.UserSelect;
 

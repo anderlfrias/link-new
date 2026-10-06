@@ -61,6 +61,23 @@ describe("buildLogger", () => {
     expect((lines[0].err as { body: string }).body).toBe("[Redacted]");
   });
 
+  it("redacta las contraseñas y hashes del modo local, también anidados (invariante 9)", () => {
+    const { logger, lines } = captureLogger();
+    logger.info(
+      {
+        currentPassword: "actual-1",
+        body: { newPassword: "nueva-2", temporaryPassword: "temporal-3" },
+        credential: { passwordHash: "scrypt$hash-4", previousPasswordHashes: ["scrypt$hash-5"] },
+      },
+      "password change",
+    );
+
+    const serialized = JSON.stringify(lines[0]);
+    for (const secret of ["actual-1", "nueva-2", "temporal-3", "hash-4", "hash-5"]) {
+      expect(serialized).not.toContain(secret);
+    }
+  });
+
   it("respeta el nivel configurado", () => {
     const { logger, lines } = captureLogger({ level: "warn" });
     logger.info("esto no debería salir");

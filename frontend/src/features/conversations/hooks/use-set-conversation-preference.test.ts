@@ -29,6 +29,7 @@ describe("useSetConversationPreference", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
   });
 
@@ -86,6 +87,7 @@ describe("useSetConversationPreference", () => {
         logout: vi.fn(),
         updateSessionUser: vi.fn(),
         expireSession: vi.fn(),
+        completePasswordChange: vi.fn(),
       });
 
       const { result } = renderHook(() => useSetConversationPreference());
@@ -153,6 +155,7 @@ describe("useSetConversationPreference", () => {
         logout: vi.fn(),
         updateSessionUser: vi.fn(),
         expireSession: vi.fn(),
+        completePasswordChange: vi.fn(),
       });
 
       const { result } = renderHook(() => useSetConversationPreference());

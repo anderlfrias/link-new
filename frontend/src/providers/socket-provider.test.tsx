@@ -38,6 +38,7 @@ describe("SocketProvider and useSocket", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     render(
@@ -69,6 +70,7 @@ describe("SocketProvider and useSocket", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     vi.mocked(connectSocket).mockReturnValue(mockSocket as any);
@@ -120,6 +122,7 @@ describe("SocketProvider and useSocket", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     vi.mocked(connectSocket).mockReturnValue(mockSocket as any);

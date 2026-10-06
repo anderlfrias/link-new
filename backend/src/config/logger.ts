@@ -29,6 +29,17 @@ const REDACT_PATHS = [
   "*.accessToken",
   // body crudo que body-parser adjunta a sus errores (ver error.middleware.ts).
   "err.body",
+  // Cuentas locales (LOCAL_AUTH_PLAN.md §8, invariante 9).
+  "currentPassword",
+  "*.currentPassword",
+  "newPassword",
+  "*.newPassword",
+  "temporaryPassword",
+  "*.temporaryPassword",
+  "passwordHash",
+  "*.passwordHash",
+  "previousPasswordHashes",
+  "*.previousPasswordHashes",
 ];
 
 /// Factory separada del singleton para que los tests puedan construir un logger

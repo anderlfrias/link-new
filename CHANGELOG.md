@@ -10,7 +10,12 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ### Añadido
 - **Docker**: `Dockerfile` de backend y frontend y `docker-compose.yml` (PostgreSQL + backend + frontend). El backend aplica las migraciones pendientes al arrancar.
 - **Migraciones de base de datos**: migración inicial `0_init` en `backend/prisma/migrations` y scripts `db:migrate`, `db:migrate:dev` y `db:baseline` (para instalaciones creadas con `prisma db push`).
-- **Autenticación EXTERNAL_AUTH opcional**: el modo se deduce del `.env` (con las tres `EXTERNAL_AUTH_*`, EXTERNAL_AUTH; sin ninguna, modo local). El inicio de sesión con cuentas locales todavía está en desarrollo.
+- **Autenticación local, con EXTERNAL_AUTH opcional**: el modo se deduce del `.env` (con las tres `EXTERNAL_AUTH_*`, EXTERNAL_AUTH; sin ninguna y con `LOCAL_AUTH_JWT_SECRET`, modo local). En modo local las cuentas y sus contraseñas viven en la base de LINK: se inicia sesión con el correo o el nombre de usuario, y el primer admin se crea con `npm run auth:admin -- create-admin --email <correo>`. Ver la sección "Autenticación" del README y `docs/design/LOCAL_AUTH_PLAN.md`.
+- **Cambio de contraseña** (modo local): desde el perfil, y obligatorio al entrar con una contraseña temporal, vencida o que no cumple la política vigente. Mientras no se cambia, la sesión solo sirve para cambiarla.
+- **Administración de cuentas** (modo local): desde el panel de usuarios, un admin crea y edita cuentas, asigna el rol de admin, restablece contraseñas (la temporal se muestra una sola vez) y desbloquea cuentas. Filtros por estado y por cuentas sin contraseña.
+- **Política de sesión y contraseñas** (modo local), en la configuración global: duración de la sesión, largo mínimo, reglas de composición, vencimiento, historial y bloqueo por intentos fallidos. Todo apagado por defecto salvo el largo mínimo de 12 caracteres. El panel advierte, antes de guardar, qué cambios cortan sesiones abiertas o piden cambiar la contraseña en el próximo inicio de sesión.
+- **Desactivar cuentas** (los dos modos): un admin puede desactivar y reactivar el acceso de cualquier cuenta al chat. Una cuenta desactivada no inicia sesión (en modo external-auth, aunque EXTERNAL_AUTH valide sus credenciales), sus sesiones abiertas se cortan y la sincronización con EXTERNAL_AUTH no la reactiva. Nadie puede desactivarse a sí mismo, y en modo local siempre queda al menos un admin activo.
+- **Auditoría de cuentas**: acciones `CREATE_USER`, `UPDATE_USER`, `RESET_PASSWORD` y `CHANGE_PASSWORD`. `LOGIN` y `LOGIN_FAILED` registran el modo de autenticación y, en modo local, el motivo del fallo. El panel de auditoría los muestra junto a la acción.
 - **Documentación para publicar el proyecto**: README para instalar desde cero, `CONTRIBUTING.md`, `SECURITY.md`, plantillas de issues y PR, y Dependabot.
 - **CI**: tests, builds, verificación de que las migraciones coinciden con el schema y build de las imágenes Docker, con Node.js 24.
 - `THIRD_PARTY_NOTICES.md`: licencias de los diseños de avatares, tipografías, íconos y dependencias, y la lista de assets de marca.
@@ -22,6 +27,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - **Acción requerida en producción:** con `NODE_ENV=production`, el backend no arranca sin `CORS_ORIGIN`. Definirla con el origen del frontend (o con `*` para aceptar cualquier origen a propósito). Antes, sin definirla, la API aceptaba cualquier origen.
 - **Acción requerida detrás de Cloudflare:** el backend ya no toma la IP del cliente de `CF-Connecting-IP` salvo con `TRUST_CF_CONNECTING_IP=true`. Si hay un proxy entre Cloudflare y el backend y no se define, el rate limiting y la auditoría ven la IP del proxy. `trust proxy` sigue en `1` por defecto (`TRUST_PROXY`).
 - LINK ya no se puede embeber en un iframe de otro origen.
+- **Migración de base de datos nueva** (`20261006150000_local_auth`): tabla de credenciales locales y campos nuevos en `users` y `app_settings`. Se aplica con `npm run db:migrate`, o sola al arrancar el contenedor del backend. No cambia nada en una instalación EXTERNAL_AUTH.
+- El panel de usuarios deja de ser de solo lectura: en modo external-auth permite desactivar y reactivar cuentas; los demás datos se siguen administrando en EXTERNAL_AUTH.
+- El campo del login dice "Usuario o correo electrónico" en los dos modos.
+- Las respuestas de error de la API pueden incluir `code`, un identificador estable del motivo, además de `error` (ver `backend/API.md`, sección 1).
 - Sin `GIPHY_API_KEY`, el selector de emojis oculta las pestañas de GIFs, stickers y favoritos, igual que cuando un admin desactiva la opción. Antes mostraba pestañas que solo daban error. La integración con GIPHY queda deshabilitada por defecto: ver `backend/src/modules/giphy/README.md`, "Requisitos de GIPHY".
 - Nuevo sonido de notificación, sintetizado por el proyecto (`scripts/generate-notification-sound.js`), en lugar del archivo anterior, de origen desconocido.
 - `npm run prisma:sync` ahora aplica migraciones (`prisma migrate deploy`) en lugar de `prisma db push`. Las instalaciones existentes tienen que correr una vez `npm run db:baseline` (ver README).
@@ -37,6 +46,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Errores de tipos en tests del frontend que bloqueaban el build con Next.js 16.3, y el tipo de la acción de reacciones (faltaba `"updated"`).
 - `ecosystem.config.js` no encontraba el binario de Next.js cuando `next` queda instalado en la raíz del monorepo.
 - Un body JSON mal formado o demasiado grande respondía 500. Ahora responde 400 o 413.
+- En modo external-auth, iniciar sesión respondía 500 si el nombre de usuario que trae EXTERNAL_AUTH ya lo tenía otra cuenta. Ahora manda el de EXTERNAL_AUTH: la otra cuenta lo pierde y queda un aviso en el log.
 
 ### Seguridad
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).

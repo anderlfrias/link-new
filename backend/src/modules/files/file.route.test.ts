@@ -65,8 +65,8 @@ vi.mock("../../storage", () => ({
   S3Storage: vi.fn(),
 }));
 
-vi.mock("../auth/jwt", () => ({
-  verifyToken: vi.fn((token: string) => {
+vi.mock("../auth/jwt", () => {
+  const verifyToken = vi.fn((token: string) => {
     if (token.startsWith("admin-token:")) {
       const id = token.slice("admin-token:".length);
       return { id: `ext-${id}`, email: `${id}@example.com`, roles: ["admin"] };
@@ -76,19 +76,30 @@ vi.mock("../auth/jwt", () => ({
       return { id: `ext-${id}`, email: `${id}@example.com`, roles: ["user"] };
     }
     throw new Error("Unknown token");
-  }),
-  mapTokenToUser: vi.fn((payload: any) => ({
+  });
+  const mapTokenToUser = vi.fn((payload: any) => ({
     id: payload.id,
     email: payload.email,
     roles: payload.roles,
-  })),
-}));
+  }));
+  return {
+    verifyToken,
+    mapTokenToUser,
+    // Los middlewares usan el verificador único (LOCAL_AUTH_PLAN.md, Fase 4):
+    // en modo external-auth equivale a verificar el JWT de EXTERNAL_AUTH y mapearlo.
+    verifyAccessToken: vi.fn((token: string) => ({
+      mode: "external-auth",
+      user: mapTokenToUser(verifyToken(token)),
+      mustChangePassword: false,
+    })),
+  };
+});
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
     user: {
       findUnique: vi.fn((args: any) =>
-        Promise.resolve({ id: `internal-${args.where.email}`, email: args.where.email }),
+        Promise.resolve({ id: `internal-${args.where.email}`, email: args.where.email, status: "ACTIVE" }),
       ),
     },
   },
@@ -294,6 +305,15 @@ describe("GET /files/:id/content", () => {
     expect(res.status).toBe(206);
     expect(res.headers["content-range"]).toMatch(/^bytes 0-8\/\d+$/);
     expect(res.text).toBe("contenido");
+  });
+
+  it("un Bearer inválido responde 401, no 500 (antes la excepción del verificador llegaba cruda al error handler)", async () => {
+    vi.mocked(fileRepository.findActiveById).mockResolvedValue(mockFile as any);
+
+    const res = await request(app).get("/files/f-123/content").set("Authorization", "Bearer token-desconocido");
+
+    expect(res.status).toBe(401);
+    expect(FileService.canAccessFile).not.toHaveBeenCalled();
   });
 
   it("permite acceso mediante header Authorization Bearer sin HMAC token", async () => {

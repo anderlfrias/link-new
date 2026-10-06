@@ -33,6 +33,12 @@ vi.mock("@/features/admin/hooks/use-admin-users", () => ({
   useAdminUsers: vi.fn(),
 }));
 
+// El panel de usuarios lee el modo de la instalación de la sesión: sin sesión
+// (o sin authProvider) se comporta como en modo external-auth.
+vi.mock("@/providers/auth-provider", () => ({
+  useAuth: () => ({ session: null }),
+}));
+
 vi.mock("@/features/admin/hooks/use-admin-files", () => ({
   useAdminFiles: vi.fn(),
 }));
@@ -100,6 +106,16 @@ const mockSettings: AdminSettings = {
   fileMigrationBatchSize: 50,
   fileMigrationIntervalMinutes: 60,
   fileMigrationDeleteLocalAfterCommit: false,
+  localSessionTtlHours: 12,
+  passwordMinLength: 12,
+  passwordRequireUppercase: false,
+  passwordRequireLowercase: false,
+  passwordRequireNumber: false,
+  passwordRequireSymbol: false,
+  passwordExpirationDays: null,
+  passwordHistoryCount: 0,
+  maxFailedLoginAttempts: null,
+  lockoutDurationMinutes: 15,
 };
 
 describe("Admin i18n support (English locale)", () => {
@@ -228,7 +244,7 @@ describe("Admin i18n support (English locale)", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Users" })).toBeInTheDocument();
-    expect(screen.getByText("This panel is read-only. To update a user's name, photo, or details, do so from EXTERNAL_AUTH.")).toBeInTheDocument();
+    expect(screen.getByText("Each account's details are managed in EXTERNAL_AUTH. From here you can only deactivate or reactivate its access to the chat.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search by name, email, or username")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear" })).toBeInTheDocument();

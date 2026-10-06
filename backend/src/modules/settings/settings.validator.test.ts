@@ -233,5 +233,55 @@ describe("settings.validator", () => {
         updateSettingsSchema.validate({ whoCanLeaveGroup: "INVALID_LEVEL" as any }),
       ).rejects.toThrow();
     });
+    describe("sesión y contraseñas del modo local (LOCAL_AUTH_PLAN.md, D15)", () => {
+      it("el piso de 8 caracteres no se puede bajar ni por API (invariante 10)", async () => {
+        await expect(updateSettingsSchema.validate({ passwordMinLength: 7 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ passwordMinLength: 8 })).resolves.toMatchObject({ passwordMinLength: 8 });
+      });
+
+      it("el largo mínimo no puede pasar el máximo de 128", async () => {
+        await expect(updateSettingsSchema.validate({ passwordMinLength: 129 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ passwordMinLength: 128 })).resolves.toBeDefined();
+      });
+
+      it("la duración de sesión va de 1 a 720 horas, en enteros", async () => {
+        await expect(updateSettingsSchema.validate({ localSessionTtlHours: 0 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ localSessionTtlHours: 721 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ localSessionTtlHours: 1.5 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ localSessionTtlHours: 720 })).resolves.toBeDefined();
+      });
+
+      it("rangos de vencimiento, historial y bloqueo (D15)", async () => {
+        await expect(updateSettingsSchema.validate({ passwordExpirationDays: 0 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ passwordExpirationDays: 366 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ passwordHistoryCount: 13 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ passwordHistoryCount: -1 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ maxFailedLoginAttempts: 2 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ maxFailedLoginAttempts: 51 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ lockoutDurationMinutes: 0 })).rejects.toThrow();
+        await expect(updateSettingsSchema.validate({ lockoutDurationMinutes: 1441 })).rejects.toThrow();
+        await expect(
+          updateSettingsSchema.validate({ passwordExpirationDays: 365, passwordHistoryCount: 12, maxFailedLoginAttempts: 3 }),
+        ).resolves.toBeDefined();
+      });
+
+      it("un PATCH con un solo campo nuevo pasa at-least-one-field", async () => {
+        for (const payload of [
+          { localSessionTtlHours: 8 },
+          { passwordMinLength: 10 },
+          { passwordRequireUppercase: true },
+          { passwordRequireLowercase: true },
+          { passwordRequireNumber: true },
+          { passwordRequireSymbol: false },
+          { passwordExpirationDays: 90 },
+          { passwordExpirationDays: null },
+          { passwordHistoryCount: 0 },
+          { maxFailedLoginAttempts: null },
+          { lockoutDurationMinutes: 15 },
+        ]) {
+          await expect(updateSettingsSchema.validate(payload)).resolves.toBeDefined();
+        }
+      });
+    });
   });
 });

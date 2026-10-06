@@ -1,11 +1,36 @@
 import { apiRequest } from "@/lib/api-client";
-import type { LoginCredentials, LoginResponse } from "@/features/auth/types/auth.types";
+import type {
+  AuthConfig,
+  ChangePasswordResponse,
+  LoginCredentials,
+  LoginResponse,
+} from "@/features/auth/types/auth.types";
 import type { UploadedFile } from "@/features/files/types/file.types";
 
 export function login(credentials: LoginCredentials): Promise<LoginResponse> {
   return apiRequest<LoginResponse>("/v1/auth/login", {
     method: "POST",
     body: credentials,
+  });
+}
+
+/** Modo de autenticación y, en modo local, la política de contraseñas. Público. */
+export function getAuthConfig(): Promise<AuthConfig> {
+  return apiRequest<AuthConfig>("/v1/auth/config");
+}
+
+/** Cambia la propia contraseña (solo modo local). Acepta el token restringido
+ * del cambio obligatorio. Los rechazos son 400 con `code`, nunca 401: una
+ * contraseña actual incorrecta no cierra la sesión. */
+export function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangePasswordResponse> {
+  return apiRequest<ChangePasswordResponse>("/v1/auth/password", {
+    method: "PATCH",
+    token,
+    body: { currentPassword, newPassword },
   });
 }
 

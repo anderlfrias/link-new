@@ -12,7 +12,7 @@ import userRoutes, { adminUserRouter } from "./modules/users/user.route";
 
 const router = Router();
 
-// Módulo público / con auth manejada dentro (login de EXTERNAL_AUTH) → se monta tal cual.
+// Módulo público / con auth manejada dentro (login, EXTERNAL_AUTH o local) → se monta tal cual.
 router.use("/v1/auth", authRoutes);
 // authenticate + attachInternalUser se aplican dentro de conversation.route.ts.
 router.use("/v1/conversations", conversationRoutes);

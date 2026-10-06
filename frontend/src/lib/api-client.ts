@@ -57,7 +57,12 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as ApiErrorBody | null;
-    const error = new ApiError(response.status, errorBody?.error ?? response.statusText);
+    const error = new ApiError(
+      response.status,
+      errorBody?.error ?? response.statusText,
+      errorBody?.code,
+      errorBody ?? undefined,
+    );
 
     if (response.status === 401 && !path.startsWith("/v1/auth/login")) {
       notifySessionExpired(error);

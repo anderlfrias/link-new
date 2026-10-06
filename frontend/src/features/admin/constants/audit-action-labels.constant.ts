@@ -11,13 +11,23 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   SET_GROUP_ADMIN: "Cambio de admin de grupo",
   LOGIN: "Inicio de sesión",
   LOGIN_FAILED: "Inicio de sesión fallido",
+  CHANGE_PASSWORD: "Cambio de contraseña",
+  CREATE_USER: "Alta de cuenta",
+  UPDATE_USER: "Edición de cuenta",
+  RESET_PASSWORD: "Restablecimiento de contraseña",
   UPDATE_SETTINGS: "Actualización de configuración",
   ADMIN_DELETE_FILE: "Eliminación de archivo por admin",
 };
 
+/** Espejo de `DEFAULT_ADMIN_AUDIT_ACTIONS` en backend/src/modules/audit/audit.types.ts:
+ * lo que el backend devuelve cuando no se filtra por acción. */
 export const DEFAULT_ADMIN_ACTIONS = [
   "LOGIN",
   "LOGIN_FAILED",
+  "CHANGE_PASSWORD",
+  "CREATE_USER",
+  "UPDATE_USER",
+  "RESET_PASSWORD",
   "UPDATE_SETTINGS",
   "ADMIN_DELETE_FILE",
 ];

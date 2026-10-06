@@ -3,6 +3,7 @@ import { AuditAction, ConversationType } from "@prisma/client";
 import { runWithContext, getLogger } from "../../config/request-context";
 import * as AuditRepository from "./audit.repository";
 import * as AuditService from "./audit.service";
+import { DEFAULT_ADMIN_AUDIT_ACTIONS } from "./audit.types";
 
 vi.mock("./audit.repository");
 
@@ -49,6 +50,7 @@ describe("AuditService", () => {
           action: AuditAction.LOGIN,
           userId: "user-explicit-2",
           actorEmail: "explicit@test.com",
+          metadata: { provider: "external-auth" },
         });
       });
 
@@ -68,7 +70,7 @@ describe("AuditService", () => {
           action: AuditAction.LOGIN_FAILED,
           userId: null,
           actorEmail: "attempted@test.com",
-          metadata: { reason: "invalid_credentials" },
+          metadata: { provider: "external-auth", reason: "invalid_credentials" },
         });
       });
 
@@ -173,12 +175,28 @@ describe("AuditService", () => {
           action: [
             AuditAction.LOGIN,
             AuditAction.LOGIN_FAILED,
+            AuditAction.CHANGE_PASSWORD,
+            AuditAction.CREATE_USER,
+            AuditAction.UPDATE_USER,
+            AuditAction.RESET_PASSWORD,
             AuditAction.UPDATE_SETTINGS,
             AuditAction.ADMIN_DELETE_FILE,
           ],
         }),
         expect.anything(),
       );
+    });
+
+    it("el default nunca incluye actividad del chat (privacidad por omisión)", () => {
+      const chatActions: AuditAction[] = [
+        AuditAction.SEND_MESSAGE,
+        AuditAction.EDIT_MESSAGE,
+        AuditAction.DELETE_MESSAGE,
+        AuditAction.FORWARD_MESSAGE,
+        AuditAction.CREATE_CONVERSATION,
+      ];
+
+      expect(DEFAULT_ADMIN_AUDIT_ACTIONS.filter((action) => chatActions.includes(action))).toEqual([]);
     });
 
     it("con action explícito incluyendo acciones de chat, las devuelve", async () => {

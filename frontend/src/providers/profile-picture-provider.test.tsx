@@ -47,6 +47,7 @@ describe("ProfilePictureProvider and useProfilePicture", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     render(
@@ -70,6 +71,7 @@ describe("ProfilePictureProvider and useProfilePicture", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     vi.mocked(getProfilePicture).mockResolvedValueOnce(mockBlob);
@@ -98,6 +100,7 @@ describe("ProfilePictureProvider and useProfilePicture", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     vi.mocked(getProfilePicture).mockRejectedValueOnce(new Error("404 Not Found"));
@@ -125,6 +128,7 @@ describe("ProfilePictureProvider and useProfilePicture", () => {
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
       expireSession: vi.fn(),
+      completePasswordChange: vi.fn(),
     });
 
     vi.mocked(getProfilePicture)

@@ -1,12 +1,15 @@
 import { TokenExpiredError } from "jsonwebtoken";
-import { mapTokenToUser, verifyToken } from "../modules/auth/jwt";
-import { prisma } from "../config/prisma";
-import { AuthenticatedSocketUser, SocketMiddleware } from "./types";
+import { authenticateAccessToken } from "../modules/auth/identity";
+import { AppError } from "../utils/errors";
+import { SocketMiddleware } from "./types";
 
 /// Primer middleware global de socketMiddlewares (ver middleware.ts): verifica
-/// el mismo JWT de EXTERNAL_AUTH que usa `authenticate` en Express, a partir de
-/// `socket.handshake.auth.token`, y resuelve el `id` interno del usuario (igual
-/// que `attachInternalUser` en Express) para dejarlo en `socket.data.user`.
+/// el mismo token que `authenticate` en Express, a partir de
+/// `socket.handshake.auth.token`, y lo resuelve contra la base con la misma
+/// función que `attachInternalUser` (`resolveInternalUser`, LOCAL_AUTH_PLAN.md
+/// D7) para dejarlo en `socket.data.user`. Rechaza además los tokens
+/// restringidos (`pcr`): con uno de esos no se recibe nada en vivo hasta
+/// cambiar la contraseña (D13).
 /// Ningún módulo debe autenticar un socket por su cuenta: todos leen
 /// `socket.data.user` una vez este middleware corrió.
 export const authenticateSocket: SocketMiddleware = (socket, next) => {
@@ -15,24 +18,18 @@ export const authenticateSocket: SocketMiddleware = (socket, next) => {
     return next(new Error("Missing token"));
   }
 
-  resolveUser(token)
-    .then((user) => {
+  authenticateAccessToken(token)
+    .then(({ user }) => {
       socket.data.user = user;
       next();
     })
     .catch((error) => {
-      if (error instanceof TokenExpiredError) {
-        return next(new Error("Token expired"));
-      }
-      next(new Error("Invalid token"));
+      // El frontend cierra la sesión ante estos dos mensajes
+      // (socket-provider.tsx). Una cuenta desactivada, un token revocado o un
+      // cambio de contraseña pendiente también terminan la sesión del socket:
+      // van como "Invalid token", igual que un usuario que no existe.
+      const expired =
+        error instanceof TokenExpiredError || (error instanceof AppError && error.code === "session_expired");
+      next(new Error(expired ? "Token expired" : "Invalid token"));
     });
 };
-
-async function resolveUser(token: string): Promise<AuthenticatedSocketUser> {
-  const mappedUser = mapTokenToUser(verifyToken(token));
-  const user = await prisma.user.findUnique({ where: { email: mappedUser.email } });
-  if (!user) {
-    throw new Error("User not found");
-  }
-  return { ...mappedUser, internalUserId: user.id };
-}

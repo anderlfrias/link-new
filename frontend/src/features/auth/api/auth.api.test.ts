@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  changePassword,
+  getAuthConfig,
   login,
   getProfilePicture,
   updateProfilePicture,
@@ -114,5 +116,24 @@ describe("auth.api", () => {
       body: { language: "en" },
     });
     expect(result).toEqual({ notificationSoundEnabled: true, language: "en" });
+  });
+
+  it("getAuthConfig pide GET /v1/auth/config sin token", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ mode: "external-auth" });
+
+    await expect(getAuthConfig()).resolves.toEqual({ mode: "external-auth" });
+    expect(apiRequest).toHaveBeenCalledWith("/v1/auth/config");
+  });
+
+  it("changePassword manda PATCH /v1/auth/password con el token y las dos contraseñas", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ token: "nuevo", exp: 1 });
+
+    await changePassword("tok", "actual", "nueva");
+
+    expect(apiRequest).toHaveBeenCalledWith("/v1/auth/password", {
+      method: "PATCH",
+      token: "tok",
+      body: { currentPassword: "actual", newPassword: "nueva" },
+    });
   });
 });

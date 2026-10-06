@@ -109,6 +109,20 @@ export function requireExternalUserConfig(config: AuthConfig): ExternalUserAuthC
   return config.external-auth;
 }
 
+/// Config del modo local, para el código que solo tiene sentido con cuentas
+/// locales (firmar tokens propios, login local, administrar contraseñas).
+/// Mismo criterio que `requireExternalUserConfig`: en modo external-auth tira en vez de
+/// devolver `undefined`.
+export function requireLocalConfig(config: AuthConfig): LocalAuthConfig {
+  if (config.mode !== "local") {
+    throw new ServiceUnavailableError(
+      "Las cuentas locales no están habilitadas en esta instalación.",
+      "local_auth_not_enabled",
+    );
+  }
+  return config.local;
+}
+
 /// Secreto JWT del modo activo. Hoy lo usa solo la firma de URLs de archivos,
 /// como respaldo cuando no hay `FILE_URL_SIGNING_SECRET` (antes ese respaldo
 /// era siempre `EXTERNAL_AUTH_JWT_SECRET`, que en modo local no existe).

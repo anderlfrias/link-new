@@ -10,15 +10,38 @@ interface AdminAuditRowProps {
   item: AdminAuditLogListItem;
 }
 
+/** Acciones cuyo metadata trae `provider`. Las filas anteriores al modo local
+ * no lo tienen: "ausente" significa external-auth (backend/src/modules/audit/audit.types.ts). */
+const ACTIONS_WITH_PROVIDER = new Set(["LOGIN", "LOGIN_FAILED"]);
+
+function metadataString(metadata: unknown, key: string): string | null {
+  if (typeof metadata !== "object" || metadata === null) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
 export function AdminAuditRow({ item }: AdminAuditRowProps) {
   const { t, locale } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  const translatedAction = t(`admin.audit.actions.${item.action}`);
-  const actionLabel =
-    translatedAction !== `admin.audit.actions.${item.action}`
-      ? translatedAction
-      : getAuditActionLabel(item.action);
+  /** Traduce `key` o, si no hay traducción, muestra el valor crudo. */
+  function translateOr(key: string, fallback: string): string {
+    const translated = t(key);
+    return translated !== key ? translated : fallback;
+  }
+
+  const actionLabel = translateOr(`admin.audit.actions.${item.action}`, getAuditActionLabel(item.action));
+
+  // Proveedor, motivo y origen se muestran sin abrir el detalle: son lo primero
+  // que mira un admin en un login fallido o en un cambio de cuenta.
+  const provider = ACTIONS_WITH_PROVIDER.has(item.action) ? (metadataString(item.metadata, "provider") ?? "external-auth") : null;
+  const reason = metadataString(item.metadata, "reason");
+  const via = metadataString(item.metadata, "via");
+  const detailChips = [
+    provider && translateOr(`admin.audit.providers.${provider}`, provider),
+    reason && translateOr(`admin.audit.reasons.${reason}`, reason),
+    via && translateOr(`admin.audit.via.${via}`, via),
+  ].filter((chip): chip is string => Boolean(chip));
 
   const actorLabel = item.actor.name
     ? `${item.actor.name} · ${item.actor.email ?? ""}`
@@ -43,6 +66,14 @@ export function AdminAuditRow({ item }: AdminAuditRowProps) {
             <span className="rounded-full bg-brand-blue/10 px-2.5 py-0.5 text-xs font-semibold text-brand-blue dark:bg-brand-blue/20">
               {actionLabel}
             </span>
+            {detailChips.map((chip) => (
+              <span
+                key={chip}
+                className="rounded-full bg-black/5 px-2 py-0.5 text-[11px] text-neutral-600 dark:bg-white/10 dark:text-neutral-300"
+              >
+                {chip}
+              </span>
+            ))}
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {new Date(item.createdAt).toLocaleString(locale === "en" ? "en-US" : "es-AR")}
             </span>
