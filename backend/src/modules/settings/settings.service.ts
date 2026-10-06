@@ -1,4 +1,5 @@
 import { AppSettings, AuditAction, ConversationGroupSettings } from "@prisma/client";
+import env from "../../config/env";
 import { prisma } from "../../config/prisma";
 import * as AuditRepository from "../audit/audit.repository";
 import * as AuditService from "../audit/audit.service";
@@ -18,15 +19,31 @@ import {
 /// revisarse (invalidación cross-proceso).
 let cached: AppSettings | null = null;
 
+/// Lectura en curso de la fila singleton, compartida por todos los llamados
+/// que llegan con el cache vacío. Sin esto, al arrancar el server los workers
+/// piden la configuración a la vez y cada uno dispara su propio upsert: en una
+/// base nueva (sin la fila todavía) esos upserts compiten por insertar el mismo
+/// id, uno falla por unique constraint y el proceso se cae en el primer arranque.
+let pending: Promise<AppSettings> | null = null;
+
 export function _resetCacheForTesting(): void {
   cached = null;
+  pending = null;
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  if (!cached) {
-    cached = await SettingsRepository.getOrCreate();
+  if (cached) return cached;
+  if (!pending) {
+    pending = SettingsRepository.getOrCreate()
+      .then((settings) => {
+        cached = settings;
+        return settings;
+      })
+      .finally(() => {
+        pending = null;
+      });
   }
-  return cached;
+  return pending;
 }
 
 export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
@@ -42,7 +59,12 @@ export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
     messageDeleteForEveryoneTimeLimitMinutes: settings.messageDeleteForEveryoneTimeLimitMinutes,
     allowConversationDelete: settings.allowConversationDelete,
     allowGroupDelete: settings.allowGroupDelete,
-    allowStickersAndGifs: settings.allowStickersAndGifs,
+    // Sin GIPHY_API_KEY los endpoints de /giphy responden 503 (ver
+    // giphy.service.ts): se informa apagado para que el frontend no muestre
+    // pestañas que solo darían error — mismo efecto que si un admin hubiera
+    // desactivado la opción. GIPHY queda así deshabilitado por configuración
+    // (ver modules/giphy/README.md, "Requisitos de GIPHY").
+    allowStickersAndGifs: settings.allowStickersAndGifs && Boolean(env.GIPHY_API_KEY),
   };
 }
 

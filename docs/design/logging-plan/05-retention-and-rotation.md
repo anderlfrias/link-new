@@ -52,7 +52,7 @@ Aprovechá para fijar el nivel de log de producción en el bloque `env` del back
 ### Test
 
 Esto es configuración de infraestructura sin lógica, así que entra en la excepción de
-[AGENTS.md](../AGENTS.md) y no requiere test unitario. Sí requiere verificación manual (§5.5).
+[AGENTS.md](../../../AGENTS.md) y no requiere test unitario. Sí requiere verificación manual (§5.5).
 
 ---
 

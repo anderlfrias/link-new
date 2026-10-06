@@ -27,6 +27,7 @@ describe("LoginForm", () => {
       login: mockLogin,
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
   });
 

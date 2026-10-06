@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import env from "../config/env";
 import {
   downloadRateLimiter,
   loginIpRateLimiter,
@@ -91,6 +92,42 @@ describe("loginUserRateLimiter", () => {
 });
 
 describe("loginIpRateLimiter", () => {
+  // Las pruebas con cf-connecting-ip simulan una instalación detrás de
+  // Cloudflare (TRUST_CF_CONNECTING_IP=true, ver config/client-ip.ts).
+  const originalTrustCf = env.TRUST_CF_CONNECTING_IP;
+
+  beforeEach(() => {
+    env.TRUST_CF_CONNECTING_IP = true;
+  });
+
+  afterEach(() => {
+    env.TRUST_CF_CONNECTING_IP = originalTrustCf;
+  });
+
+  it("sin TRUST_CF_CONNECTING_IP, cambiar cf-connecting-ip en cada intento no da cupo nuevo", async () => {
+    env.TRUST_CF_CONNECTING_IP = false;
+    let fakeIp = 0;
+    const app = express();
+    app.use(express.json());
+    // req.ip fijo y propio de este test: el limiter es una instancia compartida
+    // y el test de fallback de abajo ya gasta el cupo de la IP de supertest.
+    app.use((req, _res, next) => {
+      Object.defineProperty(req, "ip", { value: "192.0.2.50" });
+      next();
+    });
+    app.use(loginIpRateLimiter);
+    app.post("/login", (_req, res) => res.status(401).json({ error: "bad credentials" }));
+
+    for (let i = 0; i < 20; i++) {
+      fakeIp += 1;
+      const res = await request(app).post("/login").set("cf-connecting-ip", `203.0.113.${fakeIp}`).send({});
+      expect(res.status).toBe(401);
+    }
+
+    const blocked = await request(app).post("/login").set("cf-connecting-ip", "203.0.113.250").send({});
+    expect(blocked.status).toBe(429);
+  });
+
   it("permite 20 intentos fallidos por IP (cf-connecting-ip) y bloquea el 21ro", async () => {
     const app = buildApp(loginIpRateLimiter);
     const ip = uniqueKey("203.0.113");

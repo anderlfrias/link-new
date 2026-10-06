@@ -82,7 +82,7 @@ Si el repo usa plantilla de PR de GitHub, agregar un ítem en
 `.github/pull_request_template.md` (crearlo si no existe):
 
 ```markdown
-- [ ] Este cambio agrega o modifica comportamiento y tiene su test unitario (ver [AGENTS.md](../AGENTS.md))
+- [ ] Este cambio agrega o modifica comportamiento y tiene su test unitario (ver [AGENTS.md](../../../AGENTS.md))
 ```
 
 Esto es un recordatorio visual, no un enforcement — el enforcement real es el piso de

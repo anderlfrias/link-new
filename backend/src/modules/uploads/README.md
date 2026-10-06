@@ -1,6 +1,6 @@
 # Uploads (Chunked / Multipart)
 
-Gestiona sesiones efímeras de subida multipart directa a S3 / SeaweedFS para archivos grandes (> 16 MiB), según la arquitectura definida en [LARGE_FILES_PLAN.md](../../../../LARGE_FILES_PLAN.md).
+Gestiona sesiones efímeras de subida multipart directa a S3 / SeaweedFS para archivos grandes (> 16 MiB), según la arquitectura definida en [LARGE_FILES_PLAN.md](../../../../docs/design/LARGE_FILES_PLAN.md).
 
 ## Principio rector
 

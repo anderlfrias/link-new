@@ -15,6 +15,27 @@ afterEach(() => {
   vi.resetModules();
 });
 
+describe("parseCorsOrigin", () => {
+  it("\"*\" -> true (cualquier origen, a propósito)", async () => {
+    const { parseCorsOrigin } = await import("./cors-origins");
+
+    expect(parseCorsOrigin("*")).toBe(true);
+    expect(parseCorsOrigin(" * ")).toBe(true);
+  });
+
+  it("descarta entradas vacías de la lista", async () => {
+    const { parseCorsOrigin } = await import("./cors-origins");
+
+    expect(parseCorsOrigin("https://a.example.com,,")).toEqual(["https://a.example.com"]);
+  });
+
+  it("una lista sin ningún origen válido no abre nada (falla cerrado)", async () => {
+    const { parseCorsOrigin } = await import("./cors-origins");
+
+    expect(parseCorsOrigin(" , ")).toEqual([]);
+  });
+});
+
 describe("corsOrigin", () => {
   it("CORS_ORIGIN sin definir -> true (abierto a cualquier origen, ver config/env.ts)", async () => {
     delete process.env.CORS_ORIGIN;

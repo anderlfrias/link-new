@@ -1,16 +1,16 @@
 import rateLimit from "express-rate-limit";
+import { getClientIp } from "../config/client-ip";
 
 const WINDOW_MS = 15 * 60 * 1000;
 const TOO_MANY_ATTEMPTS_MESSAGE = {
   error: "Hiciste demasiados intentos de inicio de sesión. Esperá unos minutos y volvé a intentar.",
 };
 
-// Cloudflare siempre manda la IP real del visitante en `CF-Connecting-IP`, y
-// ese header no se puede falsificar desde el cliente (Cloudflare lo
-// sobreescribe en su borde) — usarlo acá evita depender de adivinar cuántos
-// saltos de proxy hay entre Cloudflare y este proceso (ver `trust proxy` en
-// app.ts, que igual hace falta para que `req.ip` — el fallback de acá, y lo
-// que usa httpLogger para loguear — también sea el real).
+// La IP sale de `getClientIp` (config/client-ip.ts): `req.ip` según
+// TRUST_PROXY, o `CF-Connecting-IP` solo si TRUST_CF_CONNECTING_IP=true. Esa
+// cabecera no se puede falsificar cuando todo el tráfico pasa por Cloudflare
+// (la sobreescribe en su borde), pero sin Cloudflare delante cualquier
+// cliente la manda con la IP que quiera y se saltaba este límite.
 //
 // Dos limiters en paralelo, no uno solo: si el único límite fuera por IP,
 // todo el tráfico detrás del mismo proxy/NAT (oficina, CGNAT) comparte una
@@ -36,7 +36,7 @@ export const loginIpRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+  keyGenerator: (req) => getClientIp(req) ?? "unknown",
   message: TOO_MANY_ATTEMPTS_MESSAGE,
 });
 
@@ -76,7 +76,7 @@ export const uploadRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) =>
-    req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+    req.user?.internalUserId ?? getClientIp(req) ?? "unknown",
   message: { error: "Hiciste demasiadas subidas de archivos. Esperá unos minutos y volvé a intentar." },
 });
 
@@ -89,7 +89,7 @@ export const partUrlsRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) =>
-    req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+    req.user?.internalUserId ?? getClientIp(req) ?? "unknown",
   message: { error: "Demasiadas solicitudes de URLs de subida. Esperá unos minutos y volvé a intentar." },
 });
 
@@ -102,7 +102,7 @@ export const downloadRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) =>
-    req.user?.internalUserId ?? req.headers["cf-connecting-ip"]?.toString() ?? req.ip ?? "unknown",
+    req.user?.internalUserId ?? getClientIp(req) ?? "unknown",
   message: { error: "Demasiadas solicitudes de descarga de archivos. Esperá unos minutos y volvé a intentar." },
 });
 

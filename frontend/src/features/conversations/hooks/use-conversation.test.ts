@@ -106,6 +106,7 @@ describe("useConversation", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     vi.mocked(useSocket).mockReturnValue({

@@ -653,7 +653,7 @@ describe("MessageBubble", () => {
     const messageWithLinks: Message = {
       ...baseMessage,
       id: "msg-links",
-      content: "Consulta https://example.org, escribe a dr.perez@example.com o llama al (809) 588-4444.",
+      content: "Consulta https://example.com, escribe a dr.perez@example.com o llama al (809) 555-0100.",
     };
 
     render(
@@ -671,9 +671,9 @@ describe("MessageBubble", () => {
       />,
     );
 
-    const urlLink = screen.getByRole("link", { name: "https://example.org" });
+    const urlLink = screen.getByRole("link", { name: "https://example.com" });
     expect(urlLink).toBeInTheDocument();
-    expect(urlLink).toHaveAttribute("href", "https://example.org");
+    expect(urlLink).toHaveAttribute("href", "https://example.com");
     expect(urlLink).toHaveAttribute("target", "_blank");
     expect(urlLink).toHaveAttribute("rel", "noopener noreferrer");
 
@@ -681,9 +681,9 @@ describe("MessageBubble", () => {
     expect(emailLink).toBeInTheDocument();
     expect(emailLink).toHaveAttribute("href", "mailto:dr.perez@example.com");
 
-    const phoneLink = screen.getByRole("link", { name: "(809) 588-4444" });
+    const phoneLink = screen.getByRole("link", { name: "(809) 555-0100" });
     expect(phoneLink).toBeInTheDocument();
-    expect(phoneLink).toHaveAttribute("href", "tel:8095884444");
+    expect(phoneLink).toHaveAttribute("href", "tel:8095550100");
   });
 
   it("renderiza botón de reaccionar y permite seleccionar un emoji rápido", () => {

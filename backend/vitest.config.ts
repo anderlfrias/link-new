@@ -6,7 +6,7 @@ export default defineConfig({
     globals: true,
     include: ["src/**/*.test.ts"],
     // config/env.ts hace process.exit(1) si falta alguna de estas al importarse
-    // (ver testing-plan/00-infrastructure-setup.md) — se setean acá para que
+    // (ver docs/design/testing-plan/00-infrastructure-setup.md) — se setean acá para que
     // cualquier test que importe código del backend no mate el proceso entero.
     env: {
       DATABASE_URL: "postgresql://test:test@localhost:5432/test",

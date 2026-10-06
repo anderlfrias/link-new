@@ -3,7 +3,7 @@
 Este módulo gestiona la escritura del **audit trail de cumplimiento normativo** del sistema.
 
 > [!IMPORTANT]
-> Esta tabla (`AuditLog`, mapeada físicamente a `chat_audit_logs`) es el **audit trail de negocio/cumplimiento** y **NO** el log de aplicación. Ver [LOGGING_PLAN.md](../../../LOGGING_PLAN.md) §3 para entender las diferencias conceptuales y arquitectónicas entre ambos sistemas.
+> Esta tabla (`AuditLog`, mapeada físicamente a `chat_audit_logs`) es el **audit trail de negocio/cumplimiento** y **NO** el log de aplicación. Ver [LOGGING_PLAN.md](../../../../docs/design/LOGGING_PLAN.md) §3 para entender las diferencias conceptuales y arquitectónicas entre ambos sistemas.
 
 ## Propósito y Filosofía
 

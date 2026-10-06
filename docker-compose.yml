@@ -1,0 +1,87 @@
+# LINK con Docker: PostgreSQL + backend + frontend. Ver README.md, sección "Docker".
+#
+#   cp .env.example .env     # completar las variables obligatorias
+#   docker compose up -d --build
+#
+# Frontend: http://localhost:3000 · API: http://localhost:4000
+name: link
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-link}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env (ver .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:-link}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-link}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-link}?schema=public
+      PORT: "4000"
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      # IP real del cliente detrás de un reverse proxy. Ver .env.example y SECURITY.md.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      TRUST_CF_CONNECTING_IP: ${TRUST_CF_CONNECTING_IP:-false}
+      # Autenticación: las tres EXTERNAL_AUTH_* (modo external-auth) o LOCAL_AUTH_JWT_SECRET
+      # (modo local). Vacías cuentan como no definidas. Ver .env.example.
+      EXTERNAL_AUTH_API_URL: ${EXTERNAL_AUTH_API_URL:-}
+      APP_CODE_EXTERNAL_AUTH: ${APP_CODE_EXTERNAL_AUTH:-}
+      EXTERNAL_AUTH_JWT_SECRET: ${EXTERNAL_AUTH_JWT_SECRET:-}
+      LOCAL_AUTH_JWT_SECRET: ${LOCAL_AUTH_JWT_SECRET:-}
+      FILE_URL_SIGNING_SECRET: ${FILE_URL_SIGNING_SECRET:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?Falta VAPID_PUBLIC_KEY en .env (ver .env.example)}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?Falta VAPID_PRIVATE_KEY en .env (ver .env.example)}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+      GIPHY_API_KEY: ${GIPHY_API_KEY:-}
+      # Almacenamiento: LOCAL (volumen `uploads`) por defecto. S3 es opcional,
+      # ver README.md, sección "Almacenamiento S3".
+      STORAGE_WRITE_PROVIDER: ${STORAGE_WRITE_PROVIDER:-LOCAL}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-link-files}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - uploads:/app/backend/uploads
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Se embeben en el bundle: el navegador llama a la API con estas URLs.
+        # Si cambiás BACKEND_PORT o publicás detrás de un dominio, actualizalas
+        # y reconstruí (docker compose build frontend).
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000/api}
+        NEXT_PUBLIC_SOCKET_URL: ${PUBLIC_SOCKET_URL:-http://localhost:4000}
+    init: true
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  uploads:

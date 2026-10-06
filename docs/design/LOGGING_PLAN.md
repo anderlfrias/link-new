@@ -11,7 +11,7 @@ que corresponda en `logging-plan/`.
 No hace falta pedir permiso para ejecutar las fases: el plan mismo ya fue aprobado. Lo que sí
 requiere criterio es no dejar nada a medias (ver protocolo abajo), respetar las reglas de
 privacidad de la sección 4 (son no negociables) y **entregar tests con cada cambio** — la regla
-de [AGENTS.md](AGENTS.md) aplica a este plan sin excepciones.
+de [AGENTS.md](../../AGENTS.md) aplica a este plan sin excepciones.
 
 ---
 

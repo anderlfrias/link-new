@@ -2,6 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import { SOCKET_LIFECYCLE_EVENTS } from "./events";
 import { attachSocketModules, registerSocketModule } from "./registry";
 
+// registry.ts importa el módulo de llamadas, que importa push.service.ts, y
+// este llama a `webpush.setVapidDetails` al cargarse: con las claves VAPID
+// ficticias de vitest.config.ts tira y el archivo entero de test no llega a
+// correr. Mismo mock que call.service.test.ts; acá no se prueba push.
+vi.mock("web-push", () => ({
+  default: {
+    setVapidDetails: vi.fn(),
+    sendNotification: vi.fn(),
+  },
+  WebPushError: class extends Error {},
+}));
+
 describe("socket registry", () => {
   it("attaches connection listener to io server and executes registered modules on connection", () => {
     let connectionHandler: ((socket: any) => void) | undefined;

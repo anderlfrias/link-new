@@ -66,7 +66,7 @@ El repo documenta cada módulo en su propio `README.md` y esa es la convención 
 
 ## 6.4 `AGENTS.md` — la regla permanente
 
-[AGENTS.md](../AGENTS.md) es lo que todo agente lee primero. Hoy tiene una sección
+[AGENTS.md](../../../AGENTS.md) es lo que todo agente lee primero. Hoy tiene una sección
 "Plan activo: logging y auditoría" que describe el estado **previo** al plan (38 `console.*`, la
 fuga conocida, el audit a medias). Con el plan terminado eso pasó a ser falso:
 **reemplazá esa sección** por la regla permanente. El estilo del archivo es breve y con links, no

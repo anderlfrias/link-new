@@ -13,7 +13,7 @@ describe("public-settings.api", () => {
 
   it("getPublicSettings llama a /v1/settings/public con el token", async () => {
     const mockSettings = {
-      appName: "Organización Ejemplo",
+      appName: "Organización de ejemplo",
       vapidPublicKey: "fake-vapid",
     };
     vi.mocked(apiRequest).mockResolvedValueOnce(mockSettings);

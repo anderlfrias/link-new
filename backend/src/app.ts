@@ -1,7 +1,8 @@
-import "./config/env";
+import env from "./config/env";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import { parseTrustProxy } from "./config/client-ip";
 import { corsOrigin } from "./config/cors-origins";
 import { errorHandler } from "./middlewares/error.middleware";
 import { httpLogger } from "./middlewares/http-logger.middleware";
@@ -10,15 +11,16 @@ import routes from "./route";
 
 const app = express();
 
-// Detrás de Cloudflare (y de cualquier reverse proxy local propio entre
-// Cloudflare y este proceso) — sin esto, Express toma la conexión TCP
-// entrante como "el cliente", que siempre es el proxy más cercano, nunca el
-// visitante real. Eso rompe cualquier cosa basada en IP (rate limiting, el
-// access log de httpLogger): TODO el tráfico externo cae bajo la misma IP. `1` asume
-// un único salto de proxy delante de este proceso (típico con Cloudflare
-// Tunnel/cloudflared apuntando directo acá); si además hay un reverse proxy
-// local (nginx, etc.) entre Cloudflare y este server, subir a `2`.
-app.set("trust proxy", 1);
+// Detrás de un reverse proxy (nginx, Caddy, Cloudflare Tunnel...) — sin esto,
+// Express toma la conexión TCP entrante como "el cliente", que siempre es el
+// proxy más cercano, nunca el visitante real. Eso rompe cualquier cosa basada
+// en IP (rate limiting, el access log de httpLogger): TODO el tráfico externo
+// cae bajo la misma IP. Se configura con TRUST_PROXY (ver
+// config/client-ip.ts): el default `1` asume un único salto de proxy delante
+// de este proceso; con un proxy local además (ej. Cloudflare → nginx → acá),
+// `2`; sin ningún proxy, `false` — si no, cualquiera elige su IP mandando
+// X-Forwarded-For.
+app.set("trust proxy", parseTrustProxy(env.TRUST_PROXY));
 
 app.use(helmet());
 app.use(cors({ origin: corsOrigin }));

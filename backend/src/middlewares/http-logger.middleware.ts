@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Request } from "express";
 import pinoHttp from "pino-http";
+import { getClientIp } from "../config/client-ip";
 import { logger } from "../config/logger";
 
 /// Forma del `req` que pino-http realmente pasa a un serializer custom: ya
@@ -41,14 +42,15 @@ export function shouldIgnoreRequest(req: IncomingMessage) {
 ///
 /// `req` llega ya envuelto por el serializer estándar de pino (`id`, `method`,
 /// `url`, `headers`, ...) — el objeto Express original está en `req.raw` (ver
-/// pino-http#custom-serializers, "wrapSerializers"). `trust proxy` ya está en 1
-/// (ver app.ts), así que `req.raw.ip` es el visitante real y no la IP de Cloudflare.
+/// pino-http#custom-serializers, "wrapSerializers"). La IP sale de
+/// `getClientIp` (config/client-ip.ts), la misma que usan el rate limiting y
+/// el audit trail: el visitante real y no la del proxy.
 export function serializeRequest(req: WrappedRequest) {
   return {
     id: req.id,
     method: req.method,
     url: req.url.split("?")[0],
-    ip: (req.raw as Request)?.ip,
+    ip: req.raw ? getClientIp(req.raw as Request) : undefined,
     userAgent: req.headers["user-agent"],
   };
 }

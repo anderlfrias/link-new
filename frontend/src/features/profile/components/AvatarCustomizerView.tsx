@@ -5,6 +5,7 @@ import { IconArrowLeft, IconCheck, IconDice, IconLoader2 } from "@tabler/icons-r
 import type { AvatarStyleDef } from "@/constants/avatar-catalog";
 import { AVATAR_BACKGROUND_PALETTES } from "@/constants/avatar-catalog";
 import { renderDiceBearDataUri, renderDiceBearSvg, svgStringToPngBlob } from "@/utils/dicebear-renderer";
+import { getDiceBearAttribution } from "@/utils/dicebear-attribution";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/utils/cn";
 
@@ -64,6 +65,9 @@ export function AvatarCustomizerView({
   }
 
   const isActionDisabled = disabled || isSubmitting;
+  // Algunos estilos son de terceros bajo CC BY 4.0: la licencia exige acreditar
+  // título, autor, fuente y licencia donde se usa la obra (ver THIRD_PARTY_NOTICES.md).
+  const attribution = getDiceBearAttribution(styleDef.style);
 
   return (
     <div className="flex flex-col h-full animate-fadeIn">
@@ -130,6 +134,29 @@ export function AvatarCustomizerView({
           <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
             Tocá el dado para probar distintas expresiones y peinados
           </p>
+
+          {attribution && (
+            <p className="mt-2 max-w-xs text-center text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+              Adaptación de «
+              <a
+                href={attribution.source}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-brand-blue"
+              >
+                {attribution.title}
+              </a>
+              » de {attribution.creator}, bajo licencia{" "}
+              <a
+                href={attribution.licenseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-brand-blue"
+              >
+                {attribution.licenseName}
+              </a>
+            </p>
+          )}
         </div>
 
         {/* Selector de color de fondo */}

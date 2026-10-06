@@ -77,7 +77,8 @@ export interface MessageReactionUpdatedEvent {
   reactions: MessageReaction[];
   userId: string;
   emoji: string;
-  action: "added" | "removed";
+  /// "updated": el usuario reemplazó su reacción anterior por este emoji.
+  action: "added" | "removed" | "updated";
 }
 
 export interface PollVote {

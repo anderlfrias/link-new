@@ -46,7 +46,7 @@
 
 **Política de tests (obligatoria, sin excepciones).** Todo cambio en `backend/src/**` o
 `frontend/src/**` requiere al menos un test unitario del caso principal más los casos de
-error/edge razonables — ver [AGENTS.md](AGENTS.md). Los criterios de mocking por capa
+error/edge razonables — ver [AGENTS.md](../../AGENTS.md). Los criterios de mocking por capa
 (Prisma, socket.io, red del frontend) están en [TESTING_PLAN.md](TESTING_PLAN.md) §3:
 **reusarlos, no reinventarlos por archivo.** Cada fase de §11 lista qué testear.
 
@@ -73,12 +73,12 @@ El proyecto está diseñado para esto y hay mucho que **no** hay que construir:
 
 | # | Bloqueador | Dónde | Tipo |
 |---|---|---|---|
-| B1 | `StoredFile.size` es `Int` → PG `int4`, máx `2 147 483 647`. Un archivo de 2 GiB son `2 147 483 648` bytes: **desborda por 1 byte** | [schema.prisma](backend/prisma/schema.prisma) | Bloqueador |
-| B2 | `multer.memoryStorage()` con techo de 500 MB contra `max_memory_restart: "500M"` de PM2 → **hoy una sola subida grande reinicia el backend** | [file.route.ts](backend/src/modules/files/file.route.ts), [ecosystem.config.js](ecosystem.config.js) | **Bug activo** |
+| B1 | `StoredFile.size` es `Int` → PG `int4`, máx `2 147 483 647`. Un archivo de 2 GiB son `2 147 483 648` bytes: **desborda por 1 byte** | [schema.prisma](../../backend/prisma/schema.prisma) | Bloqueador |
+| B2 | `multer.memoryStorage()` con techo de 500 MB contra `max_memory_restart: "500M"` de PM2 → **hoy una sola subida grande reinicia el backend** | [file.route.ts](../../backend/src/modules/files/file.route.ts), [ecosystem.config.js](../../ecosystem.config.js) | **Bug activo** |
 | B3 | Cloudflare corta el body en **100 MB** (Free/Pro), 200 MB (Business). Ningún ajuste de Node lo evita | verificado | Bloqueador |
-| B4 | `StorageProvider` es **solo-buffer** (`save(buffer, path)`): sin streaming, multipart ni presign | [storage.types.ts](backend/src/storage/storage.types.ts) | Bloqueador |
-| B5 | `/uploads` se sirve con `express.static` **sin autenticación**, y el frontend arma la URL desde el `path` crudo del `StoredFile` embebido en cada mensaje | [app.ts](backend/src/app.ts), [file-url.ts](frontend/src/utils/file-url.ts) | **Agujero de seguridad** |
-| B6 | El composer se bloquea entero mientras sube un adjunto (`canSend = ... && !isUploading`) → con 2 GB el usuario no puede escribir por minutos | [MessageInput.tsx](frontend/src/features/messages/components/MessageInput.tsx) | Bloqueador de UX |
+| B4 | `StorageProvider` es **solo-buffer** (`save(buffer, path)`): sin streaming, multipart ni presign | [storage.types.ts](../../backend/src/storage/storage.types.ts) | Bloqueador |
+| B5 | `/uploads` se sirve con `express.static` **sin autenticación**, y el frontend arma la URL desde el `path` crudo del `StoredFile` embebido en cada mensaje | [app.ts](../../backend/src/app.ts), [file-url.ts](../../frontend/src/utils/file-url.ts) | **Agujero de seguridad** |
+| B6 | El composer se bloquea entero mientras sube un adjunto (`canSend = ... && !isUploading`) → con 2 GB el usuario no puede escribir por minutos | [MessageInput.tsx](../../frontend/src/features/messages/components/MessageInput.tsx) | Bloqueador de UX |
 
 ### 2.3 Las tres decisiones que definen el plan
 
@@ -111,13 +111,13 @@ SeaweedFS + Cloudflare en paralelo. Si la validación saliera mal, el trabajo de
 | Frontend | **Next.js 16.2.11**, React 19.2.4, Tailwind 4, `socket.io-client`. HTTP vía `fetch` envuelto en `apiRequest` |
 | Tests | **Vitest** en ambos workspaces + `supertest` |
 | Deploy | **PM2**, `instances: 1`, `exec_mode: "fork"`, `max_memory_restart: "500M"` |
-| Reverse proxy | **No hay nginx/Caddy/Docker en el repo.** Cloudflare se infiere de comentarios de código (`trust proxy 1`, `cf-connecting-ip`) y del dominio `https://link.example.org` |
+| Reverse proxy | **No hay nginx/Caddy/Docker en el repo.** Cloudflare se infiere de comentarios de código (`trust proxy 1`, `cf-connecting-ip`) y del dominio `https://chat.example.com` |
 | Auth | JWT HS256 emitido por **EXTERNAL_AUTH** (externo) |
 | AWS SDK | **No existe** ninguna dependencia S3 hoy |
 
 **Restricción de escalado:** socket.io no tiene adapter de Redis, así que PM2 **no puede
 pasar de 1 instancia**. Por eso los workers in-process con `setInterval` (patrón de
-[message-retention.worker.ts](backend/src/workers/message-retention.worker.ts)) siguen
+[message-retention.worker.ts](../../backend/src/workers/message-retention.worker.ts)) siguen
 siendo válidos, y por eso la contención del event loop importa (ver §4.6).
 
 ### 3.2 Flujo actual de archivos
@@ -149,7 +149,7 @@ flowchart LR
 | `GET`/`DELETE /api/v1/admin/files/:id` | `requireRoles("admin")`; el DELETE **sí** borra físicamente |
 
 Importación de stickers de Giphy: el **backend** descarga el archivo y llama
-`storage.save` ([giphy.service.ts](backend/src/modules/giphy/giphy.service.ts)) — no pasa
+`storage.save` ([giphy.service.ts](../../backend/src/modules/giphy/giphy.service.ts)) — no pasa
 por el navegador. Relevante para §4.2.
 
 ### 3.4 Modelo de datos actual
@@ -169,24 +169,24 @@ erDiagram
 
 **Punto crítico:** un `StoredFile` **no pertenece a ninguna conversación**. El
 `conversationId` de `POST /v1/files` solo decide la carpeta y **no crea relación alguna**
-(documentado a propósito en [files/README.md](backend/src/modules/files/README.md)). Por
+(documentado a propósito en [files/README.md](../../backend/src/modules/files/README.md)). Por
 eso "¿puede X descargar F?" hay que **derivarlo** — ver §5.4.
 
 ### 3.5 Frontend relacionado
 
 | Archivo | Rol y limitación |
 |---|---|
-| [use-message-attachments.ts](frontend/src/features/messages/hooks/use-message-attachments.ts) | Orquesta la subida. Solo 3 estados: `uploading` / `done` / `error` |
-| [files.api.ts](frontend/src/features/files/api/files.api.ts) | `FormData` + `apiRequest` (fetch) → **`fetch` no expone progreso de upload** |
-| [AttachmentPreviewChip.tsx](frontend/src/features/messages/components/AttachmentPreviewChip.tsx) | Spinner. Sin `%`, sin velocidad, sin cancelación de transferencia |
-| [MessageAttachments.tsx](frontend/src/features/messages/components/MessageAttachments.tsx) | Usa `buildStoredFileUrl(file.path)` → **deriva la URL del `path` crudo** |
-| [download-file.ts](frontend/src/utils/download-file.ts) | `fetch` → `blob` → `<a download>`. **Bufferea el archivo entero en memoria** |
-| [compress-image.ts](frontend/src/utils/compress-image.ts) | Comprime a WebP. **Salta GIF y SVG** — relevante para §9 |
+| [use-message-attachments.ts](../../frontend/src/features/messages/hooks/use-message-attachments.ts) | Orquesta la subida. Solo 3 estados: `uploading` / `done` / `error` |
+| [files.api.ts](../../frontend/src/features/files/api/files.api.ts) | `FormData` + `apiRequest` (fetch) → **`fetch` no expone progreso de upload** |
+| [AttachmentPreviewChip.tsx](../../frontend/src/features/messages/components/AttachmentPreviewChip.tsx) | Spinner. Sin `%`, sin velocidad, sin cancelación de transferencia |
+| [MessageAttachments.tsx](../../frontend/src/features/messages/components/MessageAttachments.tsx) | Usa `buildStoredFileUrl(file.path)` → **deriva la URL del `path` crudo** |
+| [download-file.ts](../../frontend/src/utils/download-file.ts) | `fetch` → `blob` → `<a download>`. **Bufferea el archivo entero en memoria** |
+| [compress-image.ts](../../frontend/src/utils/compress-image.ts) | Comprime a WebP. **Salta GIF y SVG** — relevante para §9 |
 
 ### 3.6 Problemas secundarios detectados (a resolver de paso)
 
 1. **Los mensajes filtran el `StoredFile` completo.** `withRelations` en
-   [message.repository.ts](backend/src/modules/messages/message.repository.ts) hace
+   [message.repository.ts](../../backend/src/modules/messages/message.repository.ts) hace
    `files: { include: { file: true } }` → el payload expone `path`, `storedName`,
    `checksum` y `provider`.
 2. **`_sum.size`** en el panel admin devolverá `BigInt` tras el cambio de tipo, y
@@ -740,13 +740,13 @@ stateDiagram-v2
 | `features/files/lib/chunked-uploader.ts` | **Nuevo.** Toda la mecánica: partición, cola con concurrencia 4, **`XMLHttpRequest` por parte** (necesario para `xhr.upload.onprogress`), backoff, re-presign en 403, pausa/cancelación por `AbortController`, hash SHA-256 incremental. **Sin React**, para poder testearlo aislado |
 | `features/files/api/uploads.api.ts` | **Nuevo.** `initiateUpload`, `getPartUrls`, `getUploadStatus`, `completeUpload`, `abortUpload` vía `apiRequest` |
 | `features/files/hooks/use-upload-progress.ts` | **Nuevo.** Velocidad (media móvil exponencial) + ETA |
-| [use-message-attachments.ts](frontend/src/features/messages/hooks/use-message-attachments.ts) | **Extender.** Elige camino por tamaño (umbral 16 MiB) y expone los estados nuevos. `fileIds` sigue filtrando `status === "done"` — **el envío del mensaje no cambia** |
-| [AttachmentPreviewChip.tsx](frontend/src/features/messages/components/AttachmentPreviewChip.tsx) | **Extender.** Barra de progreso, `%`, velocidad, ETA, botones pausa/reanudar/cancelar/reintentar |
-| [MessageInput.tsx](frontend/src/features/messages/components/MessageInput.tsx) | **Corregir** el bloqueo del composer (§8.3) |
-| [MessageAttachments.tsx](frontend/src/features/messages/components/MessageAttachments.tsx) | Usar `file.url` en lugar de `buildStoredFileUrl(file.path)` |
-| [file-url.ts](frontend/src/utils/file-url.ts) | **Eliminar `buildStoredFileUrl`.** Ya no hay `path` en el payload |
-| [download-file.ts](frontend/src/utils/download-file.ts) | **Corregir:** no bufferear a blob para archivos grandes. Navegar a la URL firmada con `Content-Disposition: attachment` → el navegador descarga con su gestor nativo (con pausa y reanudación propias) |
-| [api-client.ts](frontend/src/lib/api-client.ts) | **No se toca.** Sigue siendo solo-JSON; el uploader XHR vive aparte |
+| [use-message-attachments.ts](../../frontend/src/features/messages/hooks/use-message-attachments.ts) | **Extender.** Elige camino por tamaño (umbral 16 MiB) y expone los estados nuevos. `fileIds` sigue filtrando `status === "done"` — **el envío del mensaje no cambia** |
+| [AttachmentPreviewChip.tsx](../../frontend/src/features/messages/components/AttachmentPreviewChip.tsx) | **Extender.** Barra de progreso, `%`, velocidad, ETA, botones pausa/reanudar/cancelar/reintentar |
+| [MessageInput.tsx](../../frontend/src/features/messages/components/MessageInput.tsx) | **Corregir** el bloqueo del composer (§8.3) |
+| [MessageAttachments.tsx](../../frontend/src/features/messages/components/MessageAttachments.tsx) | Usar `file.url` en lugar de `buildStoredFileUrl(file.path)` |
+| [file-url.ts](../../frontend/src/utils/file-url.ts) | **Eliminar `buildStoredFileUrl`.** Ya no hay `path` en el payload |
+| [download-file.ts](../../frontend/src/utils/download-file.ts) | **Corregir:** no bufferear a blob para archivos grandes. Navegar a la URL firmada con `Content-Disposition: attachment` → el navegador descarga con su gestor nativo (con pausa y reanudación propias) |
+| [api-client.ts](../../frontend/src/lib/api-client.ts) | **No se toca.** Sigue siendo solo-JSON; el uploader XHR vive aparte |
 | `providers/public-settings-provider.tsx` | Consumir los límites nuevos de `getPublicSettings()` |
 
 `compress-image.ts` **no se toca**: sigue aplicando a imágenes, que caen del lado directo
@@ -867,8 +867,8 @@ Recomendación explícita de **dejarlo afuera de V1**, con razones:
 |---|---|
 | **Storage** | `weed server -s3` (≥ 4.x) en `127.0.0.1`, una unidad de systemd, identidades explícitas, **sin acceso anónimo** |
 | **Filer** | **Base PostgreSQL separada** en la instancia existente (`Postgres2`). Agregarla a la rutina de backup |
-| **Bucket** | `link-files` con **CORS**: origen `https://link.example.org`, métodos `GET, PUT, HEAD`, `ExposeHeaders: ETag`, headers `content-type` + `x-amz-*`. **Sin CORS no hay upload directo** |
-| **Hostname** | Subdominio propio (ej. `storage.link.example.org`) **proxeado por Cloudflare (nube naranja)**. Con partes de 8 MiB el límite de 100 MB no aplica y se conservan TLS, WAF y ocultamiento del origen. **No usar DNS-only** |
+| **Bucket** | `link-files` con **CORS**: origen `https://chat.example.com`, métodos `GET, PUT, HEAD`, `ExposeHeaders: ETag`, headers `content-type` + `x-amz-*`. **Sin CORS no hay upload directo** |
+| **Hostname** | Subdominio propio (ej. `storage.chat.example.com`) **proxeado por Cloudflare (nube naranja)**. Con partes de 8 MiB el límite de 100 MB no aplica y se conservan TLS, WAF y ocultamiento del origen. **No usar DNS-only** |
 | **Reverse proxy** | No hay ninguno versionado. Definir qué termina TLS y enruta ambos hostnames. **Si se agrega nginx:** `client_max_body_size 16m` (parte + margen) y **subir `trust proxy` de `1` a `2`** en `app.ts` — el propio comentario del código lo anticipa |
 | **Firewall** | Puerto del gateway S3 **cerrado desde afuera**; solo loopback |
 | **Node / Express** | `requestTimeout` ya está en 30 min. **Bajar** `ABSOLUTE_MAX_UPLOAD_BYTES` de 500 MB a ~32 MB |
@@ -1000,7 +1000,7 @@ través de Cloudflare, se descarga con `Range`, y `ListParts` sobrevive un reini
   - Presigned GET con cabecera `Range: bytes=0-1023` responde `206 Partial Content` con cabecera `Content-Range: bytes 0-1023/10485760`.
   - `AbortMultipartUpload` purga los fragmentos y `ListParts` retorna `NoSuchUpload`.
 - **Harness interactivo y suite de pruebas**: Creado en `scratch/phase0_harness.html` y servidor en `scratch/phase0_server.js` (puerto 4050) para ejecución continua.
-- **Activación en Link**: `STORAGE_WRITE_PROVIDER="S3"` y `S3_ENDPOINT="http://127.0.0.1:8333"` activados en `backend/.env`.
+- **Activación en Link**: `STORAGE_WRITE_PROVIDER="S3"` y `S3_ENDPOINT="http://<host-de-seaweedfs>:8333"` activados en `backend/.env`.
 
 ---
 

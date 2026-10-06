@@ -39,6 +39,7 @@ describe("PublicSettingsProvider and usePublicSettings", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     render(
@@ -61,6 +62,7 @@ describe("PublicSettingsProvider and usePublicSettings", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     vi.mocked(getPublicSettings).mockResolvedValueOnce(mockSettings);
@@ -87,6 +89,7 @@ describe("PublicSettingsProvider and usePublicSettings", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     vi.mocked(getPublicSettings).mockRejectedValueOnce(new Error("Network failure"));
@@ -116,6 +119,7 @@ describe("PublicSettingsProvider and usePublicSettings", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     vi.mocked(getPublicSettings).mockReturnValueOnce(slowPromise as any);

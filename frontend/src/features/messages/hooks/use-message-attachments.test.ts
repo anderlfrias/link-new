@@ -89,6 +89,7 @@ describe("useMessageAttachments", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
     vi.mocked(usePublicSettings).mockReturnValue(
       createMockPublicSettings({ maxFilesPerMessage: 5 }),

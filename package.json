@@ -2,6 +2,9 @@
   "name": "link",
   "version": "1.0.1",
   "private": true,
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
   "workspaces": [
     "backend",
     "frontend"
@@ -12,6 +15,9 @@
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "prisma:sync": "npm run prisma:sync --workspace=backend",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:migrate:dev": "npm run db:migrate:dev --workspace=backend",
+    "db:baseline": "npm run db:baseline --workspace=backend",
     "start": "concurrently \"npm:start:backend\" \"npm:start:frontend\"",
     "start:backend": "npm run start --workspace=backend",
     "start:frontend": "npm run start --workspace=frontend",

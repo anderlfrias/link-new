@@ -16,7 +16,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     // lib/env.ts hace throw si faltan estas al importarse (ver
-    // testing-plan/00-infrastructure-setup.md).
+    // docs/design/testing-plan/00-infrastructure-setup.md).
     env: {
       NEXT_PUBLIC_API_URL: "http://localhost:4000",
       NEXT_PUBLIC_SOCKET_URL: "http://localhost:4000",

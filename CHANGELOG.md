@@ -7,6 +7,48 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Añadido
+- **Docker**: `Dockerfile` de backend y frontend y `docker-compose.yml` (PostgreSQL + backend + frontend). El backend aplica las migraciones pendientes al arrancar.
+- **Migraciones de base de datos**: migración inicial `0_init` en `backend/prisma/migrations` y scripts `db:migrate`, `db:migrate:dev` y `db:baseline` (para instalaciones creadas con `prisma db push`).
+- **Autenticación EXTERNAL_AUTH opcional**: el modo se deduce del `.env` (con las tres `EXTERNAL_AUTH_*`, EXTERNAL_AUTH; sin ninguna, modo local). El inicio de sesión con cuentas locales todavía está en desarrollo.
+- **Documentación para publicar el proyecto**: README para instalar desde cero, `CONTRIBUTING.md`, `SECURITY.md`, plantillas de issues y PR, y Dependabot.
+- **CI**: tests, builds, verificación de que las migraciones coinciden con el schema y build de las imágenes Docker, con Node.js 24.
+- `THIRD_PARTY_NOTICES.md`: licencias de los diseños de avatares, tipografías, íconos y dependencias, y la lista de assets de marca.
+- El personalizador de avatar acredita título, autor, fuente y licencia de los estilos de DiceBear bajo CC BY 4.0.
+- Variables `TRUST_PROXY` y `TRUST_CF_CONNECTING_IP` para indicar qué proxies hay delante del backend (ver `SECURITY.md`).
+- Cabeceras de seguridad en todas las respuestas del frontend (`Content-Security-Policy` con `frame-ancestors`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`).
+
+### Cambiado
+- **Acción requerida en producción:** con `NODE_ENV=production`, el backend no arranca sin `CORS_ORIGIN`. Definirla con el origen del frontend (o con `*` para aceptar cualquier origen a propósito). Antes, sin definirla, la API aceptaba cualquier origen.
+- **Acción requerida detrás de Cloudflare:** el backend ya no toma la IP del cliente de `CF-Connecting-IP` salvo con `TRUST_CF_CONNECTING_IP=true`. Si hay un proxy entre Cloudflare y el backend y no se define, el rate limiting y la auditoría ven la IP del proxy. `trust proxy` sigue en `1` por defecto (`TRUST_PROXY`).
+- LINK ya no se puede embeber en un iframe de otro origen.
+- Sin `GIPHY_API_KEY`, el selector de emojis oculta las pestañas de GIFs, stickers y favoritos, igual que cuando un admin desactiva la opción. Antes mostraba pestañas que solo daban error. La integración con GIPHY queda deshabilitada por defecto: ver `backend/src/modules/giphy/README.md`, "Requisitos de GIPHY".
+- Nuevo sonido de notificación, sintetizado por el proyecto (`scripts/generate-notification-sound.js`), en lugar del archivo anterior, de origen desconocido.
+- `npm run prisma:sync` ahora aplica migraciones (`prisma migrate deploy`) en lugar de `prisma db push`. Las instalaciones existentes tienen que correr una vez `npm run db:baseline` (ver README).
+- Versión de Node.js requerida: 22.12 o superior, o 24 (`engines` y `.nvmrc`).
+- Los hosts permitidos del servidor de desarrollo del frontend se configuran con `NEXT_ALLOWED_DEV_ORIGINS`.
+- Los documentos de diseño se movieron a `docs/design/`.
+- Ejemplos, tests y nombres de colores de avatar usan datos genéricos.
+- Actualización de Next.js a 16.3.8 y de Prisma a 7.10.0.
+
+### Corregido
+- En una base de datos nueva, el primer arranque del backend se caía: los workers creaban la configuración global en paralelo y chocaban por la clave única.
+- Dos archivos de tests de socket no llegaban a ejecutarse desde que las llamadas envían notificaciones push.
+- Errores de tipos en tests del frontend que bloqueaban el build con Next.js 16.3, y el tipo de la acción de reacciones (faltaba `"updated"`).
+- `ecosystem.config.js` no encontraba el binario de Next.js cuando `next` queda instalado en la raíz del monorepo.
+- Un body JSON mal formado o demasiado grande respondía 500. Ahora responde 400 o 413.
+
+### Seguridad
+- Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
+- Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
+- Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.
+- La subida de archivos aceptaba campos de texto sin límite de cantidad, guardados en memoria.
+- La importación de GIPHY seguía redirecciones sin revalidar el host y leía el archivo entero antes de comprobar el tamaño.
+- El frontend ya no envía la cabecera `X-Powered-By`.
+
+### Eliminado
+- `graphify-out/` (salida generada localmente) del repositorio, archivos sin uso de la plantilla de Next.js y `TODO.md`.
+
 ## [1.0.1] - 2026-10-02
 
 ### Corregido

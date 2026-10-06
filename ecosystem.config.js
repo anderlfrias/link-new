@@ -9,7 +9,7 @@
 //   pm2 restart all     # tras un nuevo build
 //   pm2 save && pm2 startup   # para que sobrevivan un reinicio del server
 //
-// Rotación de logs con pm2-logrotate (ver logging-plan/05-retention-and-rotation.md):
+// Rotación de logs con pm2-logrotate (ver docs/design/logging-plan/05-retention-and-rotation.md):
 //   pm2 install pm2-logrotate
 //   pm2 set pm2-logrotate:max_size 50M && pm2 set pm2-logrotate:retain 14 && pm2 set pm2-logrotate:compress true
 //
@@ -26,6 +26,8 @@ module.exports = {
       // dotenv/config (backend/src/config/env.ts) carga backend/.env solo,
       // usando process.cwd() — por eso el `cwd` de arriba importa: si no
       // apunta a backend/, no encuentra el .env y el server no arranca.
+      // Con NODE_ENV=production, backend/.env tiene que definir CORS_ORIGIN o
+      // el server no arranca (ver SECURITY.md).
       env: {
         NODE_ENV: "production",
         LOG_LEVEL: "info",
@@ -42,15 +44,17 @@ module.exports = {
       // false a propósito: pino ya emite su propio campo `time` en ISO-8601
       // (ver src/config/logger.ts). Con `time: true`, PM2 prefija un timestamp
       // a cada línea y rompe el JSON — dejaría el log ilegible para jq y para
-      // cualquier agregador. Ver logging-plan/05-retention-and-rotation.md.
+      // cualquier agregador. Ver docs/design/logging-plan/05-retention-and-rotation.md.
       time: false,
     },
     {
       name: "link-frontend",
       cwd: "./frontend",
       // Bin de Next directo (equivalente a "next start") — mismo motivo que
-      // el backend: un proceso menos que "npm run start".
-      script: "node_modules/next/dist/bin/next",
+      // el backend: un proceso menos que "npm run start". Se resuelve desde
+      // frontend/ porque con npm workspaces `next` suele quedar instalado en
+      // el node_modules de la raíz, no en frontend/node_modules.
+      script: require.resolve("next/dist/bin/next", { paths: [`${__dirname}/frontend`] }),
       args: "start",
       // Los NEXT_PUBLIC_* (frontend/.env.local) quedan embebidos en el bundle
       // al momento del build — cambiarlos acá o reiniciar con PM2 no alcanza,
@@ -68,7 +72,7 @@ module.exports = {
       max_memory_restart: "500M",
       // Conservado en true a propósito: Next.js no emite JSON estructurado,
       // sus líneas son texto libre y ahí el timestamp de PM2 es lo único que
-      // las ubica en el tiempo. Ver logging-plan/05-retention-and-rotation.md.
+      // las ubica en el tiempo. Ver docs/design/logging-plan/05-retention-and-rotation.md.
       time: true,
     },
   ],

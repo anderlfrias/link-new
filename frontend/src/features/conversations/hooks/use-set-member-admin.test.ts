@@ -24,6 +24,7 @@ describe("useSetMemberAdmin", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
   });
 
@@ -79,6 +80,7 @@ describe("useSetMemberAdmin", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const { result } = renderHook(() => useSetMemberAdmin("conv-1"));

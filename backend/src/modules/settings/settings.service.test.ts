@@ -5,7 +5,7 @@ import {
   FileTypeRestrictionMode,
   GroupPermissionLevel,
 } from "@prisma/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as SettingsRepository from "./settings.repository";
 
 vi.mock("./settings.repository", () => ({
@@ -28,6 +28,7 @@ vi.mock("../audit/audit.service", () => ({
   buildAuditData: vi.fn((params) => ({ ...params, built: true })),
 }));
 
+import env from "../../config/env";
 import { prisma } from "../../config/prisma";
 import * as AuditRepository from "../audit/audit.repository";
 import * as AuditService from "../audit/audit.service";
@@ -100,9 +101,67 @@ describe("settings.service", () => {
       expect(SettingsRepository.getOrCreate).toHaveBeenCalledTimes(1);
       expect(secondCall).toBe(defaultMockSettings);
     });
+
+    // Regresión: en una base nueva, los workers piden la configuración a la vez
+    // al arrancar; con un upsert por llamado, dos competían por insertar la fila
+    // singleton y el proceso se caía por unique constraint en el primer arranque.
+    it("concurrent calls on a cold cache share a single getOrCreate", async () => {
+      let release: (value: typeof defaultMockSettings) => void = () => {};
+      vi.mocked(SettingsRepository.getOrCreate).mockReturnValue(
+        new Promise((resolve) => {
+          release = resolve;
+        }) as any,
+      );
+
+      const calls = [getSettings(), getSettings(), getSettings()];
+      release(defaultMockSettings);
+      const results = await Promise.all(calls);
+
+      expect(SettingsRepository.getOrCreate).toHaveBeenCalledTimes(1);
+      expect(results).toEqual([defaultMockSettings, defaultMockSettings, defaultMockSettings]);
+    });
+
+    it("when getOrCreate fails, every waiting caller gets the error and the next call retries", async () => {
+      vi.mocked(SettingsRepository.getOrCreate)
+        .mockRejectedValueOnce(new Error("db down"))
+        .mockResolvedValueOnce(defaultMockSettings);
+
+      await expect(Promise.all([getSettings(), getSettings()])).rejects.toThrow("db down");
+      expect(SettingsRepository.getOrCreate).toHaveBeenCalledTimes(1);
+
+      await expect(getSettings()).resolves.toBe(defaultMockSettings);
+      expect(SettingsRepository.getOrCreate).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("getPublicSettings", () => {
+    const originalGiphyApiKey = env.GIPHY_API_KEY;
+
+    beforeEach(() => {
+      env.GIPHY_API_KEY = "test-giphy-api-key";
+    });
+
+    afterEach(() => {
+      env.GIPHY_API_KEY = originalGiphyApiKey;
+    });
+
+    it("reports GIFs and stickers as disabled when GIPHY_API_KEY is not configured, even if the admin toggle is on", async () => {
+      env.GIPHY_API_KEY = undefined;
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(defaultMockSettings);
+
+      const publicSettings = await getPublicSettings();
+
+      expect(publicSettings.allowStickersAndGifs).toBe(false);
+    });
+
+    it("reports GIFs and stickers as disabled when the admin turned them off, even with GIPHY_API_KEY configured", async () => {
+      vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({ ...defaultMockSettings, allowStickersAndGifs: false });
+
+      const publicSettings = await getPublicSettings();
+
+      expect(publicSettings.allowStickersAndGifs).toBe(false);
+    });
+
     it("exposes only the allowed public DTO fields and omits administrative/sensitive fields", async () => {
       vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue(defaultMockSettings);
 

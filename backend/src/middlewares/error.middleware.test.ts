@@ -1,4 +1,6 @@
+import express from "express";
 import { MulterError } from "multer";
+import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotFoundError, ServiceUnavailableError } from "../utils/errors";
 import { createMockRequest, createMockResponse } from "../test/http-mocks";
@@ -78,5 +80,48 @@ describe("errorHandler", () => {
     const [[jsonArg]] = vi.mocked(res.json).mock.calls;
     expect(JSON.stringify(jsonArg)).not.toContain("postgres");
     expect(logSpy.error).toHaveBeenCalledWith({ err: error }, "unhandled error");
+  });
+
+  // body-parser real (no un mock del error): así el test cubre la forma exacta
+  // que tienen sus errores, que es lo que reconoce isClientHttpError.
+  function buildJsonApp(limit?: string) {
+    const app = express();
+    app.use(express.json(limit ? { limit } : undefined));
+    app.post("/login", (_req, res) => res.status(204).end());
+    app.use(errorHandler);
+    return app;
+  }
+
+  it("JSON mal formado (body-parser) -> 400, sin loguear el body crudo", async () => {
+    const res = await request(buildJsonApp())
+      .post("/login")
+      .set("Content-Type", "application/json")
+      .send('{"user":"ana","password":"secreto-123"');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Invalid request body" });
+    expect(logSpy.warn).toHaveBeenCalledWith({ statusCode: 400, error: "entity.parse.failed" }, "request rejected");
+    expect(logSpy.error).not.toHaveBeenCalled();
+    expect(JSON.stringify(logSpy.warn.mock.calls)).not.toContain("secreto-123");
+  });
+
+  it("body más grande que el límite (body-parser) -> 413", async () => {
+    const res = await request(buildJsonApp("10b"))
+      .post("/login")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ user: "ana", password: "una-contraseña-larga" }));
+
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({ error: "Request body too large" });
+    expect(logSpy.error).not.toHaveBeenCalled();
+  });
+
+  it("un error con status 4xx pero sin expose: true sigue siendo un 500", () => {
+    const res = createMockResponse();
+    const error = Object.assign(new Error("interno"), { status: 400 });
+
+    errorHandler(error, createMockRequest(), res, vi.fn());
+
+    expect(res.status).toHaveBeenCalledWith(500);
   });
 });

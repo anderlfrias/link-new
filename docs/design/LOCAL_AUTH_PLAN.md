@@ -16,7 +16,7 @@ una fase por sesión, sin coordinación previa.
 
 ## 1. Cómo retomar este plan
 
-1. Leé este archivo completo. Después [AGENTS.md](AGENTS.md) (tests obligatorios, nada de `console.*`)
+1. Leé este archivo completo. Después [AGENTS.md](../../AGENTS.md) (tests obligatorios, nada de `console.*`)
    y [LOGGING_PLAN.md](LOGGING_PLAN.md) §3 y §4 (logs vs. auditoría, reglas de privacidad): este plan
    toca contraseñas y tokens, así que §4 aplica en **todas** las fases.
 2. Elegí la **primera fase sin ✅** de la [sección 9](#9-fases). No arranques una fase si la anterior
@@ -662,7 +662,7 @@ de otros módulos, mockear `config/env` (patrón de `storage/index.test.ts`) o u
 
 ### Fase 9 — Frontend: login, cambio de contraseña y perfil
 
-Antes de escribir UI, leé [frontend/AGENTS.md](frontend/AGENTS.md): la versión de Next.js tiene cambios
+Antes de escribir UI, leé [frontend/AGENTS.md](../../frontend/AGENTS.md): la versión de Next.js tiene cambios
 que rompen respecto de lo habitual.
 
 - [ ] `auth.api.ts`: `getAuthConfig` y `changePassword`. `auth.types.ts`: `authProvider`,
@@ -738,7 +738,7 @@ que rompen respecto de lo habitual.
       el modo.
 - [ ] `LOGGING_PLAN.md` §4.2: sumar `LOCAL_AUTH_JWT_SECRET` a la lista de secretos que nunca se loguean.
 - [ ] `TESTING_PLAN.md` §4: un puntero a las invariantes de §8 de este plan.
-- [ ] `CHANGELOG.md` y versión según [VERSIONING.md](VERSIONING.md) (funcionalidad nueva → minor).
+- [ ] `CHANGELOG.md` y versión según [VERSIONING.md](../../VERSIONING.md) (funcionalidad nueva → minor).
 - [ ] Repaso final: grep de "EXTERNAL_AUTH" en documentación y comentarios. Frases como "el backend nunca emite
       su propio token", "este módulo no administra usuarios ni contraseñas" o "los roles vienen
       exclusivamente del JWT de EXTERNAL_AUTH" pasan a ser ciertas solo en modo `external-auth`, y hay que decirlo.

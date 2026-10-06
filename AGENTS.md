@@ -1,4 +1,7 @@
-# chat-interno — instrucciones para agentes de IA
+# LINK — instrucciones para agentes de IA
+
+> Para personas: la guía de contribución está en [CONTRIBUTING.md](CONTRIBUTING.md). Las reglas de
+> este archivo aplican igual a cualquier contribución.
 
 ## Regla: los tests unitarios son obligatorios para código nuevo
 
@@ -15,7 +18,7 @@ comportamiento.
 
 El detalle completo de esta política, las decisiones técnicas (qué runner, cómo se
 mockea cada capa, dónde van los tests) y el plan por fases para cubrir todo el código
-que ya existe están en **[TESTING_PLAN.md](TESTING_PLAN.md)**. Si vas a tocar
+que ya existe están en **[docs/design/TESTING_PLAN.md](docs/design/TESTING_PLAN.md)**. Si vas a tocar
 `backend/` o `frontend/`, leelo antes de escribir el test — ahí está el criterio de
 mocking de cada capa (Prisma, EXTERNAL_AUTH, socket.io, etc.) para no reinventarlo por archivo.
 
@@ -28,10 +31,6 @@ npm run test --workspace=frontend
 
 O ambos desde la raíz: `npm test`.
 
-> Estos comandos existen recién después de ejecutar la Fase 0 de
-> [TESTING_PLAN.md](TESTING_PLAN.md). Si `npm test` todavía no existe en este repo,
-> esa es la primera tarea: [testing-plan/00-infrastructure-setup.md](testing-plan/00-infrastructure-setup.md).
-
 ## Regla: nada de `console.*` en el backend
 
 `backend/src/**` loguea a través de `src/config/logger.ts` (pino) y del contexto de
@@ -40,7 +39,7 @@ O ambos desde la raíz: `npm test`.
 `src/config/env.ts`.
 
 Además: **los logs de aplicación y el audit trail son dos cosas distintas** y no se sustituyen
-entre sí. Antes de loguear o auditar algo nuevo, leé [LOGGING_PLAN.md](LOGGING_PLAN.md) §3 y §4
+entre sí. Antes de loguear o auditar algo nuevo, leé [docs/design/LOGGING_PLAN.md](docs/design/LOGGING_PLAN.md) §3 y §4
 — §4 son las reglas de privacidad (nunca contenido de mensajes, nunca tokens) y no son negociables.
 Para agregar una acción al audit trail, ver `backend/src/modules/audit/README.md`.
 
@@ -52,3 +51,7 @@ Para agregar una acción al audit trail, ver `backend/src/modules/audit/README.m
 - Los comentarios en el código (backend y frontend) están en español y suelen explicar
   el *por qué* de una decisión no obvia (ver `backend/API.md` y los `README.md` de
   cada módulo bajo `backend/src/modules/`). Leerlos antes de asumir comportamiento.
+- Cuando un comentario cita un documento como `LOGGING_PLAN.md` o `LARGE_FILES_PLAN.md`,
+  está en [docs/design/](docs/design/): son los documentos de diseño de cada iniciativa.
+- Cambios en `backend/prisma/schema.prisma` van siempre con su migración
+  (`npm run db:migrate:dev`); la CI falla si el schema y las migraciones no coinciden.

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: Tests y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # El postinstall del backend genera el cliente de Prisma (Prisma 7 ya no
+      # lo hace solo al instalar).
+      - run: npm ci
+      - name: Tests backend
+        run: npm run test:coverage --workspace=backend
+      - name: Tests frontend
+        run: npm run test:coverage --workspace=frontend
+      - name: Build backend
+        run: npm run build --workspace=backend
+      - name: Build frontend
+        run: npm run build --workspace=frontend
+        env:
+          # NEXT_PUBLIC_* se embeben en el build; acá solo hace falta que existan.
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api
+          NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+
+  migrations:
+    name: Migraciones al día con el schema
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: link
+          POSTGRES_PASSWORD: link
+          POSTGRES_DB: link
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U link -d link"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://link:link@localhost:5432/link?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Aplicar migraciones sobre una base vacía
+        run: npm run db:migrate --workspace=backend
+      # Falla si schema.prisma cambió sin su migración (npm run db:migrate:dev).
+      - name: Verificar que no queda diferencia con schema.prisma
+        working-directory: backend
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+  docker:
+    name: Imágenes Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend
+        run: docker build -f backend/Dockerfile -t link-backend:ci .
+      - name: Build frontend
+        run: docker build -f frontend/Dockerfile -t link-frontend:ci .

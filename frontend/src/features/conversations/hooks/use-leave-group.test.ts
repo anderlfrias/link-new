@@ -27,6 +27,7 @@ describe("useLeaveGroup", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
   });
 
@@ -70,6 +71,7 @@ describe("useLeaveGroup", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const { result } = renderHook(() => useLeaveGroup());

@@ -109,3 +109,49 @@ describe("config/env — modo de autenticación", () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("EXTERNAL_AUTH_API_URL must be a valid URL"));
   });
 });
+
+describe("config/env — CORS_ORIGIN según NODE_ENV", () => {
+  it("con NODE_ENV=production y sin CORS_ORIGIN -> imprime el motivo y corta el arranque", async () => {
+    stubAuthEnv(EXTERNAL_AUTH_VARS);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CORS_ORIGIN", "");
+    const { exitSpy, consoleErrorSpy } = spyOnFatalExit();
+
+    await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("CORS_ORIGIN is required when NODE_ENV=production"),
+    );
+  });
+
+  it("con NODE_ENV=production y CORS_ORIGIN definida -> arranca", async () => {
+    stubAuthEnv(EXTERNAL_AUTH_VARS);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CORS_ORIGIN", "https://chat.example.com");
+
+    const { default: env } = await importFreshEnv();
+
+    expect(env.CORS_ORIGIN).toBe("https://chat.example.com");
+  });
+
+  it("con NODE_ENV=production y CORS_ORIGIN=\"*\" -> arranca (abierto a propósito)", async () => {
+    stubAuthEnv(EXTERNAL_AUTH_VARS);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("CORS_ORIGIN", "*");
+
+    const { default: env } = await importFreshEnv();
+
+    expect(env.CORS_ORIGIN).toBe("*");
+  });
+
+  it("fuera de producción, sin CORS_ORIGIN -> arranca igual (cómodo en dev/LAN)", async () => {
+    stubAuthEnv(EXTERNAL_AUTH_VARS);
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("CORS_ORIGIN", "");
+
+    const { default: env } = await importFreshEnv();
+
+    expect(env.CORS_ORIGIN).toBeUndefined();
+  });
+});

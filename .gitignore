@@ -8,15 +8,21 @@ backend/dist/
 frontend/.next/
 frontend/out/
 
-# Environment variables
+# Environment variables: ningún .env real entra al repo, en ningún nivel.
+# Solo se versionan los .env.example.
 .env
-.env.local
-backend/.env
+.env.*
+!.env.example
+
+# Claves y certificados
+*.pem
+*.key
 
 # Prisma generated client
 backend/generated/
 
 # Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -31,3 +37,7 @@ backend/uploads/*
 # Test coverage output
 backend/coverage/
 frontend/coverage/
+
+# Salida local de graphify (grafo de conocimiento del código): se genera en
+# cada máquina y guarda rutas absolutas locales.
+graphify-out/

@@ -87,6 +87,10 @@ describe("MessageInput", () => {
     resumableMismatchError: unknown;
     resumeSessionWithFile: ReturnType<typeof vi.fn>;
     discardResumableSession: ReturnType<typeof vi.fn>;
+    pauseAttachment: ReturnType<typeof vi.fn>;
+    resumeAttachment: ReturnType<typeof vi.fn>;
+    retryAttachment: ReturnType<typeof vi.fn>;
+    removeSentAttachments: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -117,6 +121,10 @@ describe("MessageInput", () => {
       resumableMismatchError: null,
       resumeSessionWithFile: vi.fn(),
       discardResumableSession: vi.fn(),
+      pauseAttachment: vi.fn(),
+      resumeAttachment: vi.fn(),
+      retryAttachment: vi.fn(),
+      removeSentAttachments: vi.fn(),
     };
   });
 
@@ -792,7 +800,7 @@ describe("MessageInput", () => {
         onSend={vi.fn()}
         onTyping={vi.fn()}
         onStopTyping={vi.fn()}
-        attachmentsState={defaultAttachmentsState}
+        attachmentsState={defaultAttachmentsState as any}
         replyTo={null}
         onCancelReply={vi.fn()}
         currentUserId="current-u"
@@ -811,7 +819,7 @@ describe("MessageInput", () => {
         onSend={vi.fn()}
         onTyping={vi.fn()}
         onStopTyping={vi.fn()}
-        attachmentsState={defaultAttachmentsState}
+        attachmentsState={defaultAttachmentsState as any}
         replyTo={null}
         onCancelReply={vi.fn()}
         currentUserId="current-u"
@@ -830,7 +838,7 @@ describe("MessageInput", () => {
         onSend={vi.fn()}
         onTyping={vi.fn()}
         onStopTyping={vi.fn()}
-        attachmentsState={defaultAttachmentsState}
+        attachmentsState={defaultAttachmentsState as any}
         replyTo={null}
         onCancelReply={vi.fn()}
         currentUserId="current-u"

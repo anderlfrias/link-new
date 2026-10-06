@@ -168,8 +168,8 @@ export interface AvatarColorOption {
 
 export const AVATAR_BACKGROUND_PALETTES: AvatarColorOption[] = [
   { name: "Sin fondo", hex: "transparent" },
-  { name: "Azul Corporativo", hex: "0068d8" },
-  { name: "Teal Corporativo", hex: "00a8a8" },
+  { name: "Azul Link", hex: "0068d8" },
+  { name: "Teal Link", hex: "00a8a8" },
   { name: "Celeste Suave", hex: "e0f2fe", isLight: true },
   { name: "Menta Fresco", hex: "d1fae5", isLight: true },
   { name: "Esmeralda", hex: "10b981" },

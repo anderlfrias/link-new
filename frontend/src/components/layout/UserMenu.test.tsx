@@ -31,6 +31,7 @@ describe("UserMenu", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const { container } = render(
@@ -58,6 +59,7 @@ describe("UserMenu", () => {
       login: vi.fn(),
       logout,
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const user = userEvent.setup();
@@ -96,6 +98,7 @@ describe("UserMenu", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const user = userEvent.setup();
@@ -117,6 +120,7 @@ describe("UserMenu", () => {
       login: vi.fn(),
       logout,
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const user = userEvent.setup();
@@ -136,6 +140,7 @@ describe("UserMenu", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const user = userEvent.setup();

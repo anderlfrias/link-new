@@ -9,11 +9,11 @@ import {
 describe("linkify utils", () => {
   describe("isValidPhoneNumber", () => {
     it("valida números telefónicos válidos de República Dominicana e internacionales", () => {
-      expect(isValidPhoneNumber("(809) 588-4444")).toBe(true);
-      expect(isValidPhoneNumber("809-588-4444")).toBe(true);
+      expect(isValidPhoneNumber("(809) 555-0100")).toBe(true);
+      expect(isValidPhoneNumber("809-555-0100")).toBe(true);
       expect(isValidPhoneNumber("829.123.4567")).toBe(true);
       expect(isValidPhoneNumber("849 555 1234")).toBe(true);
-      expect(isValidPhoneNumber("8095884444")).toBe(true);
+      expect(isValidPhoneNumber("8095550100")).toBe(true);
       expect(isValidPhoneNumber("+1 (809) 555-1234")).toBe(true);
       expect(isValidPhoneNumber("+34 612 34 56 78")).toBe(true);
       expect(isValidPhoneNumber("555-1234")).toBe(true);
@@ -35,17 +35,17 @@ describe("linkify utils", () => {
 
   describe("buildTelHref & buildUrlHref", () => {
     it("formatea el href para teléfonos correctamente", () => {
-      expect(buildTelHref("(809) 588-4444")).toBe("tel:8095884444");
+      expect(buildTelHref("(809) 555-0100")).toBe("tel:8095550100");
       expect(buildTelHref("+1 (809) 555-1234")).toBe("tel:+18095551234");
       expect(buildTelHref("+34 612 345 678")).toBe("tel:+34612345678");
       expect(buildTelHref("809-555-1234")).toBe("tel:8095551234");
     });
 
     it("formatea el href para URLs asegurando el protocolo", () => {
-      expect(buildUrlHref("https://example.org")).toBe("https://example.org");
+      expect(buildUrlHref("https://example.com")).toBe("https://example.com");
       expect(buildUrlHref("http://ejemplo.com")).toBe("http://ejemplo.com");
       expect(buildUrlHref("www.google.com")).toBe("https://www.google.com");
-      expect(buildUrlHref("example.org/portal")).toBe("https://example.org/portal");
+      expect(buildUrlHref("example.com/portal")).toBe("https://example.com/portal");
     });
   });
 
@@ -61,36 +61,36 @@ describe("linkify utils", () => {
     });
 
     it("detecta URLs completas con protocolo y mantiene parámetros", () => {
-      const text = "Ver informe en https://example.org/paciente?id=123&ficha=456#lab";
+      const text = "Ver informe en https://example.com/paciente?id=123&ficha=456#lab";
       const tokens = tokenizeMessageContent(text);
       expect(tokens).toEqual([
         { type: "text", value: "Ver informe en " },
         {
           type: "url",
-          value: "https://example.org/paciente?id=123&ficha=456#lab",
-          href: "https://example.org/paciente?id=123&ficha=456#lab",
+          value: "https://example.com/paciente?id=123&ficha=456#lab",
+          href: "https://example.com/paciente?id=123&ficha=456#lab",
         },
       ]);
     });
 
     it("detecta URLs con www y dominios conocidos sin protocolo", () => {
-      const text = "Entra a www.example.org o revisa github.com/anderlfrias";
+      const text = "Entra a www.example.com o revisa github.com/example";
       const tokens = tokenizeMessageContent(text);
       expect(tokens).toHaveLength(4);
       expect(tokens[1]).toEqual({
         type: "url",
-        value: "www.example.org",
-        href: "https://www.example.org",
+        value: "www.example.com",
+        href: "https://www.example.com",
       });
       expect(tokens[3]).toEqual({
         type: "url",
-        value: "github.com/anderlfrias",
-        href: "https://github.com/anderlfrias",
+        value: "github.com/example",
+        href: "https://github.com/example",
       });
     });
 
     it("limpia signos de puntuación al final de las URLs", () => {
-      const text = "¿Ya visitaste https://google.com? (ver https://example.org).";
+      const text = "¿Ya visitaste https://google.com? (ver https://example.com).";
       const tokens = tokenizeMessageContent(text);
       expect(tokens[1]).toEqual({
         type: "url",
@@ -100,20 +100,20 @@ describe("linkify utils", () => {
       expect(tokens[2].value).toBe("? (ver ");
       expect(tokens[3]).toEqual({
         type: "url",
-        value: "https://example.org",
-        href: "https://example.org",
+        value: "https://example.com",
+        href: "https://example.com",
       });
       expect(tokens[4].value).toBe(").");
     });
 
     it("detecta correos electrónicos y limpia puntuación de cierre", () => {
-      const text = "Escribe a contacto@example.org o a dr.perez@example.co.uk.";
+      const text = "Escribe a contacto@example.com o a dr.perez@example.co.uk.";
       const tokens = tokenizeMessageContent(text);
       expect(tokens).toHaveLength(5);
       expect(tokens[1]).toEqual({
         type: "email",
-        value: "contacto@example.org",
-        href: "mailto:contacto@example.org",
+        value: "contacto@example.com",
+        href: "mailto:contacto@example.com",
       });
       expect(tokens[3]).toEqual({
         type: "email",
@@ -127,13 +127,13 @@ describe("linkify utils", () => {
     });
 
     it("detecta números de teléfono en múltiples formatos y limpia puntuación", () => {
-      const text = "Llama al (809) 588-4444 o al móvil +1 829 555 1234.";
+      const text = "Llama al (809) 555-0100 o al móvil +1 829 555 1234.";
       const tokens = tokenizeMessageContent(text);
       expect(tokens).toHaveLength(5);
       expect(tokens[1]).toEqual({
         type: "phone",
-        value: "(809) 588-4444",
-        href: "tel:8095884444",
+        value: "(809) 555-0100",
+        href: "tel:8095550100",
       });
       expect(tokens[2].value).toBe(" o al móvil ");
       expect(tokens[3]).toEqual({
@@ -146,27 +146,27 @@ describe("linkify utils", () => {
 
     it("combina URLs, correos y teléfonos en un mismo mensaje respetando el orden exacto", () => {
       const text =
-        "Hola, visita https://example.org/portal, llama al (809) 588-4444 o envía correo a soporte@example.org para asistencia.";
+        "Hola, visita https://example.com/portal, llama al (809) 555-0100 o envía correo a soporte@example.com para asistencia.";
       const tokens = tokenizeMessageContent(text);
 
       expect(tokens).toHaveLength(7);
       expect(tokens[0]).toEqual({ type: "text", value: "Hola, visita " });
       expect(tokens[1]).toEqual({
         type: "url",
-        value: "https://example.org/portal",
-        href: "https://example.org/portal",
+        value: "https://example.com/portal",
+        href: "https://example.com/portal",
       });
       expect(tokens[2]).toEqual({ type: "text", value: ", llama al " });
       expect(tokens[3]).toEqual({
         type: "phone",
-        value: "(809) 588-4444",
-        href: "tel:8095884444",
+        value: "(809) 555-0100",
+        href: "tel:8095550100",
       });
       expect(tokens[4]).toEqual({ type: "text", value: " o envía correo a " });
       expect(tokens[5]).toEqual({
         type: "email",
-        value: "soporte@example.org",
-        href: "mailto:soporte@example.org",
+        value: "soporte@example.com",
+        href: "mailto:soporte@example.com",
       });
       expect(tokens[6]).toEqual({ type: "text", value: " para asistencia." });
     });
@@ -178,14 +178,14 @@ describe("linkify utils", () => {
     });
 
     it("detecta menciones (@usuario) y no las confunde con correos electrónicos", () => {
-      const text = "Hola @carlos, envía el informe a carlos@example.org o avisa a @maria.perez.";
+      const text = "Hola @carlos, envía el informe a carlos@example.com o avisa a @maria.perez.";
       const tokens = tokenizeMessageContent(text);
 
       expect(tokens).toEqual([
         { type: "text", value: "Hola " },
         { type: "mention", value: "@carlos" },
         { type: "text", value: ", envía el informe a " },
-        { type: "email", value: "carlos@example.org", href: "mailto:carlos@example.org" },
+        { type: "email", value: "carlos@example.com", href: "mailto:carlos@example.com" },
         { type: "text", value: " o avisa a " },
         { type: "mention", value: "@maria.perez" },
         { type: "text", value: "." },

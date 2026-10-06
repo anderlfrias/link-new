@@ -51,6 +51,16 @@ describe("buildLogger", () => {
     expect((lines[0].body as { password: string }).password).toBe("[Redacted]");
   });
 
+  it("redacta el body crudo que body-parser adjunta a sus errores (err.body)", () => {
+    const { logger, lines } = captureLogger();
+    const err = Object.assign(new Error("Unexpected end of JSON input"), { body: '{"password":"secreto-123"' });
+
+    logger.error({ err }, "unhandled error");
+
+    expect(JSON.stringify(lines[0])).not.toContain("secreto-123");
+    expect((lines[0].err as { body: string }).body).toBe("[Redacted]");
+  });
+
   it("respeta el nivel configurado", () => {
     const { logger, lines } = captureLogger({ level: "warn" });
     logger.info("esto no debería salir");

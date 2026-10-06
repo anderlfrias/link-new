@@ -1,3 +1,4 @@
+import { getClientIp } from "../config/client-ip";
 import { logger } from "../config/logger";
 import { runWithContext, type RequestMeta } from "../config/request-context";
 import { AppSocket, AuthenticatedSocketUser, SocketContextData, SocketMiddleware } from "./types";
@@ -10,9 +11,11 @@ export const attachSocketContext: SocketMiddleware = (socket, next) => {
   const user = socket.data.user as AuthenticatedSocketUser | undefined;
   socket.data.logger = logger.child({ socketId: socket.id, userId: user?.internalUserId });
   socket.data.meta = {
-    // El equivalente de req.ip para un socket. `handshake.address` respeta el
-    // mismo trust proxy que Express (ver gateway.ts / app.ts).
-    ip: socket.handshake.address,
+    // El equivalente de req.ip para un socket. Ojo: `handshake.address` es
+    // la dirección de la conexión TCP y NO aplica TRUST_PROXY — detrás de un
+    // reverse proxy es la del proxy. CF-Connecting-IP sí se respeta, con la
+    // misma regla que en HTTP (ver config/client-ip.ts).
+    ip: getClientIp({ headers: socket.handshake.headers, ip: socket.handshake.address }),
     userAgent: socket.handshake.headers["user-agent"],
     actorUserId: user?.internalUserId,
     actorEmail: user?.email,

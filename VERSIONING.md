@@ -164,15 +164,15 @@ git push origin main --follow-tags
 
 ---
 
-### Paso 7: Despliegue en Servidor de Producción
-En el servidor donde corre el servicio con PM2:
+### Paso 7: Actualizar una instalación
+En una instalación con PM2 (`ecosystem.config.js`):
 
 ```bash
 # 1. Obtener la última versión y tags
 git pull origin main
 
 # 2. Instalar dependencias si hubo cambios
-npm install
+npm ci
 
 # 3. Aplicar migraciones si hubo cambios en Prisma
 npm run prisma:sync
@@ -186,6 +186,14 @@ pm2 reload ecosystem.config.js
 # 6. Verificar el estado de los procesos y logs
 pm2 status
 pm2 logs --lines 50
+```
+
+En una instalación con Docker (`docker-compose.yml`), el backend aplica las migraciones al arrancar:
+
+```bash
+git pull origin main
+docker compose up -d --build
+docker compose ps
 ```
 
 ---
@@ -232,6 +240,6 @@ git push origin :refs/tags/vX.Y.Z
 
 Si una versión recién desplegada introduce un fallo crítico en producción:
 1. Revertir temporalmente al tag estable previo: `git checkout v<ANTERIOR>`.
-2. Reconstruir y reiniciar: `npm run build && pm2 reload ecosystem.config.js`.
+2. Reconstruir y reiniciar: `npm run build && pm2 reload ecosystem.config.js` (con Docker, `docker compose up -d --build`). Si la versión nueva aplicó migraciones, revisar antes si la anterior funciona con ese schema.
 3. Desarrollar la corrección en una rama de hotfix.
 4. Generar una nueva versión `PATCH` documentando el incidente y solución en `CHANGELOG.md`.

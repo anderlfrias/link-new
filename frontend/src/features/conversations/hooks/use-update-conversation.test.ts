@@ -24,6 +24,7 @@ describe("useUpdateConversation", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
   });
 
@@ -64,6 +65,7 @@ describe("useUpdateConversation", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const { result } = renderHook(() => useUpdateConversation("conv-1"));

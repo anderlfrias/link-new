@@ -262,10 +262,11 @@ describe("Admin i18n support (English locale)", () => {
       totalCount: 0,
       totalSize: 0,
       refetch: vi.fn(),
+      removeFile: vi.fn(),
     });
 
     vi.mocked(useDeleteAdminFile).mockReturnValue({
-      deleteFile: vi.fn(),
+      remove: vi.fn(),
       pending: false,
       error: null,
     });

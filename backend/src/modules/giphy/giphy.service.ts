@@ -124,6 +124,29 @@ function isGiphyCdnUrl(rawUrl: string): boolean {
   return parsed.protocol === "https:" && /(^|\.)giphy\.com$/i.test(parsed.hostname);
 }
 
+/// Las URLs de medios de Giphy pueden redirigir (ej. entre sus CDNs). Se
+/// siguen a mano, revalidando cada salto con `isGiphyCdnUrl`: con el
+/// `redirect: "follow"` por defecto de fetch, un redirect hacia cualquier host
+/// (incluida una IP interna) se seguía sin pasar por esa validación.
+const MAX_GIPHY_REDIRECTS = 3;
+
+async function fetchGiphyAsset(url: string, signal: AbortSignal): Promise<Response> {
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    const response = await fetch(current, { signal, redirect: "manual" });
+    const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+    if (!location) return response;
+    if (hop >= MAX_GIPHY_REDIRECTS) {
+      throw new Error("too many redirects downloading a Giphy asset");
+    }
+    const next = new URL(location, current).toString();
+    if (!isGiphyCdnUrl(next)) {
+      throw new Error("Giphy asset redirected outside giphy.com");
+    }
+    current = next;
+  }
+}
+
 export async function searchGiphy(
   kind: GiphyMediaKind,
   query: string,
@@ -181,7 +204,7 @@ export async function importGiphyAsset(
   const timeout = setTimeout(() => controller.abort(), GIPHY_REQUEST_TIMEOUT_MS);
   let downloadResponse: Response;
   try {
-    downloadResponse = await fetch(originalUrl, { signal: controller.signal });
+    downloadResponse = await fetchGiphyAsset(originalUrl, controller.signal);
   } catch (error) {
     getLogger().warn({ err: error }, "giphy asset download failed");
     throw new ServiceUnavailableError("Could not download the selected Giphy asset");
@@ -198,8 +221,18 @@ export async function importGiphyAsset(
     throw new BadRequestError("Unexpected Giphy asset content type");
   }
 
+  // Si el tamaño declarado ya supera el límite, se corta antes de leer el
+  // body: leerlo entero primero dejaba que cualquier respuesta grande ocupara
+  // memoria antes del chequeo de abajo (que sigue haciendo falta: el
+  // Content-Length puede no venir).
+  const maxBytes = settings.maxUploadSizeMb * 1024 * 1024;
+  if (Number(downloadResponse.headers.get("content-length")) > maxBytes) {
+    controller.abort();
+    throw new BadRequestError(`File exceeds the maximum allowed size of ${settings.maxUploadSizeMb}MB`);
+  }
+
   const buffer = Buffer.from(await downloadResponse.arrayBuffer());
-  if (buffer.length > settings.maxUploadSizeMb * 1024 * 1024) {
+  if (buffer.length > maxBytes) {
     throw new BadRequestError(`File exceeds the maximum allowed size of ${settings.maxUploadSizeMb}MB`);
   }
 

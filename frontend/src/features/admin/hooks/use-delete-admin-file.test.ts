@@ -25,6 +25,7 @@ describe("useDeleteAdminFile", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const { result } = renderHook(() => useDeleteAdminFile());
@@ -46,6 +47,7 @@ describe("useDeleteAdminFile", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
     vi.mocked(deleteAdminFile).mockResolvedValueOnce({ id: "file-1" });
 
@@ -70,6 +72,7 @@ describe("useDeleteAdminFile", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
     vi.mocked(deleteAdminFile).mockRejectedValueOnce(new Error("No autorizado"));
 

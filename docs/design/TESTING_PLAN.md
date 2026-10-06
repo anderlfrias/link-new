@@ -155,7 +155,7 @@ sin al menos un test unitario que cubra su caso principal y sus casos de error/e
 razonables. Esto aplica tanto a features nuevas como a fixes de bugs (un fix sin
 test de regresión no evita que el mismo bug vuelva).
 
-Esta regla está duplicada en la raíz del repo en [AGENTS.md](AGENTS.md) (y
+Esta regla está duplicada en la raíz del repo en [AGENTS.md](../../AGENTS.md) (y
 `CLAUDE.md`, que apunta a `AGENTS.md`) precisamente para que **cualquier agente la
 tenga como contexto cargado automáticamente**, sin depender de que alguien lo derive a
 este documento primero.

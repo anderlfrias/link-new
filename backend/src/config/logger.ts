@@ -27,6 +27,8 @@ const REDACT_PATHS = [
   "*.token",
   "accessToken",
   "*.accessToken",
+  // body crudo que body-parser adjunta a sus errores (ver error.middleware.ts).
+  "err.body",
 ];
 
 /// Factory separada del singleton para que los tests puedan construir un logger

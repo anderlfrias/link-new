@@ -4,6 +4,8 @@ Buscador de GIFs y stickers vía la API de [Giphy](https://developers.giphy.com/
 
 Recurso plano (`/api/v1/giphy`, no anidado bajo `conversations`): un resultado de búsqueda no pertenece a ninguna conversación en particular, solo el mensaje que termina usándolo.
 
+> **Deshabilitado por defecto.** La integración actual no sigue varias pautas de la documentación de GIPHY para desarrolladores. Antes de definir `GIPHY_API_KEY`, leé [Requisitos de GIPHY](#requisitos-de-giphy).
+
 ## Endpoints
 
 Base: `/api/v1/giphy`
@@ -42,4 +44,38 @@ Reutiliza las mismas validaciones que `uploadFile` (`AppSettings.maxUploadSizeMb
 
 ## Por qué no se linkea la URL de Giphy directamente
 
+> Esta decisión choca con la documentación actual de GIPHY, que pide no almacenar copias de sus medios. Ver [Requisitos de GIPHY](#requisitos-de-giphy).
+
 Guardar como `StoredFile` propio (en vez de guardar solo la URL de Giphy en el mensaje) reutiliza TODO el pipeline existente sin código nuevo: `MessageFile`, borrado lógico, panel de admin de storage, futura retención — y no depende de que ese link de Giphy siga vivo/estable después de mandado (Giphy no garantiza URLs permanentes). El costo es previsible: un GIF/sticker pesa lo mismo que cualquier imagen ya permitida hoy, y cuenta contra `AppSettings.maxUploadSizeMb` igual que un adjunto normal.
+
+## Requisitos de GIPHY
+
+Comparación técnica contra la [documentación pública de la API de GIPHY](https://developers.giphy.com/docs/api/), revisada el 2026-10-06. **No es una interpretación legal de los términos de GIPHY.** Antes de habilitar GIPHY en una instalación, quien la opere tiene que revisar los términos vigentes de la API y decidir.
+
+**Estado actual: deshabilitado por configuración.** Sin `GIPHY_API_KEY`, `/api/v1/giphy/*` responde `503` y `GET /api/v1/settings/public` informa `allowStickersAndGifs: false` (ver `settings.service.ts#getPublicSettings`). El frontend entonces oculta las pestañas de GIFs, stickers y favoritos del picker, igual que cuando un admin apaga la opción. Los GIF y stickers que ya se mandaron se siguen viendo porque son `StoredFile` propios.
+
+Diferencias entre la implementación actual y lo que pide esa documentación:
+
+| La documentación de GIPHY pide | LINK hoy | Dónde |
+|---|---|---|
+| Hacer las llamadas de búsqueda y tendencias desde el cliente. No proxiar llamadas a la API ni cargas de medios. | El backend intermedia `search` y `trending`, así la key nunca llega al navegador. | `giphy.service.ts#fetchGiphy`, `giphy.route.ts` |
+| Cargar los medios directo desde las URLs que devuelve la API, sin cachearlos, proxiarlos, reescribirlos ni almacenarlos. Las excepciones requieren aprobación de GIPHY. | `POST /import` descarga la rendition original y la guarda como `StoredFile`. Los mensajes muestran esa copia. | `giphy.service.ts#importGiphyAsset`, `frontend/.../MessageInput.tsx#handleSelectGif` |
+| No cachear URLs de medios sin aprobación. | Los favoritos guardan `previewUrl` y `originalUrl` en `localStorage`. | `frontend/src/features/messages/lib/favorites-store.ts` |
+| Mostrar la marca "Powered By GIPHY" donde se usa la API. | El picker no muestra atribución. | `frontend/src/features/messages/components/EmojiGifStickerPicker.tsx` |
+| No filtrar ni reordenar los resultados. | Se descartan los resultados que no traen las renditions `fixed_width` y `original`. | `giphy.service.ts#toSearchResult` |
+| No mezclar contenido de GIPHY con el de otros proveedores en la misma grilla. | La grilla de stickers favoritos mezcla stickers de GIPHY con stickers guardados desde el chat, que son archivos de LINK. | `EmojiGifStickerPicker.tsx` |
+| Recomendado (no obligatorio): renditions MP4/WEBP y eventos de analytics (Action Register). | Usa `.gif` y no manda analytics. | `giphy.service.ts#toSearchResult` |
+
+Además, las keys nuevas de GIPHY son "beta", limitadas a 100 llamadas por hora. Para producción hay que pedirle a GIPHY una key de producción.
+
+### Cambios técnicos necesarios para alinearla
+
+No están implementados. Cambian el modelo de datos y cómo se ven los mensajes, así que conviene decidirlos junto con los términos de GIPHY:
+
+1. Buscar y listar tendencias desde el navegador con una key de GIPHY para web, que queda expuesta al cliente (por ejemplo `NEXT_PUBLIC_GIPHY_API_KEY`), y quitar `GET /search` y `GET /trending` del backend.
+2. Reemplazar `POST /import`. El mensaje guardaría la referencia de GIPHY (id y URLs de la rendition, sin tocar sus query params) y el frontend mostraría el medio directo desde los servidores de GIPHY. Hace falta un campo o tipo de mensaje nuevo (migración de Prisma), cambios en `MessageBubble`, y decidir qué pasa con los GIF que ya se importaron.
+3. Mostrar la marca oficial "Powered By GIPHY" en el picker, con los assets y las pautas de uso que publica GIPHY.
+4. No descartar resultados, separar la grilla de favoritos por proveedor y revisar si los favoritos pueden guardar URLs de GIPHY.
+5. Opcional: renditions MP4/WEBP y analytics.
+
+Problema conocido del flujo actual: un GIF marcado como favorito desde un mensaje (`MessageBubble`) guarda la URL del archivo de LINK como `originalUrl`. Al reenviarlo desde favoritos, `POST /import` lo rechaza con `400` porque no es un host de GIPHY. Se resolvería dentro del rediseño de arriba.

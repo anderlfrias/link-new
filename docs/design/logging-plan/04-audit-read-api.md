@@ -151,7 +151,7 @@ Más la entrada de nav:
   { href: "/admin/audit", label: "Auditoría", icon: IconHistory },
 ```
 
-Antes de escribir componentes, leé [frontend/AGENTS.md](../frontend/AGENTS.md): esta versión de
+Antes de escribir componentes, leé [frontend/AGENTS.md](../../../frontend/AGENTS.md): esta versión de
 Next.js tiene cambios que rompen respecto de lo habitual.
 
 Requisitos de la UI:

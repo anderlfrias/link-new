@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LINK — frontend
 
-## Getting Started
+Aplicación Next.js (App Router) de LINK. La instalación completa, las variables de entorno y
+Docker están en el [README principal](../README.md).
 
-First, run the development server:
+## Desarrollo
+
+Desde la raíz del repo (npm workspaces):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp frontend/.env.example frontend/.env.local
+npm run dev:frontend        # http://localhost:3000
+npm run test --workspace=frontend
+npm run build --workspace=frontend
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`NEXT_PUBLIC_API_URL` y `NEXT_PUBLIC_SOCKET_URL` se embeben en el bundle al hacer el build:
+cambiarlas requiere volver a construir.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Estructura
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/`: rutas (App Router). Están en grupos `(auth)`, `(chat)` y `(admin)`.
+- `src/features/<funcionalidad>/`: `api/`, `components/`, `hooks/` y `types/` de cada
+  funcionalidad (mensajes, conversaciones, llamadas, administración…).
+- `src/providers/`: contexto global (sesión, socket, tema, configuración pública).
+- `src/components/`: UI compartida y layout.
+- `src/i18n/`: traducciones (español e inglés).
+- `public/`: íconos, marca, sonidos y el service worker de notificaciones push (`sw.js`).
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Esta versión de Next.js tiene cambios incompatibles con versiones anteriores: antes de escribir
+código nuevo, consultar la documentación incluida en `node_modules/next/dist/docs/` (ver
+[AGENTS.md](AGENTS.md)).

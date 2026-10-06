@@ -14,7 +14,15 @@ function optionalString() {
     .optional();
 }
 
+/// Una API abierta a cualquier origen por olvido es justo lo que hay que
+/// evitar en producción (ver SECURITY.md); abrirla tiene que ser explícito.
+const CORS_ORIGIN_REQUIRED_IN_PRODUCTION =
+  'CORS_ORIGIN is required when NODE_ENV=production: set it to the frontend origin (e.g. "https://chat.example.com") or to "*" to allow any origin on purpose.';
+
 const schema = yup.object({
+  // Lo fijan el Dockerfile del backend y ecosystem.config.js. Solo se usa para
+  // exigir CORS_ORIGIN en producción.
+  NODE_ENV: optionalString(),
   DATABASE_URL: yup.string().required(),
   PORT: yup.number().default(4000),
   // Autenticación (LOCAL_AUTH_PLAN.md, D1): con las tres EXTERNAL_AUTH_* la
@@ -35,9 +43,28 @@ const schema = yup.object({
   VAPID_PUBLIC_KEY: yup.string().required(),
   VAPID_PRIVATE_KEY: yup.string().required(),
   VAPID_SUBJECT: yup.string().required(),
-  // Opcional a propósito: sin definir, la API y el socket quedan abiertos a
-  // cualquier origen (cómodo en dev/LAN). Ver config/cors-origins.ts.
-  CORS_ORIGIN: yup.string().optional(),
+  // Orígenes del frontend que pueden usar la API y el socket (ver
+  // config/cors-origins.ts). Fuera de producción es opcional: sin definir,
+  // cualquier origen (cómodo en dev/LAN). Con NODE_ENV=production es
+  // obligatoria; "*" abre a cualquier origen a propósito.
+  CORS_ORIGIN: optionalString().when("NODE_ENV", {
+    is: "production",
+    then: (schema) => schema.required(CORS_ORIGIN_REQUIRED_IN_PRODUCTION),
+  }),
+  // Reverse proxy delante del backend (ver config/client-ip.ts y SECURITY.md).
+  // Valor de `trust proxy` de Express: "1" (default, el comportamiento de
+  // siempre) = un proxy delante (nginx, Caddy, Cloudflare Tunnel); "2" = dos
+  // encadenados; "false" = backend expuesto directo, sin proxy.
+  TRUST_PROXY: optionalString().default("1"),
+  // Tomar la IP del cliente de la cabecera CF-Connecting-IP. Solo si TODO el
+  // tráfico entra por Cloudflare: si no, cualquier cliente puede mandarla y
+  // elegir su IP. Mismo patrón de parseo de booleano que S3_FORCE_PATH_STYLE.
+  TRUST_CF_CONNECTING_IP: yup
+    .boolean()
+    .transform((value, originalValue) =>
+      typeof originalValue === "string" ? originalValue.toLowerCase() === "true" : Boolean(value),
+    )
+    .default(false),
   // Opcional a propósito, a diferencia de VAPID_*: sin esta key, /v1/giphy/*
   // responde 503 en vez de tirar abajo todo el server al arrancar (ver
   // giphy.service.ts) — así activar/desactivar Giphy no exige coordinar un

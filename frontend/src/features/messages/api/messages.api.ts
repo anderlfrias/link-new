@@ -87,7 +87,9 @@ export function toggleReaction(
   reactions: MessageReaction[];
   userId: string;
   emoji: string;
-  action: "added" | "removed";
+  /// "updated": el usuario ya tenía otra reacción y la cambió por este emoji
+  /// (una sola reacción por usuario, ver message.service.ts#toggleReaction).
+  action: "added" | "removed" | "updated";
 }> {
   return apiRequest(`${basePath(conversationId)}/${messageId}/reactions`, {
     method: "POST",

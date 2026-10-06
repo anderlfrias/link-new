@@ -14,6 +14,8 @@ const mockPrivateConv: ConversationListItem = {
   lastMessageId: null,
   lastMessageAt: null,
   lastMessageSenderId: null,
+  lastMessageStatus: null,
+  lastMessagePreview: null,
   createdAt: "2026-09-09T08:00:00Z",
   updatedAt: "2026-09-09T08:00:00Z",
   deletedAt: null,

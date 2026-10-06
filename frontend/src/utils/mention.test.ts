@@ -29,7 +29,7 @@ describe("getActiveMentionQuery", () => {
   });
 
   it("no detecta @ si es parte de una dirección de correo electrónico", () => {
-    const text = "Escríbeme a soporte@example.org por favor";
+    const text = "Escríbeme a soporte@example.com por favor";
     const atPosition = text.indexOf("@");
     // Cursor justo después del dominio o del arroba
     expect(getActiveMentionQuery(text, atPosition + 1)).toBeNull();

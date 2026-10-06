@@ -70,6 +70,7 @@ describe("useConversations", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     vi.mocked(useSocket).mockReturnValue({
@@ -110,6 +111,7 @@ describe("useConversations", () => {
       login: vi.fn(),
       logout: vi.fn(),
       updateSessionUser: vi.fn(),
+      expireSession: vi.fn(),
     });
 
     const { result } = renderHook(() => useConversations());

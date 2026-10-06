@@ -4,7 +4,7 @@ Este módulo no administra usuarios ni contraseñas: reenvía credenciales al mi
 
 ## Variables de entorno
 
-Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el modo de autenticación de la instalación (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../../../../LOCAL_AUTH_PLAN.md)): con las tres definidas, modo `external-auth` (todo lo que describe este README); sin ninguna, modo `local`; con una o dos, el servidor no arranca.
+Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el modo de autenticación de la instalación (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)): con las tres definidas, modo `external-auth` (todo lo que describe este README); sin ninguna, modo `local`; con una o dos, el servidor no arranca.
 
 | Variable | Descripción |
 |---|---|

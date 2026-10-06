@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import env from "../config/env";
 import { getLogger, getRequestMeta } from "../config/request-context";
 import { logger } from "../config/logger";
 import { attachSocketContext, withRequestContext } from "./request-context";
@@ -84,6 +85,34 @@ describe("attachSocketContext", () => {
     const { data } = socket as { data: { meta: { ip: string; userAgent: string } } };
     expect(data.meta.ip).toBe("198.51.100.9");
     expect(data.meta.userAgent).toBe("custom-client");
+  });
+
+  describe("cf-connecting-ip", () => {
+    const originalTrustCf = env.TRUST_CF_CONNECTING_IP;
+
+    afterEach(() => {
+      env.TRUST_CF_CONNECTING_IP = originalTrustCf;
+    });
+
+    function attachWithCfHeader() {
+      const socket = createMockSocket({
+        handshake: { address: "10.0.0.1", headers: { "cf-connecting-ip": "198.51.100.99" }, auth: {} },
+      });
+      attachSocketContext(socket, vi.fn());
+      return (socket as { data: { meta: { ip: string } } }).data.meta.ip;
+    }
+
+    it("con TRUST_CF_CONNECTING_IP, la ip sale de la cabecera (misma regla que en HTTP)", () => {
+      env.TRUST_CF_CONNECTING_IP = true;
+
+      expect(attachWithCfHeader()).toBe("198.51.100.99");
+    });
+
+    it("sin TRUST_CF_CONNECTING_IP, la cabecera se ignora y queda la dirección de la conexión", () => {
+      env.TRUST_CF_CONNECTING_IP = false;
+
+      expect(attachWithCfHeader()).toBe("10.0.0.1");
+    });
   });
 });
 

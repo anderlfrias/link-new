@@ -262,6 +262,96 @@ describe("giphy.service", () => {
       ).rejects.toThrow(/File exceeds the maximum allowed size of 1MB/);
     });
 
+    it("rejects by Content-Length before reading the body when it exceeds maxUploadSizeMb", async () => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({
+        allowStickersAndGifs: true,
+        maxUploadSizeMb: 1,
+      } as any);
+      const arrayBuffer = vi.fn();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "image/gif", "content-length": String(2 * 1024 * 1024) }),
+          arrayBuffer,
+        }),
+      );
+
+      await expect(
+        importGiphyAsset("u-1", "gifs", "123", "https://media0.giphy.com/media/123/giphy.gif"),
+      ).rejects.toThrow(/File exceeds the maximum allowed size of 1MB/);
+      expect(arrayBuffer).not.toHaveBeenCalled();
+    });
+
+    it("follows a redirect inside giphy.com by hand, revalidating the new host", async () => {
+      const gifBuffer = Buffer.from("GIF89a...");
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 302,
+          headers: new Headers({ location: "https://media1.giphy.com/media/123/giphy.gif" }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "image/gif" }),
+          arrayBuffer: async () => gifBuffer,
+        });
+      vi.stubGlobal("fetch", mockFetch);
+      vi.mocked(storage.save).mockResolvedValue({ path: "giphy/gifs/x.gif", size: gifBuffer.length });
+      vi.mocked(FileRepository.createStoredFile).mockResolvedValue({
+        id: "file-giphy-2",
+        originalName: "gif-123.gif",
+        mimeType: "image/gif",
+        size: BigInt(gifBuffer.length),
+        createdAt: new Date(),
+      } as any);
+
+      await importGiphyAsset("u-1", "gifs", "123", "https://media0.giphy.com/media/123/giphy.gif");
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        "https://media0.giphy.com/media/123/giphy.gif",
+        expect.objectContaining({ redirect: "manual" }),
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        "https://media1.giphy.com/media/123/giphy.gif",
+        expect.objectContaining({ redirect: "manual" }),
+      );
+    });
+
+    it("does not follow a redirect outside giphy.com (SSRF via redirect)", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: "http://169.254.169.254/latest/meta-data/" }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await expect(
+        importGiphyAsset("u-1", "gifs", "123", "https://media0.giphy.com/media/123/giphy.gif"),
+      ).rejects.toThrow(new ServiceUnavailableError("Could not download the selected Giphy asset"));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives up after too many redirects", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: "https://media2.giphy.com/media/123/giphy.gif" }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      await expect(
+        importGiphyAsset("u-1", "gifs", "123", "https://media0.giphy.com/media/123/giphy.gif"),
+      ).rejects.toThrow(new ServiceUnavailableError("Could not download the selected Giphy asset"));
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
     it("throws ServiceUnavailableError when asset download fails or network errors", async () => {
       const mockFetch = vi.fn().mockRejectedValue(new Error("Timeout downloading"));
       vi.stubGlobal("fetch", mockFetch);

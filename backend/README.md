@@ -228,7 +228,7 @@ La **identidad** del usuario (quién es, cómo se autentica, sus credenciales) e
 
 ## Proveedor de Autenticación
 
-Cada instalación autentica con **un** proveedor, que se deduce del `.env` al arrancar (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../LOCAL_AUTH_PLAN.md)):
+Cada instalación autentica con **un** proveedor, que se deduce del `.env` al arrancar (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../docs/design/LOCAL_AUTH_PLAN.md)):
 
 * **`external-auth`** — con las tres variables `EXTERNAL_AUTH_*` definidas: un proveedor externo (EXTERNAL_AUTH) autentica a los usuarios y el chat sincroniza su perfil. Es el modo de las instalaciones actuales.
 * **`local`** — sin ninguna `EXTERNAL_AUTH_*`: la propia aplicación administra sus usuarios y sus credenciales (requiere `LOCAL_AUTH_JWT_SECRET`). El inicio de sesión local todavía está en desarrollo.
@@ -331,17 +331,18 @@ User.avatarFile   Conversation   MessageFile
 ## Operaciones, Backup y Restauración (§6.4)
 
 El almacenamiento de archivos desacopla la metadata de los bytes físicos. Esto introduce dos dominios de persistencia:
-1. **Base de Datos PostgreSQL**: contiene las tablas `stored_files`, `file_uploads` y la metadata del filer de SeaweedFS (si se usa `weed filer -database=postgres2`).
-2. **Volúmenes de Storage**: los bloques y blobs binarios almacenados en disco local o en los volúmenes de SeaweedFS/S3.
+1. **Base de Datos PostgreSQL**: contiene las tablas `stored_files`, `file_uploads` y el resto de los datos de LINK. Si el servicio S3 guarda su propia metadata en una base (por ejemplo, el filer de SeaweedFS con `-database=postgres2`), esa base también es parte del backup.
+2. **Almacenamiento de archivos**: el directorio `uploads/` (o el volumen `uploads` con Docker) para `STORAGE_WRITE_PROVIDER=LOCAL`, y el bucket S3 si se usa S3.
 
 ### Regla de Oro del Backup: Metadata PRIMERO, Bytes DESPUÉS
 
 ```bash
-# 1. Respaldar PostgreSQL (metadata de Link y filer)
-pg_dump -U postgres -d chat_interno -F c -b -v -f /backups/chat_interno_$(date +%Y%m%d_%H%M%S).dump
+# 1. Respaldar PostgreSQL (metadata de LINK). Con el docker-compose.yml incluido:
+docker compose exec -T postgres pg_dump -U link -d link -F c > link_$(date +%Y%m%d_%H%M%S).dump
+#    Sin Docker: pg_dump -d "<DATABASE_URL>" -F c -f link_$(date +%Y%m%d_%H%M%S).dump
 
-# 2. Respaldar Volúmenes de Storage (bytes físicos)
-rclone sync /var/seaweedfs/data remote_backup:seaweedfs-data/ --fast-list
+# 2. Respaldar los bytes: copiar uploads/ (o el volumen `uploads`) y/o sincronizar el
+#    bucket S3 con la herramienta de tu proveedor (rclone, aws s3 sync, mc mirror...).
 ```
 
 > [!IMPORTANT]
@@ -351,9 +352,9 @@ rclone sync /var/seaweedfs/data remote_backup:seaweedfs-data/ --fast-list
 
 ### Regla de Oro de la Restauración: Bytes PRIMERO, Metadata DESPUÉS
 
-1. **Restaurar Bytes**: Sincronizar o descomprimir los volúmenes en el almacenamiento (`rclone copy remote_backup:seaweedfs-data/ /var/seaweedfs/data`).
-2. **Restaurar Base de Datos**: Ejecutar `pg_restore` de la base de datos PostgreSQL.
-3. **Iniciar Servicios**: Iniciar SeaweedFS y Link. De este modo, desde el primer milisegundo en que la base de datos responde consultas, todos los bytes físicos referenciados ya están disponibles en storage.
+1. **Restaurar Bytes**: copiar de vuelta `uploads/` (o el volumen) y/o el contenido del bucket S3.
+2. **Restaurar Base de Datos**: ejecutar `pg_restore` sobre la base de PostgreSQL.
+3. **Iniciar Servicios**: iniciar el almacenamiento S3 (si aplica) y LINK. De este modo, desde el primer milisegundo en que la base de datos responde consultas, todos los bytes físicos referenciados ya están disponibles.
 
 ---
 
@@ -363,16 +364,16 @@ rclone sync /var/seaweedfs/data remote_backup:seaweedfs-data/ --fast-list
 * **Verificar cuota de subida en Admin**: Comprobar en el panel de administración (`Configuración > Tamaño máximo de archivo`) que el límite `maxUploadSizeMb` sea suficiente para el archivo.
 * **Verificar sesiones concurrentes**: Cada usuario tiene un tope de 5 subidas simultáneas activas (`PENDING` o `UPLOADING`). Si el usuario tiene subidas colgadas, debe abortarlas o esperar su vencimiento (24h).
 * **Verificar restricciones de tipo**: Comprobar si `fileTypeRestrictionMode` está en `ALLOWLIST` o `BLOCKLIST` y si el tipo MIME del archivo está bloqueado.
-* **Verificar CORS en SeaweedFS / S3**: La subida chunked se ejecuta directamente desde el navegador hacia S3. El bucket debe tener habilitada la política CORS permitiendo:
-  - `AllowedOrigins`: dominio del frontend (`https://link.example.org`).
+* **Verificar CORS del bucket S3**: La subida chunked se ejecuta directamente desde el navegador hacia S3. El bucket debe tener habilitada la política CORS permitiendo:
+  - `AllowedOrigins`: dominio del frontend (ej. `https://chat.example.com`).
   - `AllowedMethods`: `GET`, `PUT`, `HEAD`.
   - `AllowedHeaders`: `*`, `content-type`, `x-amz-*`.
   - `ExposeHeaders`: `ETag`.
-* **Verificar Reverse Proxy (Nginx / Cloudflare)**: Para subidas directas (≤ 16 MiB), asegurar que `client_max_body_size` en Nginx sea al menos `16m` o `32m`. Para subidas multipart a S3 a través de Cloudflare, las partes de 8 MiB pasan holgadamente por el límite de 100 MB de Cloudflare Free/Pro.
+* **Verificar el reverse proxy**: Para subidas directas (≤ 16 MiB), el proxy tiene que aceptar bodies de al menos `16m` o `32m` (en nginx, `client_max_body_size`). Las partes de las subidas multipart son de 8 MiB, por debajo del límite por request de proxies como Cloudflare (100 MB en sus planes gratuitos).
 
 ### 2. "Error 403 Forbidden en subida de partes (Desfase de reloj NTP)"
 * **Causa**: Las URLs presignadas de AWS S3 (SigV4) incluyen una marca de tiempo (`X-Amz-Date`). Si el reloj del servidor o del cliente difiere por más de 15 minutos respecto a la hora UTC real, S3 rechaza la petición con `RequestTimeTooSkewed` (403 Forbidden).
-* **Solución en Servidor**:
+* **Solución en Servidor** (Linux con systemd):
   ```bash
   timedatectl status
   sudo timedatectl set-ntp on
@@ -392,25 +393,26 @@ rclone sync /var/seaweedfs/data remote_backup:seaweedfs-data/ --fast-list
 
 ### 4. "Inspección de logs y diagnóstico en producción"
 
-El backend emite logs estructurados en formato JSON por línea a `stdout` (Pino). PM2 supervisa el proceso y `pm2-logrotate` rota los archivos:
+El backend emite logs estructurados en formato JSON por línea a `stdout` (Pino). Quién los guarda depende de cómo se despliegue:
 
 * **¿Dónde están los logs?**
-  Para ver la salida en vivo o reciente:
   ```bash
+  # Con Docker (docker-compose.yml):
+  docker compose logs backend --tail 100
+  # Con PM2 (ecosystem.config.js), que los escribe en ~/.pm2/logs/ (rotarlos con pm2-logrotate):
   pm2 logs link-backend --lines 100 --raw
   ```
-  Los archivos residen físicamente en `~/.pm2/logs/link-backend-out.log` y `-error.log`.
 
 * **¿Cómo filtrar por nivel o buscar errores?**
   Usando `jq` sobre la salida JSON (nivel 30 = info, 40 = warn, 50 = error, 60 = fatal):
   ```bash
-  pm2 logs link-backend --lines 200 --raw | jq 'select(.level >= 50)'
+  docker compose logs backend --no-log-prefix --tail 200 | jq 'select(.level >= 50)'
   ```
 
 * **¿Cómo rastrear una petición puntual?**
   Cada petición HTTP genera y propaga un `requestId` (devuelto al cliente en el header `x-request-id` de la respuesta). Si un usuario reporta un fallo con su ID de petición:
   ```bash
-  pm2 logs link-backend --lines 500 --raw | jq 'select(.requestId == "d8a2bc41-...")'
+  docker compose logs backend --no-log-prefix --tail 500 | jq 'select(.requestId == "d8a2bc41-...")'
   ```
   Esto devolverá exactamente la traza completa (inicio de request HTTP, logs internos de servicios, consultas lentas y respuesta final con tiempo de procesamiento).
 

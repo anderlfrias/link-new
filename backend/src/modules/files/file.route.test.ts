@@ -130,6 +130,37 @@ describe("file.route (wiring: multer + rate limit)", () => {
     expect(FileService.uploadFile).not.toHaveBeenCalled();
   }, 20000);
 
+  it("rechaza con 400 un multipart con demasiados campos de texto, sin llamar a FileService", async () => {
+    let req = request(app).post("/files").set("Authorization", `Bearer ${tokenForFreshUser()}`);
+    for (let i = 0; i < 11; i++) {
+      req = req.field(`campo-${i}`, "x");
+    }
+
+    const res = await req.attach("file", Buffer.from("contenido chico"), "small.txt");
+
+    expect(res.status).toBe(400);
+    expect(FileService.uploadFile).not.toHaveBeenCalled();
+  });
+
+  it("acepta los campos que manda el frontend (conversationId, kind) junto al archivo", async () => {
+    vi.mocked(FileService.uploadFile).mockResolvedValue({ id: "f-2", originalName: "nota.webm" } as any);
+
+    const res = await request(app)
+      .post("/files")
+      .set("Authorization", `Bearer ${tokenForFreshUser()}`)
+      .field("conversationId", "11111111-1111-1111-1111-111111111111")
+      .field("kind", "voice_note")
+      .attach("file", Buffer.from("audio"), "nota.webm");
+
+    expect(res.status).toBe(201);
+    expect(FileService.uploadFile).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "11111111-1111-1111-1111-111111111111",
+      "voice_note",
+    );
+  });
+
   it("acepta un body por debajo del techo absoluto y llega al controller", async () => {
     vi.mocked(FileService.uploadFile).mockResolvedValue({ id: "f-1", originalName: "small.txt" } as any);
 

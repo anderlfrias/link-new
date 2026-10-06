@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import env from "../config/env";
 import { getLogger, getRequestMeta } from "../config/request-context";
 import { logger as rootLogger } from "../config/logger";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
 import { requestContext } from "./request-context.middleware";
 
 describe("requestContext", () => {
+  const originalTrustCf = env.TRUST_CF_CONNECTING_IP;
+
+  afterEach(() => {
+    env.TRUST_CF_CONNECTING_IP = originalTrustCf;
+  });
+
   it("llama a next() exactamente una vez", () => {
     const req = createMockRequest({ id: "req-1", ip: "203.0.113.5" });
     const next = createMockNext();
@@ -47,7 +54,8 @@ describe("requestContext", () => {
     });
   });
 
-  it("prioriza cf-connecting-ip sobre req.ip para getRequestMeta() si el header está presente", () => {
+  it("con TRUST_CF_CONNECTING_IP, prioriza cf-connecting-ip sobre req.ip para getRequestMeta()", () => {
+    env.TRUST_CF_CONNECTING_IP = true;
     const req = createMockRequest({
       id: "req-2",
       ip: "10.0.0.1",
@@ -68,5 +76,21 @@ describe("requestContext", () => {
       ip: "198.51.100.99",
       userAgent: "vitest",
     });
+  });
+  it("sin TRUST_CF_CONNECTING_IP, ignora cf-connecting-ip (cualquier cliente puede mandarla) y usa req.ip", () => {
+    env.TRUST_CF_CONNECTING_IP = false;
+    const req = createMockRequest({
+      id: "req-3",
+      ip: "10.0.0.1",
+      headers: { "cf-connecting-ip": "198.51.100.99" },
+    });
+    let capturedIp: unknown;
+    const next = () => {
+      capturedIp = getRequestMeta().ip;
+    };
+
+    requestContext(req, createMockResponse(), next);
+
+    expect(capturedIp).toBe("10.0.0.1");
   });
 });

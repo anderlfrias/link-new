@@ -29,9 +29,13 @@ import * as FileController from "./file.controller";
 // mayor sin que este camino pueda entregarlo: multer corta acá primero.
 const ABSOLUTE_MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 
+// Además del archivo, el frontend manda a lo sumo `conversationId` y `kind`
+// (ver file.controller.ts#upload). Sin estos topes, multer acepta campos de
+// texto sin límite de cantidad y los guarda en memoria: un solo request podía
+// cargar cientos de MB de campos basura.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: ABSOLUTE_MAX_UPLOAD_BYTES },
+  limits: { fileSize: ABSOLUTE_MAX_UPLOAD_BYTES, files: 1, fields: 10, fieldSize: 64 * 1024 },
 });
 
 const router = Router();

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+import env from "../config/env";
 import { customLogLevel, serializeRequest, shouldIgnoreRequest } from "./http-logger.middleware";
 
 // Mismo patrón que app.test.ts: app.ts importa módulos que hacen llamadas
@@ -70,6 +71,24 @@ describe("serializeRequest", () => {
 
     expect(serialized.url).toBe("/v1/files/abc/content");
     expect(JSON.stringify(serialized)).not.toContain("secreto");
+  });
+
+  it("con TRUST_CF_CONNECTING_IP, toma la IP de cf-connecting-ip (misma regla que el rate limiting)", () => {
+    const originalTrustCf = env.TRUST_CF_CONNECTING_IP;
+    env.TRUST_CF_CONNECTING_IP = true;
+    try {
+      const serialized = serializeRequest({
+        id: "req-1",
+        method: "GET",
+        url: "/v1/conversations",
+        headers: {},
+        raw: { ip: "10.0.0.1", headers: { "cf-connecting-ip": "198.51.100.99" } } as unknown as IncomingMessage,
+      });
+
+      expect(serialized.ip).toBe("198.51.100.99");
+    } finally {
+      env.TRUST_CF_CONNECTING_IP = originalTrustCf;
+    }
   });
 
   it("toma la IP de req.raw (el visitante real, gracias a trust proxy)", () => {
