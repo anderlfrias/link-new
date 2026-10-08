@@ -146,6 +146,7 @@ Las más importantes del backend:
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `DATABASE_URL` | sí | Conexión a PostgreSQL. |
+| `AUTH_PROVIDER_MODULE` | no | Ruta absoluta al módulo de un proveedor de autenticación externo ([guía](docs/auth-providers.md)). Sin definir, cuentas locales. |
 | `SESSION_JWT_SECRET` | sí | Firma las sesiones de LINK, en todos los modos. 32 caracteres o más; cambiarla cierra todas las sesiones. (`LOCAL_AUTH_JWT_SECRET`, su nombre anterior, se sigue aceptando con un aviso.) |
 | `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET` | según el modo | Las tres activan el modo EXTERNAL_AUTH; sin ninguna, el modo es local. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | sí | Notificaciones push. Con claves inválidas el backend no arranca. |
@@ -185,6 +186,10 @@ El modo se deduce de las variables de entorno del backend:
     (largo mínimo, composición, vencimiento, historial y bloqueo por intentos fallidos).
   - Detalles en [`backend/src/modules/auth/README.md`](backend/src/modules/auth/README.md) y en
     [`docs/design/LOCAL_AUTH_PLAN.md`](docs/design/LOCAL_AUTH_PLAN.md).
+
+Otros sistemas de identidad se conectan con un **proveedor de autenticación**: un módulo que valida las
+credenciales y que se carga con `AUTH_PROVIDER_MODULE`, sin modificar el código de LINK. Ver
+[`docs/auth-providers.md`](docs/auth-providers.md).
 
 En los dos modos un admin puede desactivar el acceso de una cuenta al chat. Con solo una o dos
 `EXTERNAL_AUTH_*`, el backend no arranca, para no caer por error en el modo local. Para pasar una

@@ -42,6 +42,10 @@ Solo se corrigen vulnerabilidades sobre la última versión publicada (rama `mai
   real, multiplican los límites de rate limiting, que viven en memoria.
 - **Almacenamiento S3.** Restringir el CORS del bucket al origen del frontend y no dar acceso
   público de lectura: los archivos se sirven con URLs firmadas de corta duración.
+- **Instalar solo proveedores de autenticación en los que se confíe.** El módulo de `AUTH_PROVIDER_MODULE`
+  corre dentro del proceso del backend, con sus mismos permisos, y ve las contraseñas de quien inicia sesión.
+  Es código de quien administra la instalación, igual que el `.env`; ver
+  [docs/auth-providers.md](docs/auth-providers.md).
 - **Mantener las dependencias actualizadas** (`npm audit`) y hacer backups de la base y del
   almacenamiento de archivos.
 

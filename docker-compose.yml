@@ -40,6 +40,9 @@ services:
       # Autenticación: SESSION_JWT_SECRET (obligatoria, firma las sesiones) y, para el
       # modo external-auth, las tres EXTERNAL_AUTH_*. Vacías cuentan como no definidas. Ver .env.example.
       SESSION_JWT_SECRET: ${SESSION_JWT_SECRET:-}
+      # Proveedor de autenticación externo (ver docs/auth-providers.md). El módulo tiene que estar
+      # dentro de la imagen del backend.
+      AUTH_PROVIDER_MODULE: ${AUTH_PROVIDER_MODULE:-}
       EXTERNAL_AUTH_API_URL: ${EXTERNAL_AUTH_API_URL:-}
       APP_CODE_EXTERNAL_AUTH: ${APP_CODE_EXTERNAL_AUTH:-}
       EXTERNAL_AUTH_JWT_SECRET: ${EXTERNAL_AUTH_JWT_SECRET:-}

@@ -25,7 +25,7 @@ Ejemplo: `1.0.0`
 
 | Componente | Tipo de Cambio | Cuándo Usarlo | Ejemplos en este Proyecto |
 | :--- | :--- | :--- | :--- |
-| **MAJOR** (X.0.0) | Incompatible (*Breaking*) | Cambios en la API, protocolo Socket.IO, esquema de base de datos o autenticación que **rompen compatibilidad** con clientes anteriores o requieren migraciones manuales no retrocompatibles. | Modificar contratos de eventos de Socket existentes sin retrocompatibilidad, reestructuración radical del modelo de datos de Prisma que no permita coexistencia. |
+| **MAJOR** (X.0.0) | Incompatible (*Breaking*) | Cambios en la API, protocolo Socket.IO, esquema de base de datos, autenticación o interfaz de los proveedores de autenticación (`AUTH_PROVIDER_API_VERSION`, ver [docs/auth-providers.md](docs/auth-providers.md)) que **rompen compatibilidad** con clientes o plugins anteriores o requieren migraciones manuales no retrocompatibles. | Modificar contratos de eventos de Socket existentes sin retrocompatibilidad, reestructuración radical del modelo de datos de Prisma que no permita coexistencia. |
 | **MINOR** (1.X.0) | Funcionalidad compatible | Nuevas características o mejoras que **no rompen** el funcionamiento existente de clientes o servidores anteriores. | Agregar llamadas grupales, añadir soporte para un nuevo idioma, nuevos filtros en el panel de administración, nuevos tipos de adjuntos. |
 | **PATCH** (1.0.X) | Corrección de errores | Corrección de bugs (*bugfixes*), parches de seguridad, optimizaciones de rendimiento internas o ajustes de UI menores que preservan los contratos existentes. | Corregir un error de scroll en una lista, solucionar un edge case de expiración de sesión, parchar una vulnerabilidad de dependencia, corregir un tipo TypeScript. |
 
