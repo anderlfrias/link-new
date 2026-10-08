@@ -79,6 +79,8 @@ Las funcionalidades de conversaciones/presencia no manejan nombres de room ni ll
 1. `authenticateSocket`: el cliente debe conectarse pasando el token del login en el handshake (en modo external-auth, el JWT de EXTERNAL_AUTH; en modo local, el que firma este backend) (`io(url, { auth: { token: "<jwt>" } })`). Si falta el token, expiró o es inválido, la conexión se rechaza (`connect_error` en el cliente) antes de llegar al registry.
 2. `attachSocketContext`: una vez autenticado el socket, vincula al socket un logger hijo con metadatos contextuales (`socketId`, `userId`, `ip`, `userAgent`). Para cada evento procesado en un módulo, `withRequestContext(socket, eventName, fn)` inicializa un contexto `AsyncLocalStorage` con `requestId` único, permitiendo correlacionar logs y auditorías disparados en tiempo real.
 
+`authenticateSocket` además programa el corte del socket para cuando venza su token (`session-expiry.ts`, `scheduleSessionExpiry`): el token solo se verifica en el handshake, y sin este temporizador una conexión abierta seguía recibiendo eventos más allá de su sesión. El corte es `socket.disconnect(true)` en el `exp` firmado del token (las sesiones largas, de hasta 30 días, se esperan en tramos por el tope de `setTimeout`); el cliente lo ve como `disconnect` con `reason: "io server disconnect"` y trata la sesión como terminada. Las revocaciones (cuenta desactivada, contraseña cambiada) cortan los sockets por otro camino, `endLiveSessions`.
+
 Cualquier middleware futuro (autorización, validación, rate limiting) se agrega en `socketMiddlewares` sin tocar `gateway.ts` ni `index.ts`.
 
 ## Principios usados para desacoplar la infraestructura

@@ -2,7 +2,12 @@ import { JsonWebTokenError, TokenExpiredError } from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../config/prisma";
 import * as JwtModule from "../modules/auth/jwt";
+import { scheduleSessionExpiry } from "./session-expiry";
 import { authenticateSocket } from "./socket-auth.middleware";
+
+vi.mock("./session-expiry", () => ({
+  scheduleSessionExpiry: vi.fn(),
+}));
 
 vi.mock("../config/prisma", () => ({
   prisma: {
@@ -168,6 +173,48 @@ describe("socket-auth.middleware", () => {
       });
       expect(next).toHaveBeenCalledWith();
     });
+  });
+
+  it("programa la desconexión con el exp del token al autenticar", async () => {
+    const socket = {
+      handshake: { auth: { token: "valid-jwt" } },
+      data: {} as any,
+    };
+    const next = vi.fn();
+    vi.mocked(JwtModule.verifyToken).mockReturnValue({ id: "ext-1" } as any);
+    vi.mocked(JwtModule.mapTokenToUser).mockReturnValue({
+      id: "ext-1",
+      email: "ana@example.com",
+      username: "ana",
+      fullName: "Ana Gomez",
+      roles: [],
+      permissions: [],
+      app: "CHAT",
+      exp: 1_900_000_000,
+    } as any);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "internal-uuid-ana", status: "ACTIVE" } as any);
+
+    authenticateSocket(socket as any, next);
+
+    await vi.waitFor(() => {
+      expect(next).toHaveBeenCalledWith();
+    });
+    expect(scheduleSessionExpiry).toHaveBeenCalledWith(socket, 1_900_000_000);
+  });
+
+  it("no programa ningún corte si el socket no se autentica", async () => {
+    const socket = { handshake: { auth: { token: "bad-jwt" } }, data: {} };
+    const next = vi.fn();
+    vi.mocked(JwtModule.verifyToken).mockImplementation(() => {
+      throw new JsonWebTokenError("invalid signature");
+    });
+
+    authenticateSocket(socket as any, next);
+
+    await vi.waitFor(() => {
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: "Invalid token" }));
+    });
+    expect(scheduleSessionExpiry).not.toHaveBeenCalled();
   });
 
   describe("modo local (LOCAL_AUTH_PLAN.md, Fase 4)", () => {

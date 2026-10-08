@@ -145,4 +145,68 @@ describe("SocketProvider and useSocket", () => {
 
     window.removeEventListener(SESSION_EXPIRED_EVENT, eventListener);
   });
+
+  describe("desconexiones", () => {
+    function renderWithSocket() {
+      const handlers: Record<string, (...args: any[]) => void> = {};
+      const mockSocket = {
+        on: vi.fn((event: string, cb: (...args: any[]) => void) => {
+          handlers[event] = cb;
+        }),
+        off: vi.fn(),
+      };
+      vi.mocked(useAuth).mockReturnValue({
+        session: createMockSession({ token: "socket-auth-token" }),
+        status: "authenticated",
+        login: vi.fn(),
+        logout: vi.fn(),
+        updateSessionUser: vi.fn(),
+        expireSession: vi.fn(),
+        completePasswordChange: vi.fn(),
+      });
+      vi.mocked(connectSocket).mockReturnValue(mockSocket as any);
+
+      render(
+        <SocketProvider>
+          <SocketConsumer />
+        </SocketProvider>,
+      );
+      return handlers;
+    }
+
+    it("una desconexión iniciada por el servidor despacha el evento de sesión expirada", () => {
+      const handlers = renderWithSocket();
+      const eventListener = vi.fn();
+      window.addEventListener(SESSION_EXPIRED_EVENT, eventListener);
+
+      act(() => {
+        handlers["connect"]?.();
+      });
+      act(() => {
+        handlers["disconnect"]?.("io server disconnect");
+      });
+
+      expect(eventListener).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("connected").textContent).toBe("false");
+
+      window.removeEventListener(SESSION_EXPIRED_EVENT, eventListener);
+    });
+
+    it.each(["io client disconnect", "transport close", "transport error", "ping timeout"])(
+      "una desconexión del cliente o de red (%s) no despacha el evento",
+      (reason) => {
+        const handlers = renderWithSocket();
+        const eventListener = vi.fn();
+        window.addEventListener(SESSION_EXPIRED_EVENT, eventListener);
+
+        act(() => {
+          handlers["disconnect"]?.(reason);
+        });
+
+        expect(eventListener).not.toHaveBeenCalled();
+
+        window.removeEventListener(SESSION_EXPIRED_EVENT, eventListener);
+      },
+    );
+  });
 });

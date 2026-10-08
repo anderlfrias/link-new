@@ -1,6 +1,7 @@
 import { TokenExpiredError } from "jsonwebtoken";
 import { authenticateAccessToken } from "../modules/auth/identity";
 import { AppError } from "../utils/errors";
+import { scheduleSessionExpiry } from "./session-expiry";
 import { SocketMiddleware } from "./types";
 
 /// Primer middleware global de socketMiddlewares (ver middleware.ts): verifica
@@ -10,6 +11,9 @@ import { SocketMiddleware } from "./types";
 /// D7) para dejarlo en `socket.data.user`. Rechaza además los tokens
 /// restringidos (`pcr`): con uno de esos no se recibe nada en vivo hasta
 /// cambiar la contraseña (D13).
+/// Como el token solo se verifica acá, también programa el corte del socket
+/// para cuando venza (`scheduleSessionExpiry`): sin eso la conexión viviría
+/// más que la sesión.
 /// Ningún módulo debe autenticar un socket por su cuenta: todos leen
 /// `socket.data.user` una vez este middleware corrió.
 export const authenticateSocket: SocketMiddleware = (socket, next) => {
@@ -21,6 +25,7 @@ export const authenticateSocket: SocketMiddleware = (socket, next) => {
   authenticateAccessToken(token)
     .then(({ user }) => {
       socket.data.user = user;
+      scheduleSessionExpiry(socket, user.exp);
       next();
     })
     .catch((error) => {

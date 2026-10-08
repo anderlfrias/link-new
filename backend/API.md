@@ -238,6 +238,7 @@ socket.on("connect_error", (err) => {
 ```
 
 - La conexión se autentica **una sola vez, en el handshake** (no hay un evento de "login" por socket). Si el token es inválido o expiró, la conexión falla directamente con `connect_error` — no llega a `connect`.
+- **El servidor corta el socket cuando vence el token** (`exp`): `socket.disconnect(true)`, y el cliente ve el evento `disconnect` con `reason === "io server disconnect"` (no reconecta solo). Es la misma razón con la que se cortan los sockets al desactivar la cuenta o revocar sus sesiones, así que significa que la sesión terminó. Se corta en el `exp` firmado, no antes: bajar `localSessionTtlHours` no acorta las conexiones que ya existen.
 - Reconectar (ej. tras perder la red) vuelve a mandar el mismo `auth.token` automáticamente (comportamiento default de socket.io-client) — si el token ya expiró para ese momento, hay que refrescarlo (re-loguear) antes de reconectar.
 - Conectarse **no** te suscribe a nada todavía. Para recibir eventos de una conversación hay que unirse explícitamente a su room (ver 3.1) — esto es intencional, para que un socket no reciba tráfico de conversaciones que el usuario no tiene abiertas.
 

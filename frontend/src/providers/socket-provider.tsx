@@ -30,7 +30,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     setSocket(nextSocket);
 
     const handleConnect = () => setConnected(true);
-    const handleDisconnect = () => setConnected(false);
+    const handleDisconnect = (reason: string) => {
+      setConnected(false);
+      // El servidor cortó la conexión a propósito (`socket.disconnect(true)`): hoy solo lo
+      // hace cuando vence el token del socket o se revocan las sesiones de la cuenta. En los
+      // dos casos la sesión terminó, y el cliente no reconecta solo en este caso.
+      if (reason === "io server disconnect" && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: reason }));
+      }
+    };
     const handleConnectError = (err: Error) => {
       if (err?.message === "Token expired" || err?.message === "Invalid token") {
         if (typeof window !== "undefined") {
