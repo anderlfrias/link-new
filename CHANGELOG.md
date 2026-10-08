@@ -54,6 +54,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Al crear un grupo o cambiar su imagen se aceptaba el id de cualquier archivo, lo que daba a los miembros acceso a un archivo ajeno.
 - Los adjuntos de un mensaje borrado, o de un grupo eliminado, seguían descargables para los miembros que conservaban el enlace.
 - Un miembro quitado de un grupo, o que salía de él, seguía recibiendo en tiempo real los mensajes nuevos mientras su conexión siguiera abierta.
+- El servidor reenviaba señales de llamada (WebRTC) a cualquier usuario, sin comprobar que emisor y destinatario fueran los participantes de una llamada en curso. Ahora el destino lo decide el servidor, y las señales de más de 64 KiB se descartan.
+- Los errores inesperados de una llamada ya no devuelven al cliente el mensaje interno (por ejemplo, el de un error de la base de datos).
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
 - Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.

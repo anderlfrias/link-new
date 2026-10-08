@@ -262,6 +262,38 @@ export async function endCall(userId: string, callId: string): Promise<CallRespo
   return toCallResponse(updated);
 }
 
+/// Autoriza una señal WebRTC (offer, answer, candidato ICE) y devuelve a quién
+/// reenviarla: siempre el otro participante de la llamada, nunca lo que diga el
+/// cliente en `targetUserId`. Sin esto cualquier usuario autenticado podía
+/// mandar payloads arbitrarios a todos los sockets de cualquier otro usuario.
+/// Solo se admiten llamadas en curso: `ACCEPTED` es el estado normal (la oferta
+/// la crea el llamante al aceptarse) y `RINGING` cubre las carreras.
+export async function authorizeSignal(
+  userId: string,
+  callId: string,
+  targetUserId: string,
+): Promise<string> {
+  const call = await CallRepository.findById(callId);
+  if (!call) {
+    throw new NotFoundError("Llamada no encontrada");
+  }
+
+  if (call.callerId !== userId && call.receiverId !== userId) {
+    throw new ForbiddenError("No participas en esta llamada");
+  }
+
+  const peerId = call.callerId === userId ? call.receiverId : call.callerId;
+  if (targetUserId !== peerId) {
+    throw new ForbiddenError("Destino de señal inválido");
+  }
+
+  if (call.status !== CallStatus.RINGING && call.status !== CallStatus.ACCEPTED) {
+    throw new BadRequestError("La llamada no está activa");
+  }
+
+  return peerId;
+}
+
 export async function getCallById(callId: string): Promise<CallResponse | null> {
   const call = await CallRepository.findById(callId);
   return call ? toCallResponse(call) : null;

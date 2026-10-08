@@ -8,6 +8,7 @@ import * as PushService from "../push/push.service";
 import * as CallRepository from "./call.repository";
 import {
   acceptCall,
+  authorizeSignal,
   endCall,
   formatDuration,
   initiateCall,
@@ -343,6 +344,66 @@ describe("call.service", () => {
           type: "CALL",
         }),
       );
+    });
+  });
+
+  describe("authorizeSignal", () => {
+    function mockCall(status: CallStatus) {
+      vi.mocked(CallRepository.findById).mockResolvedValue({
+        id: callId,
+        callerId,
+        receiverId,
+        conversationId,
+        type: CallType.AUDIO,
+        status,
+      } as any);
+    }
+
+    it("devuelve al receptor cuando señaliza el llamante", async () => {
+      mockCall(CallStatus.ACCEPTED);
+
+      await expect(authorizeSignal(callerId, callId, receiverId)).resolves.toBe(receiverId);
+    });
+
+    it("devuelve al llamante cuando señaliza el receptor", async () => {
+      mockCall(CallStatus.ACCEPTED);
+
+      await expect(authorizeSignal(receiverId, callId, callerId)).resolves.toBe(callerId);
+    });
+
+    it("admite señales mientras la llamada todavía suena (RINGING)", async () => {
+      mockCall(CallStatus.RINGING);
+
+      await expect(authorizeSignal(callerId, callId, receiverId)).resolves.toBe(receiverId);
+    });
+
+    it("rechaza si el emisor no participa de la llamada", async () => {
+      mockCall(CallStatus.ACCEPTED);
+
+      await expect(authorizeSignal("user-intruso", callId, receiverId)).rejects.toThrow(ForbiddenError);
+    });
+
+    it("rechaza si targetUserId no es el otro participante", async () => {
+      mockCall(CallStatus.ACCEPTED);
+
+      // Ni un tercero cualquiera ni el propio emisor son destinos válidos.
+      await expect(authorizeSignal(callerId, callId, "user-tercero")).rejects.toThrow(ForbiddenError);
+      await expect(authorizeSignal(callerId, callId, callerId)).rejects.toThrow(ForbiddenError);
+    });
+
+    it.each([CallStatus.COMPLETED, CallStatus.REJECTED, CallStatus.MISSED, CallStatus.BUSY])(
+      "rechaza si la llamada ya terminó (%s)",
+      async (status) => {
+        mockCall(status);
+
+        await expect(authorizeSignal(callerId, callId, receiverId)).rejects.toThrow(BadRequestError);
+      },
+    );
+
+    it("NotFound si la llamada no existe", async () => {
+      vi.mocked(CallRepository.findById).mockResolvedValue(null);
+
+      await expect(authorizeSignal(callerId, callId, receiverId)).rejects.toThrow(NotFoundError);
     });
   });
 

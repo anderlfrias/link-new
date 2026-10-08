@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ForbiddenError } from "../../utils/errors";
 import * as CallService from "./call.service";
 import { CALL_EVENTS, registerCallSocket } from "./call.socket";
 
@@ -109,9 +110,11 @@ describe("call.socket", () => {
     expect(callback).toHaveBeenCalledWith({ ok: true, call: mockCall });
   });
 
-  it("maneja call:signal retransmitiendo al targetUserId", async () => {
+  it("retransmite call:signal solo al otro participante autorizado", async () => {
     const emitSpy = vi.fn();
     mockIo.to.mockReturnValue({ emit: emitSpy });
+    // El destino lo decide el servidor: devuelve al otro participante de la llamada.
+    vi.mocked(CallService.authorizeSignal).mockResolvedValue("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 
     await handlers[CALL_EVENTS.SIGNAL]({
       callId: "550e8400-e29b-41d4-a716-446655440000",
@@ -119,12 +122,93 @@ describe("call.socket", () => {
       signal: { type: "offer", sdp: "abc" },
     });
 
+    expect(CallService.authorizeSignal).toHaveBeenCalledWith(
+      "user-1",
+      "550e8400-e29b-41d4-a716-446655440000",
+      "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    );
     expect(mockIo.to).toHaveBeenCalledWith("user:6ba7b810-9dad-11d1-80b4-00c04fd430c8");
     expect(emitSpy).toHaveBeenCalledWith(CALL_EVENTS.SIGNAL, {
       callId: "550e8400-e29b-41d4-a716-446655440000",
       senderUserId: "user-1",
       signal: { type: "offer", sdp: "abc" },
     });
+  });
+
+  it("descarta call:signal no autorizado sin emitir nada", async () => {
+    vi.mocked(CallService.authorizeSignal).mockRejectedValue(new ForbiddenError("No participas en esta llamada"));
+
+    await handlers[CALL_EVENTS.SIGNAL]({
+      callId: "550e8400-e29b-41d4-a716-446655440000",
+      targetUserId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      signal: { type: "offer", sdp: "abc" },
+    });
+
+    expect(mockIo.to).not.toHaveBeenCalled();
+    // Sin eco al emisor: no se le da un oráculo para sondear llamadas ajenas.
+    expect(mockSocket.emit).not.toHaveBeenCalled();
+  });
+
+  it("descarta call:signal con un payload inválido sin consultar la llamada", async () => {
+    await handlers[CALL_EVENTS.SIGNAL]({ callId: "no-es-uuid", targetUserId: "x", signal: {} });
+
+    expect(CallService.authorizeSignal).not.toHaveBeenCalled();
+    expect(mockIo.to).not.toHaveBeenCalled();
+  });
+
+  it("call:error no expone el mensaje de un error inesperado", async () => {
+    // Un error de Prisma trae el nombre de la tabla y de las columnas.
+    vi.mocked(CallService.acceptCall).mockRejectedValue(
+      new Error('Invalid `prisma.call.update()` invocation: column "answered_at" of relation "calls"'),
+    );
+    const callback = vi.fn();
+
+    await handlers[CALL_EVENTS.ACCEPT]({ callId: "550e8400-e29b-41d4-a716-446655440000" }, callback);
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(CALL_EVENTS.ERROR, { message: "Error al aceptar llamada" });
+    expect(callback).toHaveBeenCalledWith({ ok: false, error: "Error al aceptar llamada" });
+  });
+
+  it("call:error conserva el mensaje de un AppError", async () => {
+    vi.mocked(CallService.acceptCall).mockRejectedValue(new ForbiddenError("No tienes permiso para responder esta llamada"));
+    const callback = vi.fn();
+
+    await handlers[CALL_EVENTS.ACCEPT]({ callId: "550e8400-e29b-41d4-a716-446655440000" }, callback);
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(CALL_EVENTS.ERROR, {
+      message: "No tienes permiso para responder esta llamada",
+    });
+    expect(callback).toHaveBeenCalledWith({ ok: false, error: "No tienes permiso para responder esta llamada" });
+  });
+
+  it("call:error conserva el mensaje de validación del payload", async () => {
+    const callback = vi.fn();
+
+    await handlers[CALL_EVENTS.END]({ callId: "no-es-uuid" }, callback);
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(CALL_EVENTS.ERROR, { message: "ID de llamada inválido" });
+    expect(callback).toHaveBeenCalledWith({ ok: false, error: "ID de llamada inválido" });
+  });
+
+  it.each([
+    [CALL_EVENTS.INITIATE, "Error al iniciar llamada", "initiateCall"],
+    [CALL_EVENTS.REJECT, "Error al rechazar llamada", "rejectCall"],
+    [CALL_EVENTS.END, "Error al finalizar llamada", "endCall"],
+  ] as const)("%s usa un mensaje genérico ante un error inesperado", async (event, expected, method) => {
+    vi.mocked((CallService as any)[method]).mockRejectedValue(new Error("connection to server at 10.0.0.5 refused"));
+    const callback = vi.fn();
+
+    await handlers[event](
+      {
+        callId: "550e8400-e29b-41d4-a716-446655440000",
+        conversationId: "550e8400-e29b-41d4-a716-446655440000",
+        receiverId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      },
+      callback,
+    );
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(CALL_EVENTS.ERROR, { message: expected });
+    expect(callback).toHaveBeenCalledWith({ ok: false, error: expected });
   });
 
   it("maneja call:end notificando el fin a ambas partes", async () => {

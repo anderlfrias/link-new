@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_SIGNAL_BYTES,
   acceptCallSchema,
   endCallSchema,
   initiateCallSchema,
@@ -98,6 +99,34 @@ describe("call.validator", () => {
           targetUserId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
         }),
       ).rejects.toThrow();
+    });
+
+    it("acepta una señal de hasta 64 KiB y rechaza una más grande", async () => {
+      const base = {
+        callId: "550e8400-e29b-41d4-a716-446655440000",
+        targetUserId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      };
+      // {"sdp":"..."} suma 10 caracteres de estructura alrededor del texto.
+      const fits = { sdp: "a".repeat(MAX_SIGNAL_BYTES - 10) };
+      const tooBig = { sdp: "a".repeat(MAX_SIGNAL_BYTES - 9) };
+
+      await expect(signalSchema.validate({ ...base, signal: fits })).resolves.toBeDefined();
+      await expect(signalSchema.validate({ ...base, signal: tooBig })).rejects.toThrow(
+        "Señal WebRTC demasiado grande",
+      );
+    });
+
+    it("rechaza una señal que no se puede serializar", async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+
+      await expect(
+        signalSchema.validate({
+          callId: "550e8400-e29b-41d4-a716-446655440000",
+          targetUserId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+          signal: circular,
+        }),
+      ).rejects.toThrow("Señal WebRTC demasiado grande");
     });
   });
 

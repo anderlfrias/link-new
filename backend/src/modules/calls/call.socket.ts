@@ -1,8 +1,10 @@
+import { ValidationError } from "yup";
 import { SOCKET_LIFECYCLE_EVENTS } from "../../socket/events";
 import { withRequestContext } from "../../socket/request-context";
 import { userRoomName } from "../../socket/rooms";
 import { AppServer, AppSocket, AuthenticatedSocketUser } from "../../socket/types";
 import { getLogger } from "../../config/request-context";
+import { AppError } from "../../utils/errors";
 import * as CallRepository from "./call.repository";
 import * as CallService from "./call.service";
 import {
@@ -27,6 +29,17 @@ export const CALL_EVENTS = {
   ENDED: "call:ended",
   ERROR: "call:error",
 } as const;
+
+/// Mensaje que se le devuelve al cliente cuando un handler falla. Solo los
+/// errores pensados para mostrarse (`AppError`, validación de yup) conservan su
+/// texto: cualquier otro (un error de Prisma trae tabla, columnas y constraint)
+/// se reemplaza por `fallback`. El error completo sigue yendo al log.
+function toClientMessage(err: unknown, fallback: string): string {
+  if (err instanceof AppError || err instanceof ValidationError) {
+    return err.message || fallback;
+  }
+  return fallback;
+}
 
 export function registerCallSocket(socket: AppSocket, io: AppServer): void {
   const user = socket.data.user as AuthenticatedSocketUser | undefined;
@@ -60,8 +73,9 @@ export function registerCallSocket(socket: AppSocket, io: AppServer): void {
         }
       } catch (err: any) {
         getLogger().warn({ err, userId: currentUserId }, "Error al iniciar llamada");
-        socket.emit(CALL_EVENTS.ERROR, { message: err?.message || "Error al iniciar llamada" });
-        callback?.({ ok: false, error: err?.message });
+        const message = toClientMessage(err, "Error al iniciar llamada");
+        socket.emit(CALL_EVENTS.ERROR, { message });
+        callback?.({ ok: false, error: message });
       }
     }),
   );
@@ -80,8 +94,9 @@ export function registerCallSocket(socket: AppSocket, io: AppServer): void {
         callback?.({ ok: true, call });
       } catch (err: any) {
         getLogger().warn({ err, userId: currentUserId }, "Error al aceptar llamada");
-        socket.emit(CALL_EVENTS.ERROR, { message: err?.message || "Error al aceptar llamada" });
-        callback?.({ ok: false, error: err?.message });
+        const message = toClientMessage(err, "Error al aceptar llamada");
+        socket.emit(CALL_EVENTS.ERROR, { message });
+        callback?.({ ok: false, error: message });
       }
     }),
   );
@@ -109,8 +124,9 @@ export function registerCallSocket(socket: AppSocket, io: AppServer): void {
         callback?.({ ok: true, call });
       } catch (err: any) {
         getLogger().warn({ err, userId: currentUserId }, "Error al rechazar llamada");
-        socket.emit(CALL_EVENTS.ERROR, { message: err?.message || "Error al rechazar llamada" });
-        callback?.({ ok: false, error: err?.message });
+        const message = toClientMessage(err, "Error al rechazar llamada");
+        socket.emit(CALL_EVENTS.ERROR, { message });
+        callback?.({ ok: false, error: message });
       }
     }),
   );
@@ -121,14 +137,27 @@ export function registerCallSocket(socket: AppSocket, io: AppServer): void {
     withRequestContext(socket, async (rawPayload: unknown) => {
       try {
         const validated = await signalSchema.validate(rawPayload);
-        // Retransmitir señal directamente a la sala del usuario destino
-        io.to(userRoomName(validated.targetUserId)).emit(CALL_EVENTS.SIGNAL, {
+        // El destino lo decide el servidor (el otro participante de una llamada
+        // en curso), no el cliente: ver `CallService.authorizeSignal`.
+        const peerId = await CallService.authorizeSignal(
+          currentUserId,
+          validated.callId,
+          validated.targetUserId,
+        );
+        io.to(userRoomName(peerId)).emit(CALL_EVENTS.SIGNAL, {
           callId: validated.callId,
           senderUserId: currentUserId,
           signal: validated.signal,
         });
-      } catch (err: any) {
-        getLogger().warn({ err, userId: currentUserId }, "Error en señalización WebRTC");
+      } catch (err) {
+        // Se descarta en silencio, sin `call:error`: una señal rechazada no es algo
+        // que el cliente deba poder usar para sondear llamadas. No se loguea `err`
+        // completo: el ValidationError de yup lleva el payload, y una SDP/ICE
+        // trae las IPs de los dos extremos (LOGGING_PLAN §4).
+        getLogger().warn(
+          { userId: currentUserId, reason: err instanceof Error ? err.message : "unknown" },
+          "Señal WebRTC descartada",
+        );
       }
     }),
   );
@@ -146,8 +175,9 @@ export function registerCallSocket(socket: AppSocket, io: AppServer): void {
         callback?.({ ok: true, call });
       } catch (err: any) {
         getLogger().warn({ err, userId: currentUserId }, "Error al finalizar llamada");
-        socket.emit(CALL_EVENTS.ERROR, { message: err?.message || "Error al finalizar llamada" });
-        callback?.({ ok: false, error: err?.message });
+        const message = toClientMessage(err, "Error al finalizar llamada");
+        socket.emit(CALL_EVENTS.ERROR, { message });
+        callback?.({ ok: false, error: message });
       }
     }),
   );
