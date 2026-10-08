@@ -28,6 +28,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - **Acción requerida en producción:** con `NODE_ENV=production`, el backend no arranca sin `CORS_ORIGIN`. Definirla con el origen del frontend (o con `*` para aceptar cualquier origen a propósito). Antes, sin definirla, la API aceptaba cualquier origen.
 - **Acción requerida detrás de Cloudflare:** el backend ya no toma la IP del cliente de `CF-Connecting-IP` salvo con `TRUST_CF_CONNECTING_IP=true`. Si hay un proxy entre Cloudflare y el backend y no se define, el rate limiting y la auditoría ven la IP del proxy. `trust proxy` sigue en `1` por defecto (`TRUST_PROXY`).
 - LINK ya no se puede embeber en un iframe de otro origen.
+- **Migración de datos irreversible** (`20261008120000_purge_deleted_message_content`): borra el texto, las encuestas y la relación con los archivos de los mensajes que ya estaban eliminados. No cambia el schema. **Hacer un backup de la base antes de aplicarla.** Los archivos no se borran: los que queden sin uso los libera la limpieza de archivos huérfanos, si un admin la activó.
 - **Migración de base de datos nueva** (`20261006150000_local_auth`): tabla de credenciales locales y campos nuevos en `users` y `app_settings`. Se aplica con `npm run db:migrate`, o sola al arrancar el contenedor del backend. No cambia nada en una instalación EXTERNAL_AUTH.
 - El panel de usuarios deja de ser de solo lectura: en modo external-auth permite desactivar y reactivar cuentas; los demás datos se siguen administrando en EXTERNAL_AUTH.
 - El campo del login dice "Usuario o correo electrónico" en los dos modos.
@@ -63,6 +64,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Una tarjeta de contacto podía mostrar el nombre y el correo de una persona y abrir el chat con otra, o cargar su foto desde un sitio externo. Ahora el servidor arma la tarjeta con los datos reales de la cuenta.
 - La conexión en tiempo real seguía abierta, recibiendo mensajes, después de que vencía la sesión.
 - Cualquiera podía impedirle a otra persona iniciar sesión durante 15 minutos con cinco intentos fallidos usando su usuario. Ahora el límite de cinco intentos es por usuario y por IP, con un tope más alto por usuario desde cualquier IP.
+- El texto de los mensajes borrados (por su autor o por la retención automática) quedaba guardado en la base, junto con sus encuestas y la relación con sus archivos. Ahora se descarta al borrar.
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
 - Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.

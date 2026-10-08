@@ -209,6 +209,20 @@ npm run db:migrate                                                              
 Si `migrate diff` muestra diferencias, la base no coincide con el esquema actual: revisarlas
 antes de seguir. Hacer un backup antes de cualquiera de estos pasos.
 
+**Backup antes de actualizar.** Algunas migraciones cambian datos y no se pueden deshacer. La
+`20261008120000_purge_deleted_message_content` borra de forma permanente el texto, las encuestas y
+la relación con los archivos de los mensajes que ya estaban eliminados (los archivos en sí no se
+borran: los libera la limpieza de archivos huérfanos, si está activada). Antes de actualizar una
+instalación existente, hacer un backup de la base:
+
+```bash
+# Con Docker (usuario y base por defecto del docker-compose.yml)
+docker compose exec -T postgres pg_dump -U link -Fc link > link-backup.dump
+
+# Sin Docker
+pg_dump --format=custom --file=link-backup.dump "$DATABASE_URL"
+```
+
 ## Producción sin Docker
 
 ```bash

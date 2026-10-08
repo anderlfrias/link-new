@@ -192,22 +192,40 @@ export function updateContent(messageId: string, content: string) {
   });
 }
 
-export function softDelete(messageId: string, deletedById: string) {
-  return prisma.message.update({
-    where: { id: messageId },
-    data: { deletedAt: new Date(), deletedById },
-  });
+/// "Borrar para todos". Marca el mensaje como borrado (`deletedAt`/`deletedById`,
+/// que siguen siendo la única señal de que existió) y descarta su contenido en
+/// la misma transacción: el texto, la encuesta (con sus opciones y votos, que
+/// caen por `ON DELETE CASCADE`) y la relación con sus archivos (`MessageFile`).
+/// Las reacciones y la auditoría se conservan: no son contenido. El archivo en
+/// sí (`StoredFile`) no se toca: si ya no lo usa ningún mensaje, avatar ni
+/// grupo, lo recoge el worker de archivos huérfanos (ver upload-cleanup.worker.ts).
+/// Es irreversible: nada de la UI lee el contenido de un mensaje borrado.
+export async function softDelete(messageId: string, deletedById: string) {
+  const [deleted] = await prisma.$transaction([
+    prisma.message.update({
+      where: { id: messageId },
+      data: { deletedAt: new Date(), deletedById, content: "" },
+    }),
+    prisma.poll.deleteMany({ where: { messageId } }),
+    prisma.messageFile.deleteMany({ where: { messageId } }),
+  ]);
+  return deleted;
 }
 
 /// Usado por el worker de retención (`src/workers/message-retention.worker.ts`)
-/// para el borrado automático por `AppSettings.messageRetentionDays`. A
-/// diferencia de `softDelete`, no tiene `deletedById` (no lo borró un
-/// usuario) y opera en lote — devuelve cuántos mensajes marcó, para logging.
+/// para el borrado automático por `AppSettings.messageRetentionDays`. Hace lo
+/// mismo que `softDelete` (descartar texto, encuesta y relación con archivos,
+/// todo en una transacción), pero sin `deletedById` (no lo borró un usuario) y en
+/// lote — devuelve cuántos mensajes marcó, para logging.
 export async function softDeleteOlderThan(cutoffDate: Date): Promise<number> {
-  const result = await prisma.message.updateMany({
-    where: { createdAt: { lt: cutoffDate }, deletedAt: null },
-    data: { deletedAt: new Date() },
-  });
+  // Mismo criterio para las tres operaciones. Las dos primeras corren antes del
+  // update: después ya no matchearían (`deletedAt` dejaría de ser null).
+  const expired = { createdAt: { lt: cutoffDate }, deletedAt: null };
+  const [, , result] = await prisma.$transaction([
+    prisma.poll.deleteMany({ where: { message: expired } }),
+    prisma.messageFile.deleteMany({ where: { message: expired } }),
+    prisma.message.updateMany({ where: expired, data: { deletedAt: new Date(), content: "" } }),
+  ]);
   return result.count;
 }
 

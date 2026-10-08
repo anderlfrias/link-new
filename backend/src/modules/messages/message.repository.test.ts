@@ -11,6 +11,10 @@ vi.mock("../../config/prisma", () => ({
     },
     messageFile: {
       findMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    poll: {
+      deleteMany: vi.fn(),
     },
     messageReaction: {
       findUnique: vi.fn(),
@@ -212,20 +216,49 @@ describe("message.repository", () => {
   });
 
   describe("softDelete", () => {
-    it("marca deletedAt y deletedById sin borrar físicamente", async () => {
+    beforeEach(() => {
+      // Forma de array de `$transaction`: las operaciones ya vienen armadas y se resuelven juntas.
+      vi.mocked(prisma.$transaction).mockImplementation(async (operations: any) => Promise.all(operations));
+    });
+
+    it("marca deletedAt y deletedById, vacía el contenido y devuelve el mensaje actualizado", async () => {
+      const deleted = { id: "msg-1", deletedAt: new Date() };
+      vi.mocked(prisma.message.update).mockResolvedValue(deleted as any);
+      vi.mocked(prisma.poll.deleteMany).mockResolvedValue({ count: 0 });
+      vi.mocked(prisma.messageFile.deleteMany).mockResolvedValue({ count: 0 });
+
+      const result = await softDelete("msg-1", "u-1");
+
+      expect(result).toBe(deleted);
+      expect(prisma.message.update).toHaveBeenCalledWith({
+        where: { id: "msg-1" },
+        data: { deletedAt: expect.any(Date), deletedById: "u-1", content: "" },
+      });
+    });
+
+    it("borra la encuesta y la relación con los archivos en la misma transacción", async () => {
       vi.mocked(prisma.message.update).mockResolvedValue({ id: "msg-1" } as any);
+      vi.mocked(prisma.poll.deleteMany).mockResolvedValue({ count: 1 });
+      vi.mocked(prisma.messageFile.deleteMany).mockResolvedValue({ count: 2 });
 
       await softDelete("msg-1", "u-1");
 
-      expect(prisma.message.update).toHaveBeenCalledWith({
-        where: { id: "msg-1" },
-        data: { deletedAt: expect.any(Date), deletedById: "u-1" },
-      });
+      expect(prisma.poll.deleteMany).toHaveBeenCalledWith({ where: { messageId: "msg-1" } });
+      expect(prisma.messageFile.deleteMany).toHaveBeenCalledWith({ where: { messageId: "msg-1" } });
+      // Una sola transacción con las tres operaciones: o se descarta todo el contenido o nada.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(prisma.$transaction).mock.calls[0][0]).toHaveLength(3);
     });
   });
 
   describe("softDeleteOlderThan", () => {
-    it("marca deletedAt en mensajes anteriores a la fecha de corte y devuelve count", async () => {
+    beforeEach(() => {
+      vi.mocked(prisma.$transaction).mockImplementation(async (operations: any) => Promise.all(operations));
+    });
+
+    it("vacía el contenido de los mensajes vencidos, marca deletedAt y devuelve el count", async () => {
+      vi.mocked(prisma.poll.deleteMany).mockResolvedValue({ count: 0 });
+      vi.mocked(prisma.messageFile.deleteMany).mockResolvedValue({ count: 0 });
       vi.mocked(prisma.message.updateMany).mockResolvedValue({ count: 42 });
       const cutoff = new Date("2025-01-01");
 
@@ -234,8 +267,29 @@ describe("message.repository", () => {
       expect(count).toBe(42);
       expect(prisma.message.updateMany).toHaveBeenCalledWith({
         where: { createdAt: { lt: cutoff }, deletedAt: null },
-        data: { deletedAt: expect.any(Date) },
+        data: { deletedAt: expect.any(Date), content: "" },
       });
+    });
+
+    it("borra las encuestas y la relación con los archivos de los mismos mensajes, en una transacción y antes del update", async () => {
+      vi.mocked(prisma.poll.deleteMany).mockResolvedValue({ count: 3 });
+      vi.mocked(prisma.messageFile.deleteMany).mockResolvedValue({ count: 5 });
+      vi.mocked(prisma.message.updateMany).mockResolvedValue({ count: 42 });
+      const cutoff = new Date("2025-01-01");
+
+      await softDeleteOlderThan(cutoff);
+
+      const expired = { createdAt: { lt: cutoff }, deletedAt: null };
+      expect(prisma.poll.deleteMany).toHaveBeenCalledWith({ where: { message: expired } });
+      expect(prisma.messageFile.deleteMany).toHaveBeenCalledWith({ where: { message: expired } });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      // Después del update esos mensajes ya no matchearían (deletedAt dejaría de ser null).
+      const order = [
+        vi.mocked(prisma.poll.deleteMany).mock.invocationCallOrder[0],
+        vi.mocked(prisma.messageFile.deleteMany).mock.invocationCallOrder[0],
+        vi.mocked(prisma.message.updateMany).mock.invocationCallOrder[0],
+      ];
+      expect(order).toEqual([...order].sort((a, b) => a - b));
     });
   });
 
