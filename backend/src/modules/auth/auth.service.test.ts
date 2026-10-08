@@ -44,8 +44,11 @@ import {
   login,
   removeProfilePicture,
   setProfilePicture,
+  DIRECTORY_SYNC_INTERVAL_MS,
+  resetDirectorySyncThrottle,
   syncAppUsers,
   syncContactAvatar,
+  syncDirectoryThrottled,
   syncProfilePicture,
   updateNotificationSoundEnabled,
   updateOwnName,
@@ -723,7 +726,8 @@ describe("auth.service", () => {
       const errorSpy = vi.spyOn(logger, "error");
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("EXTERNAL_AUTH caído")));
 
-      await expect(syncAppUsers("token")).resolves.toBeUndefined();
+      // false: no se pudo traer el directorio (el throttle usa esto para reintentar).
+      await expect(syncAppUsers("token")).resolves.toBe(false);
       expect(upsertUserFromExternalUser).not.toHaveBeenCalled();
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({ err: expect.any(Error) }),
@@ -787,12 +791,96 @@ describe("auth.service", () => {
         .mockRejectedValueOnce(new Error("DB error para juan"))
         .mockResolvedValueOnce({ id: "internal-2", avatarFileId: "x", syncProfileWithIntegration: false } as any);
 
-      await expect(syncAppUsers("token")).resolves.toBeUndefined();
+      // Un usuario puntual que falla no cuenta: el directorio sí se pudo traer.
+      await expect(syncAppUsers("token")).resolves.toBe(true);
       expect(upsertUserFromExternalUser).toHaveBeenCalledTimes(2);
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({ err: expect.any(Error), username: "juan" }),
         "failed to sync contact from external-auth",
       );
+    });
+  });
+
+  describe("syncDirectoryThrottled — el directorio se sincroniza al iniciar sesión, con throttle", () => {
+    const directory = [{ id: "ext-1", email: "a@b.com", username: "juan", fullName: "Juan Perez" }];
+    const directoryResponse = () => ({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(JSON.stringify(directory)),
+    });
+
+    beforeEach(() => {
+      resetDirectorySyncThrottle();
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
+      vi.mocked(upsertUserFromExternalUser).mockResolvedValue({
+        id: "internal-1",
+        avatarFileId: "existing-avatar",
+        syncProfileWithIntegration: true,
+      } as any);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("sincroniza el directorio con el token del login", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(directoryResponse()));
+
+      await syncDirectoryThrottled("token-del-login");
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(fetch).mock.calls[0][1]).toEqual(
+        expect.objectContaining({ headers: { Authorization: "token-del-login" } }),
+      );
+      expect(upsertUserFromExternalUser).toHaveBeenCalledWith(directory[0]);
+    });
+
+    it("no vuelve a sincronizar dentro de la ventana, aunque inicie sesión otra persona", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(directoryResponse()));
+
+      await syncDirectoryThrottled("token-ana");
+      vi.setSystemTime(Date.now() + DIRECTORY_SYNC_INTERVAL_MS - 1);
+      await syncDirectoryThrottled("token-beto");
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("sincroniza de nuevo pasada la ventana", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(directoryResponse()));
+
+      await syncDirectoryThrottled("token-ana");
+      vi.setSystemTime(Date.now() + DIRECTORY_SYNC_INTERVAL_MS);
+      await syncDirectoryThrottled("token-beto");
+
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("si no se pudo traer el directorio, no consume la ventana y el próximo login reintenta", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValueOnce(new Error("EXTERNAL_AUTH caído")).mockResolvedValue(directoryResponse()),
+      );
+
+      await syncDirectoryThrottled("token-ana");
+      await syncDirectoryThrottled("token-beto");
+
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(upsertUserFromExternalUser).toHaveBeenCalledTimes(1);
+    });
+
+    it("logins simultáneos no disparan sincronizaciones en paralelo", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(directoryResponse()));
+
+      await Promise.all([syncDirectoryThrottled("token-1"), syncDirectoryThrottled("token-2")]);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("nunca lanza, aunque falle algo inesperado", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("boom")));
+
+      await expect(syncDirectoryThrottled("token")).resolves.toBeUndefined();
     });
   });
 
@@ -823,7 +911,7 @@ describe("auth.service", () => {
     });
 
     it("syncAppUsers no rompe (sigue siendo fail-soft) y no llama a EXTERNAL_AUTH", async () => {
-      await expect(syncAppUsers("token")).resolves.toBeUndefined();
+      await expect(syncAppUsers("token")).resolves.toBe(false);
       expect(fetch).not.toHaveBeenCalled();
       expect(upsertUserFromExternalUser).not.toHaveBeenCalled();
     });

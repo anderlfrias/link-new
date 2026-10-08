@@ -21,7 +21,7 @@ describe("user.controller", () => {
   });
 
   describe("list", () => {
-    it("calls listUsers with currentUserId, token, and trimmed search query", async () => {
+    it("calls listUsers with currentUserId and the trimmed search query (sin el token)", async () => {
       const mockUsers = [{ id: "u-2", name: "Bob" }];
       vi.mocked(UserService.listUsers).mockResolvedValue(mockUsers as any);
 
@@ -35,7 +35,7 @@ describe("user.controller", () => {
 
       await UserController.list(req, res, next);
 
-      expect(UserService.listUsers).toHaveBeenCalledWith("u-1", "token-123", "bob");
+      expect(UserService.listUsers).toHaveBeenCalledWith("u-1", "bob");
       expect(res.json).toHaveBeenCalledWith(mockUsers);
       expect(next).not.toHaveBeenCalled();
     });
@@ -53,7 +53,7 @@ describe("user.controller", () => {
 
       await UserController.list(req, res, next);
 
-      expect(UserService.listUsers).toHaveBeenCalledWith("u-1", "token-123", undefined);
+      expect(UserService.listUsers).toHaveBeenCalledWith("u-1", undefined);
     });
 
     it("forwards error to next when service throws", async () => {
@@ -88,7 +88,6 @@ describe("user.controller", () => {
       await UserController.listAdmin(req, res, next);
 
       expect(UserService.listUsersForAdmin).toHaveBeenCalledWith(
-        "token-admin",
         { search: "ana" },
         { beforeId: "u-10", limit: 25 },
       );
@@ -109,7 +108,6 @@ describe("user.controller", () => {
       await UserController.listAdmin(req, res, next);
 
       expect(UserService.listUsersForAdmin).toHaveBeenCalledWith(
-        "token-admin",
         { search: undefined },
         { beforeId: undefined, limit: undefined },
       );

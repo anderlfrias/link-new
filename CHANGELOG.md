@@ -27,6 +27,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Cabeceras de seguridad en todas las respuestas del frontend (`Content-Security-Policy` con `frame-ancestors`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`).
 
 ### Cambiado
+- En modo external-auth, el directorio de contactos se sincroniza con EXTERNAL_AUTH al iniciar sesión (a lo sumo una vez cada 10 minutos, en segundo plano) y no al abrir la lista de usuarios: `GET /api/v1/users` y `GET /api/v1/admin/users` son lecturas de la base de LINK y no dependen de que EXTERNAL_AUTH responda.
 - El título de la app, el manifest y la pantalla de login ya no dicen "Chat Interno". Las claves de `localStorage` pasan de `chat-interno:*` a `link:*`; la sesión abierta y el tema elegido se migran solos, así que no hace falta volver a iniciar sesión.
 - El healthcheck del contenedor del backend comprueba la conexión con la base de datos (`GET /health`), no solo que el proceso responda: si PostgreSQL se cae, el contenedor pasa a `unhealthy`.
 - **Acción requerida en producción:** con `NODE_ENV=production`, el backend no arranca sin `CORS_ORIGIN`. Definirla con el origen del frontend (o con `*` para aceptar cualquier origen a propósito). Antes, sin definirla, la API aceptaba cualquier origen.

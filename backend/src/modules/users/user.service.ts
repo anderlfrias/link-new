@@ -1,23 +1,12 @@
 import env from "../../config/env";
-import * as AuthService from "../auth/auth.service";
 import * as UserRepository from "./user.repository";
 import { AdminUserFilters, AdminUserListOptions, AdminUserListResult } from "./user.types";
 
-/// En modo external-auth, antes de leer el directorio local sincroniza los usuarios de
-/// EXTERNAL_AUTH con acceso a esta app (`AuthService.syncAppUsers`) — así el
-/// directorio incluye a cualquiera con acceso, no solo a quien ya inició
-/// sesión en este chat alguna vez. Si EXTERNAL_AUTH no responde, `syncAppUsers` nunca
-/// lanza: el directorio simplemente se sirve con lo que ya había local. En
-/// modo local no hay a quién preguntarle: las cuentas las crea un admin acá
-/// (LOCAL_AUTH_PLAN.md, punto 8 del mapa).
-async function syncDirectoryFromProvider(token: string): Promise<void> {
-  if (env.auth.mode === "external-auth") {
-    await AuthService.syncAppUsers(token);
-  }
-}
-
-export async function listUsers(currentUserId: string, token: string, search?: string) {
-  await syncDirectoryFromProvider(token);
+/// Directorio de contactos: lectura pura de la base de LINK. Con un proveedor
+/// externo, la base se mantiene al día al iniciar sesión (`syncDirectoryThrottled`
+/// en auth.service.ts), no acá: así listar usuarios no depende de que el
+/// proveedor esté disponible.
+export async function listUsers(currentUserId: string, search?: string) {
   return UserRepository.search(currentUserId, search);
 }
 
@@ -30,11 +19,9 @@ const ADMIN_USERS_MAX_PAGE_SIZE = 100;
 /// actividad. Ver backend/src/modules/users/README.md, "Gestión de usuarios
 /// (admin)".
 export async function listUsersForAdmin(
-  token: string,
   filters: AdminUserFilters,
   options: AdminUserListOptions,
 ): Promise<AdminUserListResult> {
-  await syncDirectoryFromProvider(token);
   const limit = Math.min(Math.max(options.limit ?? ADMIN_USERS_DEFAULT_PAGE_SIZE, 1), ADMIN_USERS_MAX_PAGE_SIZE);
 
   const [rows, totalCount] = await Promise.all([

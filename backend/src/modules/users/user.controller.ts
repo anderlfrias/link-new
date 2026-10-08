@@ -13,9 +13,7 @@ function currentUserId(req: Request): string {
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const search = typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined;
-    // `authenticate` (middleware previo) ya validó el formato "Bearer <token>".
-    const token = req.headers.authorization!.slice("Bearer ".length);
-    const users = await UserService.listUsers(currentUserId(req), token, search);
+    const users = await UserService.listUsers(currentUserId(req), search);
     res.json(users);
   } catch (error) {
     next(error);
@@ -32,10 +30,8 @@ export async function listAdmin(req: Request, res: Response, next: NextFunction)
       env.auth.mode === "local" && (req.query.hasPassword === "true" || req.query.hasPassword === "false")
         ? req.query.hasPassword === "true"
         : undefined;
-    const token = req.headers.authorization!.slice("Bearer ".length);
 
     const result = await UserService.listUsersForAdmin(
-      token,
       { search, status, hasPassword },
       { beforeId: before, limit: Number.isFinite(limit) ? limit : undefined },
     );

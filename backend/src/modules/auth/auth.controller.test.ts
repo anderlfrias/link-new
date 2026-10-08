@@ -5,6 +5,7 @@ vi.mock("./auth.service", () => ({
   login: vi.fn(),
   upsertUsuario: vi.fn(),
   syncProfilePicture: vi.fn(),
+  syncDirectoryThrottled: vi.fn(),
   getOwnProfilePictureUrl: vi.fn(),
   setProfilePicture: vi.fn(),
   removeProfilePicture: vi.fn(),
@@ -123,6 +124,33 @@ describe("auth.controller", () => {
         mockToken,
         true,
       );
+      // El directorio se sincroniza con el token del login (con throttle, ver auth.service.ts).
+      expect(AuthService.syncDirectoryThrottled).toHaveBeenCalledWith(mockToken);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("responde el login sin esperar la sincronización del directorio", async () => {
+      const req = createMockRequest({ body: { user: "testuser", password: "password123" } });
+      const res = createMockResponse();
+      const next = createMockNext();
+      vi.mocked(AuthService.login).mockResolvedValue("mock-token");
+      vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
+      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+      vi.mocked(AuthService.upsertUsuario).mockResolvedValue({
+        id: "int-1",
+        name: "User",
+        status: "ACTIVE",
+        avatarFileId: null,
+        syncProfileWithIntegration: true,
+        notificationSoundEnabled: true,
+        language: "es",
+      } as any);
+      // Una sincronización que nunca termina no puede colgar el login.
+      vi.mocked(AuthService.syncDirectoryThrottled).mockReturnValue(new Promise(() => {}));
+
+      await login(req, res, next);
+
+      expect(res.json).toHaveBeenCalledTimes(1);
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -241,6 +269,8 @@ describe("auth.controller", () => {
       expect(error.code).toBe("account_disabled");
       expect(res.json).not.toHaveBeenCalled();
       expect(AuthService.syncProfilePicture).not.toHaveBeenCalled();
+      // Sin sesión no hay sincronización del directorio.
+      expect(AuthService.syncDirectoryThrottled).not.toHaveBeenCalled();
       expect(AuditService.record).toHaveBeenCalledWith({
         action: AuditAction.LOGIN_FAILED,
         userId: null,

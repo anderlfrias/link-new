@@ -109,6 +109,9 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       token,
       internalUser.syncProfileWithIntegration,
     );
+    // Y el directorio de contactos (con throttle): es acá, con el token del
+    // proveedor que solo existe en este momento, y no al listar usuarios.
+    void AuthService.syncDirectoryThrottled(token);
   } catch (error) {
     // El intento fallido se registra con la identidad INTENTADA y sin userId:
     // puede no existir ningún User local para ese usuario (ver el comentario de

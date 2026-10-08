@@ -403,14 +403,16 @@ function mapExternalUserAppUser(raw: unknown): ExternalUserAppUser | null {
 /// `createConversation`, que exige que el miembro ya exista localmente), y
 /// cachea la foto de los que todavía no tienen una. Nunca lanza: si EXTERNAL_AUTH no
 /// responde, o algún usuario puntual falla, el directorio simplemente se
-/// degrada a lo que ya había local (ver `user.service.ts`).
-export async function syncAppUsers(token: string): Promise<void> {
+/// queda con lo que ya había local. Devuelve `false` solo si no se pudo
+/// traer la lista (EXTERNAL_AUTH caído, respuesta inválida): un fallo de un usuario
+/// puntual no cuenta, el resto se sincroniza igual.
+export async function syncAppUsers(token: string): Promise<boolean> {
   let appUsers: ExternalUserAppUser[];
   try {
     appUsers = await getAppUsers(token);
   } catch (error) {
     getLogger().error({ err: error }, "failed to sync app users from external-auth");
-    return;
+    return false;
   }
 
   await Promise.all(
@@ -428,6 +430,48 @@ export async function syncAppUsers(token: string): Promise<void> {
       }
     }),
   );
+  return true;
+}
+
+/// Cada cuánto como mucho se sincroniza el directorio, para toda la
+/// instalación. El directorio se actualiza al iniciar sesión (ver
+/// `syncDirectoryThrottled`), no al listarlo: así `GET /v1/users` no depende
+/// de que EXTERNAL_AUTH responda. Con 10 minutos, una persona nueva en EXTERNAL_AUTH aparece en
+/// el directorio en cuanto alguien inicia sesión pasada la ventana.
+export const DIRECTORY_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+
+let lastDirectorySyncAt: number | null = null;
+let directorySyncInFlight = false;
+
+/// Sincroniza el directorio con EXTERNAL_AUTH al iniciar sesión, a lo sumo una vez por
+/// `DIRECTORY_SYNC_INTERVAL_MS` en todo el proceso (el estado es en memoria,
+/// igual que los rate limits: el backend corre como una sola instancia). Pensado
+/// para llamarse sin esperar (`void`) después de responder el login: nunca
+/// lanza ni demora al usuario. Si no se pudo traer el directorio (EXTERNAL_AUTH caído),
+/// no consume la ventana y el próximo login lo reintenta. Una sincronización en
+/// curso evita que logins simultáneos disparen otra.
+export async function syncDirectoryThrottled(token: string): Promise<void> {
+  const startedAt = Date.now();
+  if (directorySyncInFlight) return;
+  if (lastDirectorySyncAt !== null && startedAt - lastDirectorySyncAt < DIRECTORY_SYNC_INTERVAL_MS) return;
+
+  directorySyncInFlight = true;
+  try {
+    if (await syncAppUsers(token)) {
+      lastDirectorySyncAt = startedAt;
+    }
+  } catch (error) {
+    // `syncAppUsers` no lanza; esto es por si deja de ser así.
+    getLogger().error({ err: error }, "directory sync failed");
+  } finally {
+    directorySyncInFlight = false;
+  }
+}
+
+/// Solo para los tests: olvida cuándo fue la última sincronización.
+export function resetDirectorySyncThrottle(): void {
+  lastDirectorySyncAt = null;
+  directorySyncInFlight = false;
 }
 
 function parseExternalUserErrorCode(rawBody: string): string | undefined {

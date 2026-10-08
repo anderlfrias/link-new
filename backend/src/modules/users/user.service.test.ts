@@ -4,8 +4,11 @@ import * as AuthService from "../auth/auth.service";
 import * as UserRepository from "./user.repository";
 import { listUsers, listUsersForAdmin } from "./user.service";
 
+// Las lecturas de usuarios no tienen que llamar nunca al proveedor externo: se espían estas dos
+// funciones para comprobarlo (el servicio ni siquiera importa auth.service).
 vi.mock("../auth/auth.service", () => ({
   syncAppUsers: vi.fn(),
+  syncDirectoryThrottled: vi.fn(),
 }));
 
 vi.mock("./user.repository", () => ({
@@ -22,43 +25,48 @@ describe("user.service", () => {
   });
 
   describe("listUsers", () => {
-    it("synchronizes users via AuthService and delegates search to repository", async () => {
+    it("delega la búsqueda en el repositorio y no consulta a ningún proveedor externo", async () => {
       const mockUsers = [{ id: "u-2", name: "Maria" }];
-      vi.mocked(AuthService.syncAppUsers).mockResolvedValue(undefined as any);
       vi.mocked(UserRepository.search).mockResolvedValue(mockUsers as any);
 
-      const result = await listUsers("u-1", "token-xyz", "maria");
+      const result = await listUsers("u-1", "maria");
 
-      expect(AuthService.syncAppUsers).toHaveBeenCalledWith("token-xyz");
       expect(UserRepository.search).toHaveBeenCalledWith("u-1", "maria");
       expect(result).toBe(mockUsers);
+      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
+      expect(AuthService.syncDirectoryThrottled).not.toHaveBeenCalled();
+    });
+
+    it("sin término de búsqueda pasa undefined al repositorio", async () => {
+      vi.mocked(UserRepository.search).mockResolvedValue([] as any);
+
+      await listUsers("u-1");
+
+      expect(UserRepository.search).toHaveBeenCalledWith("u-1", undefined);
     });
   });
 
   describe("listUsersForAdmin", () => {
     it("clamps limit between 1 and 100, defaulting to 30", async () => {
-      vi.mocked(AuthService.syncAppUsers).mockResolvedValue(undefined as any);
       vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue([]);
       vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(0);
       vi.mocked(UserRepository.sumStorageForUsers).mockResolvedValue([]);
       vi.mocked(UserRepository.countGroupAdminForUsers).mockResolvedValue([]);
 
       // Test default limit (30)
-      await listUsersForAdmin("token-xyz", {}, {});
+      await listUsersForAdmin({}, {});
       expect(UserRepository.findAllForAdmin).toHaveBeenCalledWith({}, { beforeId: undefined, limit: 30 });
 
       // Test limit clamped to min 1
-      await listUsersForAdmin("token-xyz", {}, { limit: -5 });
+      await listUsersForAdmin({}, { limit: -5 });
       expect(UserRepository.findAllForAdmin).toHaveBeenCalledWith({}, { beforeId: undefined, limit: 1 });
 
       // Test limit clamped to max 100
-      await listUsersForAdmin("token-xyz", {}, { limit: 500 });
+      await listUsersForAdmin({}, { limit: 500 });
       expect(UserRepository.findAllForAdmin).toHaveBeenCalledWith({}, { beforeId: undefined, limit: 100 });
     });
 
     it("aggregates storage and group administration stats correctly for each user", async () => {
-      vi.mocked(AuthService.syncAppUsers).mockResolvedValue(undefined as any);
-
       const mockRows = [
         {
           id: "u-1",
@@ -99,9 +107,9 @@ describe("user.service", () => {
         { userId: "u-1", _count: 1 },
       ] as any);
 
-      const result = await listUsersForAdmin("token-xyz", { search: "test" }, { limit: 10 });
+      const result = await listUsersForAdmin({ search: "test" }, { limit: 10 });
 
-      expect(AuthService.syncAppUsers).toHaveBeenCalledWith("token-xyz");
+      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
       expect(UserRepository.findAllForAdmin).toHaveBeenCalledWith({ search: "test" }, { beforeId: undefined, limit: 10 });
       expect(UserRepository.countAllForAdmin).toHaveBeenCalledWith({ search: "test" });
       expect(UserRepository.sumStorageForUsers).toHaveBeenCalledWith(["u-1", "u-2"]);
@@ -148,24 +156,16 @@ describe("user.service", () => {
   describe("modo local (LOCAL_AUTH_PLAN.md, punto 8 del mapa)", () => {
     useAuthMode(LOCAL_AUTH_CONFIG);
 
-    it("el directorio no llama a EXTERNAL_AUTH", async () => {
-      vi.mocked(UserRepository.search).mockResolvedValue([] as any);
-
-      await listUsers("u-1", "local-token");
-
-      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
-      expect(UserRepository.search).toHaveBeenCalledWith("u-1", undefined);
-    });
-
-    it("el panel de usuarios tampoco", async () => {
+    it("el panel de usuarios no llama a ningún proveedor externo", async () => {
       vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue([]);
       vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(0);
       vi.mocked(UserRepository.sumStorageForUsers).mockResolvedValue([]);
       vi.mocked(UserRepository.countGroupAdminForUsers).mockResolvedValue([]);
 
-      await listUsersForAdmin("local-token", {}, {});
+      await listUsersForAdmin({}, {});
 
       expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
+      expect(AuthService.syncDirectoryThrottled).not.toHaveBeenCalled();
     });
   });
 });

@@ -8,7 +8,7 @@ Directorio de usuarios locales (`User`, `prisma/schema.prisma`) — perfil, no a
 router.use(authenticate, attachInternalUser)
 ```
 
-Sin rol especial, cualquier autenticado. En modo external-auth, antes de leer la base sincroniza los usuarios de EXTERNAL_AUTH con acceso a esta app (`AuthService.syncAppUsers(token)`) — así el directorio incluye a cualquiera con acceso, no solo a quien ya inició sesión en este chat alguna vez. Si EXTERNAL_AUTH no responde, `syncAppUsers` nunca lanza: el directorio se sirve igual con lo que ya había local. En modo local no hay a quién preguntarle: el directorio es la tabla `User`.
+Sin rol especial, cualquier autenticado. Es una **lectura pura de la tabla `User`**: no llama a ningún proveedor externo ni usa el token de la request. En modo external-auth, el directorio se mantiene al día al iniciar sesión: el login dispara `AuthService.syncDirectoryThrottled(token)` (en segundo plano, a lo sumo una vez cada 10 minutos en todo el proceso, y sin consumir la ventana si EXTERNAL_AUTH no respondió), que trae los usuarios con acceso a esta app y los upsertea — así el directorio incluye a cualquiera con acceso, no solo a quien ya inició sesión en este chat alguna vez. En modo local el directorio es la tabla `User`.
 
 Query param opcional: `search` (contains, case-insensitive, contra `name`/`email`). Devuelve un array (sin paginación, `take: 100` fijo — en la práctica el directorio de una empresa es chico), **excluye al propio usuario** y **fuerza `status: ACTIVE`** — está pensado exclusivamente para el selector de contactos al iniciar una conversación, no para administración. Cada entrada: `{ id, name, email, avatarFileId, avatarFile: { path } | null, status }`.
 
