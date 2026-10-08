@@ -40,7 +40,7 @@ export const en: TranslationSchema = {
   },
   auth: {
     title: "Sign in",
-    subtitle: "Internal chat — sign in to continue",
+    subtitle: "Sign in to continue",
     username: "Username",
     usernameOrEmail: "Username or email",
     password: "Password",

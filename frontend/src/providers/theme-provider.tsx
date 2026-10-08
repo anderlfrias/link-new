@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { THEME_STORAGE_KEY } from "@/constants/theme";
+import { LEGACY_THEME_STORAGE_KEY, THEME_STORAGE_KEY } from "@/constants/theme";
+import { migrateLegacyKey } from "@/lib/storage-keys";
 
 export type Theme = "light" | "dark";
 
@@ -21,6 +22,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
+    migrateLegacyKey(LEGACY_THEME_STORAGE_KEY, THEME_STORAGE_KEY);
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     setThemeState(stored === "dark" ? "dark" : "light");
   }, []);

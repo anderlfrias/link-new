@@ -704,7 +704,7 @@ describe("MessageBubble", () => {
     const messageWithLinks: Message = {
       ...baseMessage,
       id: "msg-links",
-      content: "Consulta https://example.com, escribe a dr.perez@example.com o llama al (809) 555-0100.",
+      content: "Consulta https://example.com, escribe a dr.perez@example.org o llama al (809) 555-0100.",
     };
 
     render(
@@ -728,9 +728,9 @@ describe("MessageBubble", () => {
     expect(urlLink).toHaveAttribute("target", "_blank");
     expect(urlLink).toHaveAttribute("rel", "noopener noreferrer");
 
-    const emailLink = screen.getByRole("link", { name: "dr.perez@example.com" });
+    const emailLink = screen.getByRole("link", { name: "dr.perez@example.org" });
     expect(emailLink).toBeInTheDocument();
-    expect(emailLink).toHaveAttribute("href", "mailto:dr.perez@example.com");
+    expect(emailLink).toHaveAttribute("href", "mailto:dr.perez@example.org");
 
     const phoneLink = screen.getByRole("link", { name: "(809) 555-0100" });
     expect(phoneLink).toBeInTheDocument();

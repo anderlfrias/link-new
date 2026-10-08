@@ -36,7 +36,7 @@ export const es = {
   },
   auth: {
     title: "Iniciar sesión",
-    subtitle: "Chat interno — iniciá sesión para continuar",
+    subtitle: "Iniciá sesión para continuar",
     username: "Usuario",
     usernameOrEmail: "Usuario o correo electrónico",
     password: "Contraseña",

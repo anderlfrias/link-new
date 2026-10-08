@@ -1,6 +1,6 @@
 # Guía de Versionamiento y Publicación de Versiones
 
-Este documento define el estándar y procedimiento oficial para el versionamiento, mantenimiento del registro de cambios y publicación de nuevas versiones de la aplicación **Link / Chat Interno**.
+Este documento define el estándar y procedimiento oficial para el versionamiento, mantenimiento del registro de cambios y publicación de nuevas versiones de la aplicación **LINK**.
 
 ---
 

@@ -73,11 +73,11 @@ export function renderWithProviders(
   if (initialSession !== undefined) {
     if (initialSession) {
       window.localStorage.setItem(
-        "chat-interno:session",
+        "link:session",
         JSON.stringify(initialSession),
       );
     } else {
-      window.localStorage.removeItem("chat-interno:session");
+      window.localStorage.removeItem("link:session");
     }
   }
 

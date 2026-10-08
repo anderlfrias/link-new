@@ -68,6 +68,48 @@ describe("AuthProvider and useAuth", () => {
     expect(screen.getByTestId("username").textContent).toBe("none");
   });
 
+  it("migra una sesión guardada bajo la clave anterior (chat-interno:session) sin cerrarla", async () => {
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const legacySession = createMockSession({
+      user: { ...createMockSession().user, exp: futureExp },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(legacySession));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    });
+    expect(screen.getByTestId("username").textContent).toBe(legacySession.user.username);
+    // La sesión quedó bajo la clave nueva y la vieja se limpió.
+    expect(JSON.parse(window.localStorage.getItem("link:session")!).token).toBe(legacySession.token);
+    expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
+  });
+
+  it("una sesión vencida bajo la clave anterior se migra y se trata como vencida", async () => {
+    const pastExp = Math.floor(Date.now() / 1000) - 60;
+    const legacySession = createMockSession({
+      user: { ...createMockSession().user, exp: pastExp },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(legacySession));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+    });
+    expect(window.localStorage.getItem("link:session")).toBeNull();
+    expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
+  });
+
   it("restores session from localStorage on mount when token is valid", async () => {
     const futureExp = Math.floor(Date.now() / 1000) + 3600;
     const mockSession = createMockSession({
@@ -76,7 +118,7 @@ describe("AuthProvider and useAuth", () => {
         exp: futureExp,
       },
     });
-    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+    window.localStorage.setItem("link:session", JSON.stringify(mockSession));
 
     render(
       <AuthProvider>
@@ -100,7 +142,7 @@ describe("AuthProvider and useAuth", () => {
         exp: pastExp,
       },
     });
-    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+    window.localStorage.setItem("link:session", JSON.stringify(mockSession));
 
     render(
       <AuthProvider>
@@ -111,14 +153,14 @@ describe("AuthProvider and useAuth", () => {
     await waitFor(() => {
       expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
     });
-    expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
+    expect(window.localStorage.getItem("link:session")).toBeNull();
     expect(screen.getByRole("dialog", { name: "Sesión expirada" })).toBeInTheDocument();
     expect(screen.getByText("Tu sesión ha expirado. Por favor, iniciá sesión nuevamente para continuar.")).toBeInTheDocument();
     expect(mockReplace).toHaveBeenCalledWith("/login");
   });
 
   it("handles corrupted JSON in localStorage gracefully", async () => {
-    window.localStorage.setItem("chat-interno:session", "{invalid json");
+    window.localStorage.setItem("link:session", "{invalid json");
 
     render(
       <AuthProvider>
@@ -162,7 +204,7 @@ describe("AuthProvider and useAuth", () => {
     expect(screen.getByTestId("username").textContent).toBe("alice");
     expect(screen.getByTestId("fullname").textContent).toBe("Alice Smith");
 
-    const saved = JSON.parse(window.localStorage.getItem("chat-interno:session") || "{}");
+    const saved = JSON.parse(window.localStorage.getItem("link:session") || "{}");
     expect(saved.token).toBe("new-token-123");
     expect(saved.user.username).toBe("alice");
   });
@@ -174,7 +216,7 @@ describe("AuthProvider and useAuth", () => {
         exp: Math.floor(Date.now() / 1000) + 3600,
       },
     });
-    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+    window.localStorage.setItem("link:session", JSON.stringify(mockSession));
 
     const user = userEvent.setup();
     render(
@@ -190,7 +232,7 @@ describe("AuthProvider and useAuth", () => {
     await user.click(screen.getByRole("button", { name: "Logout" }));
 
     expect(disconnectSocket).toHaveBeenCalledTimes(1);
-    expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
+    expect(window.localStorage.getItem("link:session")).toBeNull();
     expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
     expect(screen.getByTestId("username").textContent).toBe("none");
   });
@@ -203,7 +245,7 @@ describe("AuthProvider and useAuth", () => {
         exp: Math.floor(Date.now() / 1000) + 3600,
       },
     });
-    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+    window.localStorage.setItem("link:session", JSON.stringify(mockSession));
 
     const user = userEvent.setup();
     render(
@@ -230,7 +272,7 @@ describe("AuthProvider and useAuth", () => {
         exp: Math.floor(Date.now() / 1000) + 1,
       },
     });
-    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+    window.localStorage.setItem("link:session", JSON.stringify(mockSession));
 
     const user = userEvent.setup();
     render(
@@ -256,7 +298,7 @@ describe("AuthProvider and useAuth", () => {
         exp: Math.floor(Date.now() / 1000) + 3600,
       },
     });
-    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+    window.localStorage.setItem("link:session", JSON.stringify(mockSession));
 
     const user = userEvent.setup();
     render(
@@ -273,7 +315,7 @@ describe("AuthProvider and useAuth", () => {
 
     expect(screen.getByTestId("fullname").textContent).toBe("Alice Updated");
 
-    const saved = JSON.parse(window.localStorage.getItem("chat-interno:session") || "{}");
+    const saved = JSON.parse(window.localStorage.getItem("link:session") || "{}");
     expect(saved.user.fullName).toBe("Alice Updated");
   });
 

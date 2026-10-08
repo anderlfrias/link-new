@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Link",
     short_name: "Link",
-    description: "Chat interno de la organización",
+    description: "Chat para equipos, para instalar en infraestructura propia",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

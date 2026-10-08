@@ -54,7 +54,7 @@ function renderWithStoredSession(reason: "reset" | "expired" | "policy" | null, 
   const session = createMockSession({
     user: { ...createMockSession().user, authProvider: "local", mustChangePassword, mustChangePasswordReason: reason },
   });
-  window.localStorage.setItem("chat-interno:session", JSON.stringify(session));
+  window.localStorage.setItem("link:session", JSON.stringify(session));
   render(
     <AuthProvider>
       <FakeApp />
@@ -109,7 +109,7 @@ describe("Cambio de contraseña obligatorio (AuthProvider + ForcedPasswordChange
     expect(await screen.findByText("La app")).toBeInTheDocument();
     expect(connectSocket).toHaveBeenCalledWith("token-nuevo");
     expect(connectSocket).not.toHaveBeenCalledWith("mock-jwt-token");
-    const stored = JSON.parse(window.localStorage.getItem("chat-interno:session")!);
+    const stored = JSON.parse(window.localStorage.getItem("link:session")!);
     expect(stored.token).toBe("token-nuevo");
     expect(stored.user).toMatchObject({ mustChangePassword: false, mustChangePasswordReason: null });
   });

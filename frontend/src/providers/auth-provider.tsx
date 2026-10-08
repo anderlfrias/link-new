@@ -8,10 +8,14 @@ import { disconnectSocket } from "@/lib/socket-client";
 import { SESSION_EXPIRED_EVENT, setUnauthorizedHandler } from "@/lib/api-client";
 import { SessionExpiredModal } from "@/features/auth/components/SessionExpiredModal";
 import { teardownPushSubscription } from "@/features/notifications/utils/push-teardown";
+import { migrateLegacyKey } from "@/lib/storage-keys";
 import { ForcedPasswordChange } from "@/features/auth/components/ForcedPasswordChange";
 import { useTranslation } from "@/i18n";
 
-const SESSION_STORAGE_KEY = "chat-interno:session";
+const SESSION_STORAGE_KEY = "link:session";
+/** Clave anterior, de cuando la app se llamaba "Chat Interno": la sesión abierta se migra sola
+ * (ver `migrateLegacyKey` en `lib/storage-keys.ts`). */
+const LEGACY_SESSION_STORAGE_KEY = "chat-interno:session";
 
 type AuthStatus = "idle" | "authenticated" | "unauthenticated";
 
@@ -43,6 +47,7 @@ interface StoredSessionCheck {
 
 function checkStoredSession(): StoredSessionCheck {
   if (typeof window === "undefined") return { session: null, wasExpired: false };
+  migrateLegacyKey(LEGACY_SESSION_STORAGE_KEY, SESSION_STORAGE_KEY);
   const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
   if (!raw) return { session: null, wasExpired: false };
   try {

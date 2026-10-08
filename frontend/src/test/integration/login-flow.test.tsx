@@ -89,7 +89,7 @@ describe("Flujo clave: Login", () => {
     expect(mockPush).toHaveBeenCalledWith("/");
 
     // Persiste en localStorage
-    const saved = JSON.parse(window.localStorage.getItem("chat-interno:session") || "{}");
+    const saved = JSON.parse(window.localStorage.getItem("link:session") || "{}");
     expect(saved.token).toBe("jwt-token-123");
     expect(saved.user.username).toBe("rdoctor");
   });

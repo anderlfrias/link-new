@@ -30,7 +30,7 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler;
 }
 
-export const SESSION_EXPIRED_EVENT = "chat-interno:session-expired";
+export const SESSION_EXPIRED_EVENT = "link:session-expired";
 
 export function notifySessionExpired(error: ApiError): void {
   unauthorizedHandler?.(error);

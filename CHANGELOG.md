@@ -26,6 +26,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Cabeceras de seguridad en todas las respuestas del frontend (`Content-Security-Policy` con `frame-ancestors`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`).
 
 ### Cambiado
+- El título de la app, el manifest y la pantalla de login ya no dicen "Chat Interno". Las claves de `localStorage` pasan de `chat-interno:*` a `link:*`; la sesión abierta y el tema elegido se migran solos, así que no hace falta volver a iniciar sesión.
 - El healthcheck del contenedor del backend comprueba la conexión con la base de datos (`GET /health`), no solo que el proceso responda: si PostgreSQL se cae, el contenedor pasa a `unhealthy`.
 - **Acción requerida en producción:** con `NODE_ENV=production`, el backend no arranca sin `CORS_ORIGIN`. Definirla con el origen del frontend (o con `*` para aceptar cualquier origen a propósito). Antes, sin definirla, la API aceptaba cualquier origen.
 - **Acción requerida detrás de Cloudflare:** el backend ya no toma la IP del cliente de `CF-Connecting-IP` salvo con `TRUST_CF_CONNECTING_IP=true`. Si hay un proxy entre Cloudflare y el backend y no se define, el rate limiting y la auditoría ven la IP del proxy. `trust proxy` sigue en `1` por defecto (`TRUST_PROXY`).

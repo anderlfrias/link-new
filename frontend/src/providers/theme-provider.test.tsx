@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider, useTheme } from "./theme-provider";
-import { THEME_STORAGE_KEY } from "@/constants/theme";
+import { LEGACY_THEME_STORAGE_KEY, THEME_STORAGE_KEY } from "@/constants/theme";
 
 function ThemeConsumer() {
   const { theme, setTheme, toggleTheme } = useTheme();
@@ -43,6 +43,20 @@ describe("ThemeProvider and useTheme", () => {
     );
 
     expect(screen.getByTestId("theme-value").textContent).toBe("dark");
+  });
+
+  it("migra el tema guardado bajo la clave anterior (chat-interno:theme)", () => {
+    window.localStorage.setItem(LEGACY_THEME_STORAGE_KEY, "dark");
+
+    render(
+      <ThemeProvider>
+        <ThemeConsumer />
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("theme-value").textContent).toBe("dark");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY)).toBeNull();
   });
 
   it("setTheme updates theme, localStorage and document class", async () => {
