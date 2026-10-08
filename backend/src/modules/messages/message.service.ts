@@ -9,9 +9,11 @@ import {
 import * as ConversationRepository from "../conversations/conversation.repository";
 import { CONVERSATION_EVENTS } from "../conversations/conversation.socket";
 import { ConversationMemberWithUser, ConversationWithMembers, MessageReceipt } from "../conversations/conversation.types";
+import * as FileRepository from "../files/file.repository";
 import { toStoredFileResponse } from "../files/file.service";
 import * as PushService from "../push/push.service";
 import * as SettingsService from "../settings/settings.service";
+import { getLogger } from "../../config/request-context";
 import { getIO } from "../../socket";
 import { conversationRoomName, getConnectedUserIds, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
@@ -331,8 +333,15 @@ export async function sendMessage(
       throw new BadRequestError(`A message can include at most ${settings.maxFilesPerMessage} files`);
     }
 
-    const existingFiles = await MessageRepository.countExistingFiles(fileIds);
-    if (existingFiles !== fileIds.length) {
+    // Solo se pueden adjuntar archivos propios o ya visibles para el remitente
+    // (ver `countFilesAttachableBy`). El rechazo es el mismo 400 que "no existe":
+    // no se da un oráculo para distinguir ids existentes de ids ajenos.
+    const attachable = await FileRepository.countFilesAttachableBy(currentUserId, fileIds);
+    if (attachable !== fileIds.length) {
+      getLogger().warn(
+        { conversationId, requested: fileIds.length, attachable },
+        "message rejected: files not attachable",
+      );
       throw new BadRequestError("One or more files do not exist");
     }
   }

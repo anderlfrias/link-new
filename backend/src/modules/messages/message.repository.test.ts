@@ -2,9 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
-    storedFile: {
-      count: vi.fn(),
-    },
     message: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -44,7 +41,6 @@ vi.mock("../../config/prisma", () => ({
 import { prisma } from "../../config/prisma";
 import {
   addReaction,
-  countExistingFiles,
   createMessage,
   existsInConversation,
   findUserReaction,
@@ -61,24 +57,6 @@ import {
 describe("message.repository", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  describe("countExistingFiles", () => {
-    it("devuelve 0 inmediatamente si el array de fileIds está vacío", async () => {
-      const count = await countExistingFiles([]);
-      expect(count).toBe(0);
-      expect(prisma.storedFile.count).not.toHaveBeenCalled();
-    });
-
-    it("consulta en Prisma cuando hay fileIds", async () => {
-      vi.mocked(prisma.storedFile.count).mockResolvedValue(2);
-
-      const count = await countExistingFiles(["f-1", "f-2"]);
-      expect(count).toBe(2);
-      expect(prisma.storedFile.count).toHaveBeenCalledWith({
-        where: { id: { in: ["f-1", "f-2"] }, deletedAt: null },
-      });
-    });
   });
 
   describe("createMessage", () => {

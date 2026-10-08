@@ -70,7 +70,9 @@ El nombre físico (`storedName`) sigue siendo siempre un UUID — la carpeta agr
 
 ### `GET /:id`
 
-Devuelve la metadata del archivo en el mismo formato que `POST /`. Verifica permisos de acceso mediante `canAccessFile` (debe ser el uploader, miembro de una conversación donde se use el archivo, o admin).
+Devuelve la metadata del archivo en el mismo formato que `POST /`. Verifica permisos de acceso mediante `canAccessFile` (debe ser el uploader, miembro de una conversación donde se use el archivo, o admin). "Se usa en una conversación" cuenta solo si el mensaje que lo adjunta no está borrado y la conversación (o el grupo cuya imagen es) no fue eliminada: después de "borrar para todos", solo quien subió el archivo (y un admin) lo sigue descargando.
+
+**Quién puede adjuntar qué.** Como el acceso a un archivo se deriva de dónde está adjunto, adjuntarlo a un mensaje es una concesión de acceso y se restringe: el remitente solo puede adjuntar archivos que subió él, o que ya ve como adjunto de un mensaje vigente en una conversación vigente de la que es miembro (el caso del sticker favorito recibido de otra persona). Nunca avatares ni imágenes de grupo. Lo mismo vale para la imagen de un grupo, que tiene que ser una imagen subida por quien la asigna. Cualquier otro id responde el mismo `400` que un id inexistente. La regla vive en `countFilesAttachableBy`/`findOwnedActiveFile` (`file.repository.ts`).
 
 ### `GET /:id/content`
 

@@ -31,8 +31,13 @@ export function findActiveById(id: string) {
 /// Evalúa en una sola consulta si el usuario tiene acceso a este archivo según §5.4:
 /// 1. Creador/uploader
 /// 2. Avatar de cualquier usuario (visibles en toda la instalación)
-/// 3. Imagen de grupo de una conversación donde el usuario es miembro
-/// 4. Adjunto en un mensaje de una conversación donde el usuario es miembro
+/// 3. Imagen de un grupo vigente donde el usuario es miembro
+/// 4. Adjunto en un mensaje vigente (no borrado) de una conversación vigente
+///    donde el usuario es miembro
+///
+/// Los mensajes borrados y los grupos eliminados no conceden acceso: el creador
+/// del archivo lo conserva por la regla 1, y un reenvío tiene su propia fila
+/// `MessageFile`, así que sigue accesible mientras el reenvío exista.
 export async function checkUserFileAccess(userId: string, fileId: string): Promise<boolean> {
   const match = await prisma.storedFile.findFirst({
     where: {
@@ -43,6 +48,7 @@ export async function checkUserFileAccess(userId: string, fileId: string): Promi
         {
           imageOfConversations: {
             some: {
+              deletedAt: null,
               members: {
                 some: { userId },
               },
@@ -53,7 +59,9 @@ export async function checkUserFileAccess(userId: string, fileId: string): Promi
           messageFiles: {
             some: {
               message: {
+                deletedAt: null,
                 conversation: {
+                  deletedAt: null,
                   members: {
                     some: { userId },
                   },
@@ -67,6 +75,45 @@ export async function checkUserFileAccess(userId: string, fileId: string): Promi
     select: { id: true },
   });
   return match !== null;
+}
+
+/// Cuántos de `fileIds` puede adjuntar `userId` a un mensaje: los que subió, o
+/// los que ya ve como adjunto de un mensaje vigente en una conversación vigente
+/// de la que es miembro (sticker favorito, volver a compartir un adjunto).
+/// Nunca avatares ni imágenes de grupo: poder verlos no habilita a
+/// re-compartirlos. Como el acceso a un archivo se deriva de dónde está
+/// adjunto (`checkUserFileAccess`), validar solo que el id exista dejaba
+/// adjuntar —y así leer— el archivo de cualquier otra persona.
+export function countFilesAttachableBy(userId: string, fileIds: string[]): Promise<number> {
+  if (fileIds.length === 0) return Promise.resolve(0);
+  return prisma.storedFile.count({
+    where: {
+      id: { in: fileIds },
+      deletedAt: null,
+      OR: [
+        { createdById: userId },
+        {
+          messageFiles: {
+            some: {
+              message: {
+                deletedAt: null,
+                conversation: { deletedAt: null, members: { some: { userId } } },
+              },
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
+/// Un archivo vigente subido por `userId`. Lo usan los flujos que referencian
+/// un archivo por id y exigen que sea del propio actor (imagen de grupo).
+export function findOwnedActiveFile(userId: string, fileId: string) {
+  return prisma.storedFile.findFirst({
+    where: { id: fileId, createdById: userId, deletedAt: null },
+    select: { id: true, mimeType: true },
+  });
 }
 
 /// Verifica si el archivo es un avatar de usuario (público a toda la app).

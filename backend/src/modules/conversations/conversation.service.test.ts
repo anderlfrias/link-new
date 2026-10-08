@@ -20,6 +20,7 @@ vi.mock("../../socket", () => ({
 }));
 
 vi.mock("./conversation.repository");
+vi.mock("../files/file.repository");
 vi.mock("../settings/settings.service");
 vi.mock("../audit/audit.service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../audit/audit.service")>();
@@ -34,6 +35,7 @@ import { getIO } from "../../socket";
 import * as SettingsService from "../settings/settings.service";
 import * as AuditService from "../audit/audit.service";
 import * as AuditRepository from "../audit/audit.repository";
+import * as FileRepository from "../files/file.repository";
 import * as ConversationRepository from "./conversation.repository";
 import { CONVERSATION_EVENTS } from "./conversation.socket";
 import {
@@ -478,6 +480,82 @@ describe("conversation.service", () => {
       expect(mockEmit).toHaveBeenCalledWith(CONVERSATION_EVENTS.CREATED, createdConv);
     });
 
+    describe("imagen del grupo", () => {
+      function mockGroupCreationAllowed() {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue({
+          whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
+          maxGroupMembers: 10,
+        } as any);
+        vi.mocked(ConversationRepository.countExistingUsers).mockResolvedValue(2);
+      }
+
+      it("rechaza un imageFileId que el creador no subió, sin crear el grupo", async () => {
+        mockGroupCreationAllowed();
+        vi.mocked(FileRepository.findOwnedActiveFile).mockResolvedValue(null);
+
+        const attempt = createConversation(
+          "u-1",
+          { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "Grupo", imageFileId: "f-ajeno" },
+          [],
+        );
+
+        await expect(attempt).rejects.toThrow(BadRequestError);
+        await expect(attempt).rejects.toThrow("Invalid group image");
+        expect(FileRepository.findOwnedActiveFile).toHaveBeenCalledWith("u-1", "f-ajeno");
+        expect(ConversationRepository.createConversation).not.toHaveBeenCalled();
+      });
+
+      it("rechaza un imageFileId que no es una imagen", async () => {
+        mockGroupCreationAllowed();
+        vi.mocked(FileRepository.findOwnedActiveFile).mockResolvedValue({
+          id: "f-pdf",
+          mimeType: "application/pdf",
+        } as any);
+
+        await expect(
+          createConversation(
+            "u-1",
+            { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "Grupo", imageFileId: "f-pdf" },
+            [],
+          ),
+        ).rejects.toThrow("Invalid group image");
+        expect(ConversationRepository.createConversation).not.toHaveBeenCalled();
+      });
+
+      it("crea el grupo con una imagen subida por el creador", async () => {
+        mockGroupCreationAllowed();
+        vi.mocked(FileRepository.findOwnedActiveFile).mockResolvedValue({
+          id: "f-img",
+          mimeType: "image/png",
+        } as any);
+        const createdConv = buildMockConversation({ imageFileId: "f-img" });
+        vi.mocked(ConversationRepository.createConversation).mockResolvedValue(createdConv);
+
+        await createConversation(
+          "u-1",
+          { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "Grupo", imageFileId: "f-img" },
+          [],
+        );
+
+        expect(ConversationRepository.createConversation).toHaveBeenCalledWith(
+          expect.objectContaining({ imageFileId: "f-img" }),
+        );
+      });
+
+      it("no consulta archivos si el grupo se crea sin imagen", async () => {
+        mockGroupCreationAllowed();
+        vi.mocked(ConversationRepository.createConversation).mockResolvedValue(buildMockConversation());
+
+        await createConversation(
+          "u-1",
+          { type: ConversationType.GROUP, memberIds: ["u-2", "u-3"], name: "Grupo" },
+          [],
+        );
+
+        expect(FileRepository.findOwnedActiveFile).not.toHaveBeenCalled();
+      });
+    });
+
     it("devuelve la conversación creada aunque la auditoría falle al escribir", async () => {
       vi.mocked(SettingsService.getSettings).mockResolvedValue({
         whoCanCreateGroups: GroupPermissionLevel.ALL_MEMBERS,
@@ -595,6 +673,7 @@ describe("conversation.service", () => {
       vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
         whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
       } as any);
+      vi.mocked(FileRepository.findOwnedActiveFile).mockResolvedValue({ id: "img-new", mimeType: "image/png" } as any);
       const updated = buildMockConversation({ name: "Nombre Nuevo", imageFileId: "img-new" });
       vi.mocked(ConversationRepository.updateDetails).mockResolvedValue(updated);
 
@@ -619,6 +698,64 @@ describe("conversation.service", () => {
         }),
       );
       expect(mockEmit).toHaveBeenCalledWith(CONVERSATION_EVENTS.UPDATED, updated);
+    });
+
+    it("rechaza un imageFileId ajeno sin modificar la conversación", async () => {
+      const group = buildMockConversation({ members: [buildMockMember({ userId: "admin-1", isAdmin: true })] });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
+      vi.mocked(FileRepository.findOwnedActiveFile).mockResolvedValue(null);
+
+      const attempt = updateConversation("admin-1", "c-1", { imageFileId: "f-ajeno" }, []);
+
+      await expect(attempt).rejects.toThrow("Invalid group image");
+      expect(FileRepository.findOwnedActiveFile).toHaveBeenCalledWith("admin-1", "f-ajeno");
+      expect(ConversationRepository.updateDetails).not.toHaveBeenCalled();
+      expect(AuditService.record).not.toHaveBeenCalled();
+    });
+
+    it("rechaza un imageFileId que no es una imagen", async () => {
+      const group = buildMockConversation({ members: [buildMockMember({ userId: "admin-1", isAdmin: true })] });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
+      vi.mocked(FileRepository.findOwnedActiveFile).mockResolvedValue({
+        id: "f-doc",
+        mimeType: "application/pdf",
+      } as any);
+
+      await expect(updateConversation("admin-1", "c-1", { imageFileId: "f-doc" }, [])).rejects.toThrow(
+        "Invalid group image",
+      );
+      expect(ConversationRepository.updateDetails).not.toHaveBeenCalled();
+    });
+
+    it("imageFileId null quita la imagen sin validar ningún archivo", async () => {
+      const group = buildMockConversation({
+        imageFileId: "img-old",
+        members: [buildMockMember({ userId: "admin-1", isAdmin: true })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanChangeGroupInfo: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
+      vi.mocked(ConversationRepository.updateDetails).mockResolvedValue(
+        buildMockConversation({ imageFileId: null }),
+      );
+
+      await updateConversation("admin-1", "c-1", { imageFileId: null }, []);
+
+      expect(FileRepository.findOwnedActiveFile).not.toHaveBeenCalled();
+      expect(ConversationRepository.updateDetails).toHaveBeenCalledWith(
+        "c-1",
+        expect.objectContaining({ imageFileId: null }),
+      );
     });
 
     it("no loguea CHANGE_NAME ni CHANGE_IMAGE si esos campos no vinieron en el input", async () => {

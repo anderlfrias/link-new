@@ -4,6 +4,7 @@ import { getIO } from "../../socket";
 import { conversationRoomName, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as AuditService from "../audit/audit.service";
+import * as FileRepository from "../files/file.repository";
 import * as SettingsService from "../settings/settings.service";
 import { UpdateGroupSettingsInput } from "../settings/settings.types";
 import * as ConversationRepository from "./conversation.repository";
@@ -167,6 +168,17 @@ function assertGroupPermission(
   // ALL_MEMBERS: no-op, la membresía ya se verificó en assertMembership.
 }
 
+/// La imagen de un grupo tiene que ser una imagen que subió quien la asigna.
+/// `checkUserFileAccess` concede a todos los miembros acceso a la imagen del
+/// grupo: aceptar el id de cualquier archivo les daba acceso al de otra
+/// persona. Mismo 400 para "no existe", "no es tuyo" y "no es una imagen".
+async function assertUsableGroupImage(userId: string, fileId: string): Promise<void> {
+  const file = await FileRepository.findOwnedActiveFile(userId, fileId);
+  if (!file || !file.mimeType.startsWith("image/")) {
+    throw new BadRequestError("Invalid group image");
+  }
+}
+
 export async function createConversation(
   currentUserId: string,
   input: CreateConversationInput,
@@ -218,6 +230,10 @@ export async function createConversation(
   const existingUsers = await ConversationRepository.countExistingUsers(otherMemberIds);
   if (existingUsers !== otherMemberIds.length) {
     throw new BadRequestError("One or more members do not exist");
+  }
+
+  if (input.type === ConversationType.GROUP && typeof input.imageFileId === "string") {
+    await assertUsableGroupImage(currentUserId, input.imageFileId);
   }
 
   const conversation = await ConversationRepository.createConversation({
@@ -360,6 +376,11 @@ export async function updateConversation(
     userRoles,
     "You are not allowed to change this group's name or image",
   );
+
+  // `null` quita la imagen y `undefined` no la cambia: solo un id se valida.
+  if (typeof input.imageFileId === "string") {
+    await assertUsableGroupImage(currentUserId, input.imageFileId);
+  }
 
   const trimmedName = input.name?.trim();
   const updated = await ConversationRepository.updateDetails(conversationId, {

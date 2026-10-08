@@ -9,6 +9,7 @@ vi.mock("../../config/prisma", () => ({
       update: vi.fn(),
       findMany: vi.fn(),
       aggregate: vi.fn(),
+      count: vi.fn(),
     },
   },
 }));
@@ -17,8 +18,10 @@ import { prisma } from "../../config/prisma";
 import {
   aggregateFilesForAdmin,
   checkUserFileAccess,
+  countFilesAttachableBy,
   createStoredFile,
   findActiveById,
+  findOwnedActiveFile,
   isAvatarFile,
   listFilesForAdmin,
   softDelete,
@@ -222,8 +225,17 @@ describe("file.repository", () => {
           OR: [
             { createdById: "u-1" },
             { avatarOfUsers: { some: {} } },
-            { imageOfConversations: { some: { members: { some: { userId: "u-1" } } } } },
-            { messageFiles: { some: { message: { conversation: { members: { some: { userId: "u-1" } } } } } } },
+            { imageOfConversations: { some: { deletedAt: null, members: { some: { userId: "u-1" } } } } },
+            {
+              messageFiles: {
+                some: {
+                  message: {
+                    deletedAt: null,
+                    conversation: { deletedAt: null, members: { some: { userId: "u-1" } } },
+                  },
+                },
+              },
+            },
           ],
         },
         select: { id: true },
@@ -235,6 +247,87 @@ describe("file.repository", () => {
 
       const hasAccess = await checkUserFileAccess("u-stranger", "f-secret");
       expect(hasAccess).toBe(false);
+    });
+
+    it("ignora adjuntos de mensajes borrados y de conversaciones eliminadas", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce(null);
+
+      await checkUserFileAccess("u-1", "f-1");
+
+      const { where } = vi.mocked(prisma.storedFile.findFirst).mock.calls[0][0] as any;
+      const [, , imageOfGroup, attachment] = where.OR;
+      // Imagen de un grupo eliminado: ya no concede acceso a sus miembros.
+      expect(imageOfGroup.imageOfConversations.some.deletedAt).toBeNull();
+      // Adjunto de un mensaje borrado "para todos", o de una conversación eliminada.
+      expect(attachment.messageFiles.some.message.deletedAt).toBeNull();
+      expect(attachment.messageFiles.some.message.conversation.deletedAt).toBeNull();
+    });
+  });
+
+  describe("countFilesAttachableBy", () => {
+    it("devuelve 0 sin consultar la base si no hay fileIds", async () => {
+      const count = await countFilesAttachableBy("u-1", []);
+
+      expect(count).toBe(0);
+      expect(prisma.storedFile.count).not.toHaveBeenCalled();
+    });
+
+    it("cuenta solo archivos vigentes subidos por el usuario o adjuntos a mensajes vigentes de sus conversaciones vigentes", async () => {
+      vi.mocked(prisma.storedFile.count).mockResolvedValue(2);
+
+      const count = await countFilesAttachableBy("u-1", ["f-1", "f-2"]);
+
+      expect(count).toBe(2);
+      expect(prisma.storedFile.count).toHaveBeenCalledWith({
+        where: {
+          id: { in: ["f-1", "f-2"] },
+          deletedAt: null,
+          OR: [
+            { createdById: "u-1" },
+            {
+              messageFiles: {
+                some: {
+                  message: {
+                    deletedAt: null,
+                    conversation: { deletedAt: null, members: { some: { userId: "u-1" } } },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it("no incluye avatares ni imágenes de grupo entre los archivos adjuntables", async () => {
+      vi.mocked(prisma.storedFile.count).mockResolvedValue(0);
+
+      await countFilesAttachableBy("u-1", ["f-avatar"]);
+
+      const { where } = vi.mocked(prisma.storedFile.count).mock.calls[0][0] as any;
+      const serialized = JSON.stringify(where);
+      expect(serialized).not.toContain("avatarOfUsers");
+      expect(serialized).not.toContain("imageOfConversations");
+    });
+  });
+
+  describe("findOwnedActiveFile", () => {
+    it("filtra por dueño y por archivo no borrado", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce({ id: "f-1", mimeType: "image/png" } as any);
+
+      const file = await findOwnedActiveFile("u-1", "f-1");
+
+      expect(file).toEqual({ id: "f-1", mimeType: "image/png" });
+      expect(prisma.storedFile.findFirst).toHaveBeenCalledWith({
+        where: { id: "f-1", createdById: "u-1", deletedAt: null },
+        select: { id: true, mimeType: true },
+      });
+    });
+
+    it("devuelve null si el archivo no es del usuario", async () => {
+      vi.mocked(prisma.storedFile.findFirst).mockResolvedValueOnce(null);
+
+      expect(await findOwnedActiveFile("u-2", "f-1")).toBeNull();
     });
   });
 

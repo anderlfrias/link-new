@@ -322,7 +322,7 @@ Forma de una conversación (la misma en todos los endpoints, salvo lo que se acl
 
 - `memberIds`: ids **internos** de los demás participantes (no incluyas tu propio id, se agrega solo).
 - `PRIVATE`: exactamente 1 id en `memberIds`. Si ya existe una conversación privada activa entre ambos, la devuelve tal cual en vez de crear otra (podés llamarlo sin chequear antes "¿ya existe un chat con este usuario?").
-- `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total), sin superar el máximo configurado por un admin (`AppSettings.maxGroupMembers`, ver sección 12) — `400` si se excede. Si un admin configuró `whoCanCreateGroups: "APP_ADMINS_ONLY"`, solo un usuario con rol `"admin"` puede crear un `GROUP` (`403` en caso contrario) — ver 4.8. `imageFileId` opcional — debe ser un `id` ya subido vía `POST /api/v1/files` (ver sección 6). El creador queda marcado como admin de ese grupo (`isAdmin: true` en su membresía) — ver 4.9.
+- `GROUP`: requiere `name` y al menos 2 ids en `memberIds` (3+ participantes en total), sin superar el máximo configurado por un admin (`AppSettings.maxGroupMembers`, ver sección 12) — `400` si se excede. Si un admin configuró `whoCanCreateGroups: "APP_ADMINS_ONLY"`, solo un usuario con rol `"admin"` puede crear un `GROUP` (`403` en caso contrario) — ver 4.8. `imageFileId` opcional — debe ser el `id` de una imagen (`image/*`) que subió quien crea el grupo vía `POST /api/v1/files` (ver sección 6); `400` si no existe, no es suyo o no es una imagen. El creador queda marcado como admin de ese grupo (`isAdmin: true` en su membresía) — ver 4.9.
 
 → `201` con la conversación completa.
 
@@ -372,7 +372,7 @@ Igual forma que arriba (sin `unreadCount`/`lastMessageStatus`/`lastMessagePrevie
 { "imageFileId": null }
 ```
 
-Al menos uno de los dos campos. Solo `GROUP` (`400` en `PRIVATE`). `imageFileId: null` limpia la imagen. Sujeto a `AppSettings.whoCanChangeGroupInfo` (ver 4.8) — `403` si no tenés permiso. Emite `conversation:updated` (conversación completa) a la room.
+Al menos uno de los dos campos. Solo `GROUP` (`400` en `PRIVATE`). `imageFileId: null` limpia la imagen; un id tiene que ser de una imagen subida por quien hace el cambio (`400` en otro caso). Sujeto a `AppSettings.whoCanChangeGroupInfo` (ver 4.8) — `403` si no tenés permiso. Emite `conversation:updated` (conversación completa) a la room.
 
 ### 4.5 `POST /:id/members` — Agregar miembros
 
@@ -565,7 +565,7 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 { "content": "Hola!", "fileIds": ["<storedFileId>"], "replyToId": "<messageId>" }
 ```
 
-`content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9), pero no ilimitados: `400` si traés más entradas que `AppSettings.maxFilesPerMessage` (`null` = sin límite, ver sección 12).
+`content`: 0-4000 caracteres — opcional si mandás `fileIds` (podés mandar un adjunto sin epígrafe, igual que WhatsApp/Telegram), pero el mensaje necesita al menos uno de los dos (`400` si mandás ambos vacíos). `fileIds` opcional — ids de archivos ya subidos vía `POST /api/v1/files` (sección 9) por quien envía, o que ya ve como adjunto de un mensaje vigente de una conversación suya (un id ajeno responde el mismo `400` que uno inexistente), pero no ilimitados: `400` si traés más entradas que `AppSettings.maxFilesPerMessage` (`null` = sin límite, ver sección 12).
 
 `type` opcional — omitido (o ausente) siempre crea `TEXT`, el caso normal. El único otro valor que un cliente puede pedir es `"STICKER"` (nunca `"SYSTEM"`, eso lo genera el propio backend): exige `content` vacío y exactamente un `fileId` (`400` si no), pensado para un sticker recién importado vía `POST /api/v1/giphy/import` (sección 6.1.2). Un GIF, en cambio, **no** usa `type: "STICKER"` — se manda como `TEXT` normal con un `fileId` de tipo `image/gif`, igual que cualquier imagen adjunta.
 

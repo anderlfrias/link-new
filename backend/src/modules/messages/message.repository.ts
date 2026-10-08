@@ -76,11 +76,6 @@ const fileWithRelations = {
   message: { select: { id: true, createdAt: true, senderId: true, type: true } },
 } satisfies Prisma.MessageFileInclude;
 
-export function countExistingFiles(fileIds: string[]): Promise<number> {
-  if (fileIds.length === 0) return Promise.resolve(0);
-  return prisma.storedFile.count({ where: { id: { in: fileIds }, deletedAt: null } });
-}
-
 /// Crea el mensaje y actualiza el puntero denormalizado
 /// `Conversation.lastMessageId`/`lastMessageAt` en una sola transacción — ver
 /// backend/README.md ("¿Por qué existen lastReadMessageId y lastMessageAt?").

@@ -38,6 +38,7 @@ vi.mock("web-push", () => ({
 }));
 
 vi.mock("./message.repository");
+vi.mock("../files/file.repository");
 vi.mock("../push/push.service", () => ({
   notifyUsers: vi.fn(),
 }));
@@ -49,6 +50,7 @@ import * as ConversationService from "../conversations/conversation.service";
 import * as PushService from "../push/push.service";
 import * as SettingsService from "../settings/settings.service";
 import * as AuditService from "../audit/audit.service";
+import * as FileRepository from "../files/file.repository";
 import * as MessageRepository from "./message.repository";
 import { MESSAGE_EVENTS } from "./message.socket";
 import {
@@ -128,7 +130,7 @@ describe("message.service", () => {
     it("soporta mensajes de tipo STICKER", async () => {
       const mockConv = buildMockConversation();
       vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
-      vi.mocked(MessageRepository.countExistingFiles).mockResolvedValue(1);
+      vi.mocked(FileRepository.countFilesAttachableBy).mockResolvedValue(1);
       vi.mocked(SettingsService.getSettings).mockResolvedValue({ maxFilesPerMessage: 5 } as any);
       vi.mocked(getConnectedUserIds).mockResolvedValue(["u-1", "u-2"]);
 
@@ -230,6 +232,37 @@ describe("message.service", () => {
         }),
       ).rejects.toThrow("A message can include at most 2 files");
     });
+
+    it("rechaza con 400 si algún archivo no es adjuntable por el remitente y no crea el mensaje", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({ maxFilesPerMessage: 5 } as any);
+      // Solo uno de los dos archivos es del remitente o lo ve como adjunto.
+      vi.mocked(FileRepository.countFilesAttachableBy).mockResolvedValue(1);
+
+      const attempt = sendMessage("u-1", "conv-1", { content: "", fileIds: ["f-mio", "f-ajeno"] });
+
+      await expect(attempt).rejects.toThrow(BadRequestError);
+      // Mismo mensaje que para un id inexistente: no se da un oráculo de ids ajenos.
+      await expect(attempt).rejects.toThrow("One or more files do not exist");
+      expect(MessageRepository.createMessage).not.toHaveBeenCalled();
+    });
+
+    it("valida la lista deduplicada de fileIds contra el usuario actual", async () => {
+      const mockConv = buildMockConversation();
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({ maxFilesPerMessage: 5 } as any);
+      vi.mocked(FileRepository.countFilesAttachableBy).mockResolvedValue(2);
+      vi.mocked(getConnectedUserIds).mockResolvedValue(["u-1", "u-2"]);
+      vi.mocked(MessageRepository.createMessage).mockResolvedValue(buildMockMessage() as any);
+
+      await sendMessage("u-1", "conv-1", { content: "", fileIds: ["f-1", "f-2", "f-1"] });
+
+      expect(FileRepository.countFilesAttachableBy).toHaveBeenCalledWith("u-1", ["f-1", "f-2"]);
+      expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ fileIds: ["f-1", "f-2"] }),
+      );
+    });
   });
 
   describe("forwardMessage", () => {
@@ -274,6 +307,30 @@ describe("message.service", () => {
           conversationId: "conv-target",
           metadata: { fromConversationId: "conv-source" },
         }),
+      );
+    });
+
+    it("reenvía adjuntos subidos por otra persona sin pasar por la validación de adjuntables", async () => {
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(
+        buildMockConversation({ id: "conv-target" }) as any,
+      );
+      // El adjunto lo subió otro usuario: el reenvío ya exige ser miembro del origen.
+      vi.mocked(MessageRepository.findById).mockResolvedValue(
+        buildMockMessage({
+          id: "msg-source",
+          conversationId: "conv-source",
+          senderId: "u-2",
+          files: [{ fileId: "f-de-otro" }],
+        }) as any,
+      );
+      vi.mocked(getConnectedUserIds).mockResolvedValue([]);
+      vi.mocked(MessageRepository.createMessage).mockResolvedValue(buildMockMessage({ id: "msg-fwd" }) as any);
+
+      await forwardMessage("u-1", "conv-target", "msg-source");
+
+      expect(FileRepository.countFilesAttachableBy).not.toHaveBeenCalled();
+      expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ fileIds: ["f-de-otro"] }),
       );
     });
 
