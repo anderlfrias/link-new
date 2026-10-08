@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import path from "path";
 import { parseBuffer } from "music-metadata";
-import { AuditAction, FileTypeRestrictionMode, StoredFile } from "@prisma/client";
+import { AppSettings, AuditAction, FileTypeRestrictionMode, StoredFile } from "@prisma/client";
 import { ALLOWED_MIME_TYPES } from "../../constants/allowed-file-types.constant";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { getAuthJwtSecret } from "../../config/auth-config";
@@ -15,6 +15,12 @@ import * as AuditRepository from "../audit/audit.repository";
 import * as AuditService from "../audit/audit.service";
 import * as SettingsService from "../settings/settings.service";
 import * as FileRepository from "./file.repository";
+import {
+  AVATAR_IMAGE_MIME_TYPES,
+  SIGNATURE_BYTES,
+  areCompatible,
+  detectMimeFromSignature,
+} from "./file-signature";
 import {
   AdminFileFilters,
   AdminFileListOptions,
@@ -49,6 +55,37 @@ export function matchesFileTypePattern(pattern: string, mimeType: string): boole
     return mimeType.startsWith(pattern.slice(0, -1));
   }
   return pattern === mimeType;
+}
+
+/// Aplica la restricción de tipos de archivo de `AppSettings` (allowlist/blocklist).
+///
+/// `declared` es el tipo que dice el cliente y `detected` el que revelan los
+/// primeros bytes (`detectMimeFromSignature`), o `null` si no se reconoce (o aún
+/// no se leyó el contenido). Si no hay `detected` o es coherente con `declared`,
+/// se evalúa solo `declared`, como siempre. Si no coinciden, el archivo miente
+/// sobre su tipo: con ALLOWLIST tienen que estar permitidos los dos, y con
+/// BLOCKLIST alcanza con que uno esté bloqueado. Así un ejecutable declarado
+/// como PDF no pasa una blocklist de ejecutables, ni una allowlist de PDF.
+export function assertFileTypeAllowed(
+  settings: Pick<AppSettings, "fileTypeRestrictionMode" | "fileTypeList">,
+  declared: string,
+  detected: string | null,
+): void {
+  const types = detected !== null && !areCompatible(declared, detected) ? [declared, detected] : [declared];
+
+  if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.ALLOWLIST) {
+    for (const type of types) {
+      if (!settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, type))) {
+        throw new BadRequestError(`File type "${type}" is not allowed`);
+      }
+    }
+  } else if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.BLOCKLIST) {
+    for (const type of types) {
+      if (settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, type))) {
+        throw new BadRequestError(`File type "${type}" is blocked`);
+      }
+    }
+  }
 }
 
 /// La extensión del nombre original es solo un indicio, nunca se confía en
@@ -194,15 +231,12 @@ export async function uploadFile(
     throw new BadRequestError(`File exceeds the maximum allowed size of ${settings.maxUploadSizeMb}MB`);
   }
 
-  if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.ALLOWLIST) {
-    if (!settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, upload.mimetype))) {
-      throw new BadRequestError(`File type "${upload.mimetype}" is not allowed`);
-    }
-  } else if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.BLOCKLIST) {
-    if (settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, upload.mimetype))) {
-      throw new BadRequestError(`File type "${upload.mimetype}" is blocked`);
-    }
-  }
+  // El tipo real, según el contenido, además del que declara el cliente.
+  assertFileTypeAllowed(
+    settings,
+    upload.mimetype,
+    detectMimeFromSignature(upload.buffer.subarray(0, SIGNATURE_BYTES)),
+  );
 
   if (kind === "voice_note") {
     if (!upload.mimetype.startsWith("audio/")) {
@@ -263,6 +297,13 @@ export async function getFileChecksum(fileId: string): Promise<string | null> {
 /// `ALLOWED_MIME_TYPES` como `uploadFile` — EXTERNAL_AUTH puede devolver cualquier
 /// tipo de imagen, y este flujo no viene de un formulario del usuario.
 export async function storeAvatar(userId: string, buffer: Buffer, mimeType: string): Promise<StoredFileResponse> {
+  // Un avatar se sirve sin autenticación: tiene que ser una imagen de verdad (PNG,
+  // JPEG, GIF o WebP), no cualquier cosa declarada como `image/*`.
+  const detected = detectMimeFromSignature(buffer.subarray(0, SIGNATURE_BYTES));
+  if (!detected || !AVATAR_IMAGE_MIME_TYPES.includes(detected)) {
+    throw new BadRequestError("The file is not a valid image");
+  }
+
   const subtype = mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "").toLowerCase();
   const extension = ALLOWED_MIME_TYPES[mimeType]?.extension ?? subtype ?? "bin";
   const storedName = `${randomUUID()}.${extension}`;

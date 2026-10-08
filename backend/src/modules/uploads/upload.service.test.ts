@@ -1,3 +1,4 @@
+import { Readable } from "stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FileProvider, FileTypeRestrictionMode, FileUploadStatus } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
@@ -39,6 +40,7 @@ const {
     abortMultipartUpload: vi.fn(),
     stat: vi.fn(),
     delete: vi.fn(),
+    createReadStream: vi.fn(),
   },
 }));
 
@@ -66,6 +68,8 @@ describe("UploadService", () => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue(defaultSettings);
     mockUploadRepo.countActiveUploadsByUser.mockResolvedValue(0);
+    // Primeros bytes del objeto (completeUpload los lee para reconocer su tipo): sin firma conocida.
+    mockS3Storage.createReadStream.mockImplementation(async () => Readable.from([Buffer.from("contenido sin firma")]));
     mockS3Storage.createMultipartUpload.mockResolvedValue("s3-upload-123");
     mockS3Storage.getPresignedPartUploadUrl.mockResolvedValue("https://s3.example.com/presigned-part");
     mockS3Storage.listParts.mockResolvedValue([]);
@@ -356,6 +360,93 @@ describe("UploadService", () => {
       expect(mockUploadRepo.markCompleted).toHaveBeenCalledWith("upload-1", "stored-file-1", "sha256-hash");
       expect(res.id).toBe("stored-file-1");
       expect(res.size).toBe(16777216);
+    });
+
+    describe("tipo real del archivo", () => {
+      const EXE_HEAD = Buffer.from("MZ\x90\x00\x03\x00\x00\x00", "latin1");
+      const MP4_HEAD = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypisom", "latin1")]);
+
+      function arrangeCompletableUpload() {
+        mockUploadRepo.findById.mockResolvedValue(mockUploadForComplete);
+        mockS3Storage.listParts.mockResolvedValue([
+          { partNumber: 1, size: 8388608, eTag: '"etag-1"' },
+          { partNumber: 2, size: 8388608, eTag: '"etag-2"' },
+        ]);
+        mockS3Storage.stat.mockResolvedValue({ size: 16777216 });
+      }
+
+      it("completeUpload borra el objeto y marca FAILED si los primeros bytes revelan un tipo bloqueado", async () => {
+        arrangeCompletableUpload();
+        mockSettingsService.getSettings.mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.BLOCKLIST,
+          fileTypeList: ["application/x-msdownload"],
+        });
+        // Se declaró como video/mp4 al iniciar, pero los bytes son de un ejecutable.
+        mockS3Storage.createReadStream.mockImplementation(async () => Readable.from([EXE_HEAD]));
+
+        const attempt = UploadService.completeUpload("upload-1", "user-1", [], {});
+
+        await expect(attempt).rejects.toThrow(BadRequestError);
+        await expect(attempt).rejects.toThrow('File type "application/x-msdownload" is blocked');
+        expect(mockS3Storage.delete).toHaveBeenCalledWith("chat/conv/2026/09/archivo.mp4");
+        expect(mockUploadRepo.updateStatus).toHaveBeenCalledWith(
+          "upload-1",
+          FileUploadStatus.FAILED,
+          expect.objectContaining({ closedAt: expect.any(Date) }),
+        );
+        expect(mockFileRepo.createStoredFile).not.toHaveBeenCalled();
+        expect(mockUploadRepo.markCompleted).not.toHaveBeenCalled();
+      });
+
+      it("pide solo los primeros bytes del objeto (un rango), no el archivo entero", async () => {
+        arrangeCompletableUpload();
+        mockFileRepo.createStoredFile.mockResolvedValue({
+          id: "stored-file-1",
+          size: BigInt(16777216),
+          createdAt: new Date(),
+          deletedAt: null,
+        });
+        mockS3Storage.createReadStream.mockImplementation(async () => Readable.from([MP4_HEAD]));
+
+        await UploadService.completeUpload("upload-1", "user-1", [], {});
+
+        expect(mockS3Storage.createReadStream).toHaveBeenCalledWith("chat/conv/2026/09/archivo.mp4", {
+          start: 0,
+          end: 4099,
+        });
+      });
+
+      it("acepta un video/mp4 cuyo contenido es realmente MP4, con una allowlist de video/mp4", async () => {
+        arrangeCompletableUpload();
+        mockSettingsService.getSettings.mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.ALLOWLIST,
+          fileTypeList: ["video/mp4"],
+        });
+        mockFileRepo.createStoredFile.mockResolvedValue({
+          id: "stored-file-1",
+          size: BigInt(16777216),
+          createdAt: new Date(),
+          deletedAt: null,
+        });
+        mockS3Storage.createReadStream.mockImplementation(async () => Readable.from([MP4_HEAD]));
+
+        await expect(UploadService.completeUpload("upload-1", "user-1", [], {})).resolves.toBeDefined();
+        expect(mockS3Storage.delete).not.toHaveBeenCalled();
+      });
+
+      it("un archivo sin firma reconocible se evalúa solo por el tipo declarado", async () => {
+        arrangeCompletableUpload();
+        mockFileRepo.createStoredFile.mockResolvedValue({
+          id: "stored-file-1",
+          size: BigInt(16777216),
+          createdAt: new Date(),
+          deletedAt: null,
+        });
+
+        await expect(UploadService.completeUpload("upload-1", "user-1", [], {})).resolves.toBeDefined();
+      });
     });
 
     it("falla si faltan partes por subir en el storage", async () => {

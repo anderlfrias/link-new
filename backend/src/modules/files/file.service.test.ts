@@ -55,6 +55,7 @@ import * as FileRepository from "./file.repository";
 import { parseBuffer } from "music-metadata";
 import {
   adminDeleteFile,
+  assertFileTypeAllowed,
   buildContentDisposition,
   canAccessFile,
   deleteFile,
@@ -267,6 +268,96 @@ describe("file.service", () => {
       );
     });
 
+    describe("tipo real del archivo (según sus primeros bytes)", () => {
+      const EXE_HEAD = Buffer.from("MZ\x90\x00\x03\x00\x00\x00", "latin1");
+      const ZIP_HEAD = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+      const WEBM_HEAD = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42]);
+      const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+      function upload(mimetype: string, buffer: Buffer, originalname = "archivo.bin") {
+        return { originalname, mimetype, buffer, size: buffer.length };
+      }
+
+      it("rechaza un ejecutable declarado como PDF con una blocklist de ejecutables", async () => {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.BLOCKLIST,
+          fileTypeList: ["application/x-msdownload"],
+        } as any);
+
+        const attempt = uploadFile("u-1", upload("application/pdf", EXE_HEAD, "factura.pdf"));
+
+        await expect(attempt).rejects.toThrow(BadRequestError);
+        await expect(attempt).rejects.toThrow('File type "application/x-msdownload" is blocked');
+        expect(storage.save).not.toHaveBeenCalled();
+      });
+
+      it("rechaza con allowlist si el contenido real no está permitido", async () => {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.ALLOWLIST,
+          fileTypeList: ["application/pdf"],
+        } as any);
+
+        // Declara PDF, pero los bytes son de un ZIP: la allowlist de PDF no lo cubre.
+        await expect(uploadFile("u-1", upload("application/pdf", ZIP_HEAD, "reporte.pdf"))).rejects.toThrow(
+          'File type "application/zip" is not allowed',
+        );
+        expect(storage.save).not.toHaveBeenCalled();
+      });
+
+      it("acepta una nota de voz audio/webm con allowlist audio/*", async () => {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.ALLOWLIST,
+          fileTypeList: ["audio/*"],
+        } as any);
+        vi.mocked(parseBuffer).mockResolvedValue({ format: { duration: 5 } } as any);
+        vi.mocked(FileRepository.createStoredFile).mockResolvedValue(
+          buildMockStoredFile({ mimeType: "audio/webm;codecs=opus" }) as any,
+        );
+
+        // WebM se detecta como video/webm: es el mismo contenedor que audio/webm, no una mentira.
+        await expect(
+          uploadFile("u-1", upload("audio/webm;codecs=opus", WEBM_HEAD, "nota.webm"), undefined, "voice_note"),
+        ).resolves.toBeDefined();
+      });
+
+      it("acepta un docx con allowlist de docx (la firma ZIP es compatible)", async () => {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.ALLOWLIST,
+          fileTypeList: [DOCX],
+        } as any);
+        vi.mocked(FileRepository.createStoredFile).mockResolvedValue(buildMockStoredFile({ mimeType: DOCX }) as any);
+
+        await expect(uploadFile("u-1", upload(DOCX, ZIP_HEAD, "informe.docx"))).resolves.toBeDefined();
+      });
+
+      it("sin firma reconocible (texto), la restricción sigue siendo sobre el tipo declarado", async () => {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue({
+          ...defaultSettings,
+          fileTypeRestrictionMode: FileTypeRestrictionMode.BLOCKLIST,
+          fileTypeList: ["text/plain"],
+        } as any);
+
+        await expect(uploadFile("u-1", upload("text/plain", Buffer.from("hola"), "nota.txt"))).rejects.toThrow(
+          'File type "text/plain" is blocked',
+        );
+      });
+
+      it("no se guarda el tipo detectado: mimeType sigue siendo el declarado", async () => {
+        vi.mocked(SettingsService.getSettings).mockResolvedValue(defaultSettings as any);
+        vi.mocked(FileRepository.createStoredFile).mockResolvedValue(buildMockStoredFile() as any);
+
+        await uploadFile("u-1", upload("application/octet-stream", ZIP_HEAD, "datos.zip"));
+
+        expect(FileRepository.createStoredFile).toHaveBeenCalledWith(
+          expect.objectContaining({ mimeType: "application/octet-stream" }),
+        );
+      });
+    });
+
     it("voice_note: valida que el tipo MIME sea audio/* y la duración máxima", async () => {
       vi.mocked(SettingsService.getSettings).mockResolvedValue({
         ...defaultSettings,
@@ -441,9 +532,90 @@ describe("file.service", () => {
     });
   });
 
+  describe("assertFileTypeAllowed", () => {
+    const allow = (...types: string[]) => ({
+      fileTypeRestrictionMode: FileTypeRestrictionMode.ALLOWLIST,
+      fileTypeList: types,
+    });
+    const block = (...types: string[]) => ({
+      fileTypeRestrictionMode: FileTypeRestrictionMode.BLOCKLIST,
+      fileTypeList: types,
+    });
+
+    it("sin restricción no rechaza nada", () => {
+      const settings = { fileTypeRestrictionMode: FileTypeRestrictionMode.DISABLED, fileTypeList: ["image/*"] };
+
+      expect(() => assertFileTypeAllowed(settings, "application/x-msdownload", "application/x-msdownload")).not.toThrow();
+    });
+
+    it("ALLOWLIST: con un tipo detectado compatible evalúa solo el declarado", () => {
+      expect(() => assertFileTypeAllowed(allow("audio/*"), "audio/webm", "video/webm")).not.toThrow();
+      expect(() => assertFileTypeAllowed(allow("application/pdf"), "application/pdf", "application/pdf")).not.toThrow();
+    });
+
+    it("ALLOWLIST: si el contenido miente, tienen que estar permitidos el declarado y el detectado", () => {
+      // Permitido el declarado, no el detectado.
+      expect(() => assertFileTypeAllowed(allow("image/png"), "image/png", "application/x-msdownload")).toThrow(
+        'File type "application/x-msdownload" is not allowed',
+      );
+      // Permitido el detectado, no el declarado.
+      expect(() => assertFileTypeAllowed(allow("application/pdf"), "image/png", "application/pdf")).toThrow(
+        'File type "image/png" is not allowed',
+      );
+      // Permitidos los dos.
+      expect(() =>
+        assertFileTypeAllowed(allow("image/png", "image/jpeg"), "image/png", "image/jpeg"),
+      ).not.toThrow();
+    });
+
+    it("BLOCKLIST: alcanza con que el declarado o el detectado esté bloqueado", () => {
+      expect(() => assertFileTypeAllowed(block("application/x-msdownload"), "application/pdf", "application/x-msdownload")).toThrow(
+        'File type "application/x-msdownload" is blocked',
+      );
+      expect(() => assertFileTypeAllowed(block("application/pdf"), "application/pdf", "application/zip")).toThrow(
+        'File type "application/pdf" is blocked',
+      );
+      expect(() => assertFileTypeAllowed(block("application/x-msdownload"), "application/pdf", "application/pdf")).not.toThrow();
+    });
+
+    it("sin tipo detectado (null) evalúa solo el declarado", () => {
+      expect(() => assertFileTypeAllowed(block("text/plain"), "text/plain", null)).toThrow('File type "text/plain" is blocked');
+      expect(() => assertFileTypeAllowed(allow("image/*"), "text/plain", null)).toThrow('File type "text/plain" is not allowed');
+      expect(() => assertFileTypeAllowed(allow("image/*"), "image/png", null)).not.toThrow();
+    });
+  });
+
   describe("storeAvatar", () => {
+    const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+
+    it.each([
+      ["JPEG", Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]), "image/jpeg"],
+      ["GIF", Buffer.from("GIF89a\x01\x00", "latin1"), "image/gif"],
+      ["WebP", Buffer.concat([Buffer.from("RIFF", "latin1"), Buffer.alloc(4), Buffer.from("WEBP", "latin1")]), "image/webp"],
+    ])("acepta un avatar %s real", async (_name, buffer, mimeType) => {
+      vi.mocked(FileRepository.createStoredFile).mockResolvedValue(buildMockStoredFile({ mimeType }) as any);
+
+      await expect(storeAvatar("u-1", buffer, mimeType)).resolves.toBeDefined();
+    });
+
+    it("rechaza un archivo que no es una imagen aunque se declare como image/png", async () => {
+      const exe = Buffer.from("MZ\x90\x00\x03\x00", "latin1");
+      const html = Buffer.from("<html><script>alert(1)</script></html>");
+
+      await expect(storeAvatar("u-1", exe, "image/png")).rejects.toThrow(BadRequestError);
+      await expect(storeAvatar("u-1", html, "image/png")).rejects.toThrow("The file is not a valid image");
+      expect(storage.save).not.toHaveBeenCalled();
+      expect(FileRepository.createStoredFile).not.toHaveBeenCalled();
+    });
+
+    it("rechaza un tipo de archivo reconocido que no es una imagen de avatar (PDF)", async () => {
+      await expect(storeAvatar("u-1", Buffer.from("%PDF-1.7\n", "latin1"), "image/png")).rejects.toThrow(
+        BadRequestError,
+      );
+    });
+
     it("guarda avatar bajo directorio avatars/{userId} y crea StoredFile", async () => {
-      const buffer = Buffer.from("avatar-bytes");
+      const buffer = PNG;
       const mockCreated = buildMockStoredFile({
         originalName: "avatar.png",
         path: "avatars/u-1/avatar.png",

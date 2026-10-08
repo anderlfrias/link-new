@@ -145,6 +145,7 @@ Las subidas multipart que no llegan a completarse (por ejemplo, si el usuario ce
 
 1. **S1 — HeadObject obligatorio al completar**:
    El cliente solo declara un tamaño previo. Tras ejecutar `CompleteMultipartUpload`, Link llama de inmediato a `s3.stat(objectKey)` (`HeadObject`). Si el tamaño real supera `AppSettings.maxUploadSizeMb` o es `<= 0`, se borra el objeto con `DeleteObject`, se marca la sesión como `FAILED` y se responde `400 Bad Request`.
+   **Tipo real del archivo**: `initiate` solo puede validar el tipo declarado (todavía no hay bytes). Al completar, después del chequeo de tamaño, `complete` lee los primeros 4 KiB del objeto (un `GET` con `Range`, nunca el archivo entero), detecta su tipo real y lo aplica junto con el declarado (`assertFileTypeAllowed`, ver [`files`](../files/README.md)). Si el contenido miente y la restricción de tipos lo rechaza, se borra el objeto, se marca la sesión como `FAILED` y se responde `400 Bad Request`, igual que con el tamaño.
 2. **S5 — Cuota de sesiones activas por usuario**:
    Un usuario autenticado no puede tener más de 5 sesiones concurrentes en estado `PENDING` o `UPLOADING`. Evita ataques de agotamiento de disco/recursos (retorna `409 Conflict`).
 3. **S8 — Rate limit en generación de URLs (`partUrlsRateLimiter`)**:

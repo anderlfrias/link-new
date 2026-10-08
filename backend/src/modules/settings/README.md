@@ -29,7 +29,7 @@ publicSettingsRouter.use(authenticate, attachInternalUser)
 
 | Campo | Quién lo consulta |
 |---|---|
-| `maxUploadSizeMb`, `fileTypeRestrictionMode`, `fileTypeList` | [`files`](../files/README.md), `file.service.ts` (`uploadFile`) |
+| `maxUploadSizeMb`, `fileTypeRestrictionMode`, `fileTypeList` | [`files`](../files/README.md), `file.service.ts` (`uploadFile`, `assertFileTypeAllowed`) y [`uploads`](../uploads/README.md) (`initiateUpload`, `completeUpload`). La restricción de tipos se aplica al tipo que declara el cliente **y** al real según los primeros bytes del archivo (ejecutables, ZIP y derivados, PDF, imágenes, audio, video y comprimidos más comunes). Los formatos de texto no tienen firma: para ellos sigue siendo declarativa. |
 | `maxVoiceNoteDurationSeconds` | `files`, `file.service.ts` (`uploadFile`, cuando `kind === "voice_note"`) |
 | `maxFilesPerMessage` | [`messages`](../messages/README.md), `message.service.ts` (`sendMessage`) — también en `PublicAppSettingsDTO`, para que el compositor frene la selección de archivos en el cliente antes de intentar subir de más |
 | `maxGroupMembers`, `whoCanCreateGroups`, `whoCanAddMembers`, `whoCanRemoveMembers`, `whoCanChangeGroupInfo`, `whoCanDeleteGroup` | [`conversations`](../conversations/README.md), `conversation.service.ts` (`createConversation`, `addMembers`, `removeMember`, `updateConversation`, `deleteConversation`, vía `resolveEffectiveGroupSettings`) |

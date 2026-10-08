@@ -750,7 +750,7 @@ await fetch("http://localhost:4000/api/v1/files", {
 - Rate limit: 60 subidas por ventana de 15 minutos por usuario (`uploadRateLimiter`).
 - Techo de seguridad fijo: 32 MB en `multer` (para no saturar RAM en el proceso de Node). Archivos mayores deben usar el camino chunked multipart (`/api/v1/uploads`).
 - Límite editable en runtime: `AppSettings.maxUploadSizeMb` (default 2048 MB).
-- Restricción de tipos de archivo: gobernada por `AppSettings.fileTypeRestrictionMode` (`ALLOWLIST` / `BLOCKLIST` / `DISABLED`).
+- Restricción de tipos de archivo: gobernada por `AppSettings.fileTypeRestrictionMode` (`ALLOWLIST` / `BLOCKLIST` / `DISABLED`). Se aplica al `mimetype` que declara el cliente **y** al tipo real que revelan los primeros bytes del archivo (ejecutables, ZIP y derivados, PDF, imágenes, audio, video y comprimidos más comunes): un `.exe` declarado como `application/pdf` no pasa una blocklist de ejecutables. Los formatos de texto (CSV, TXT, scripts) no tienen firma, así que para ellos solo cuenta el tipo declarado. Responde `400` con `File type "<tipo>" is not allowed` o `is blocked` (el tipo que se rechazó, el declarado o el real).
 - `kind: "voice_note"`: exige MIME type `audio/*` y valida la duración real del buffer contra `AppSettings.maxVoiceNoteDurationSeconds`.
 
 → `201`:
@@ -845,7 +845,7 @@ Crea una sesión de subida multipart en el storage y un registro `FileUpload` en
 ```
 
 - Valida `size` contra `AppSettings.maxUploadSizeMb`.
-- Valida `mimeType` contra `AppSettings.fileTypeRestrictionMode`.
+- Valida el `mimeType` declarado contra `AppSettings.fileTypeRestrictionMode`. El contenido real se verifica recién al completar la subida (sección 10.4): si no coincide y la restricción lo rechaza, el objeto se borra y la sesión queda `FAILED`.
 - Valida cupo: máximo 5 sesiones activas concurrentes por usuario (`MAX_ACTIVE_UPLOADS_PER_USER`).
 
 → `201`:
@@ -917,6 +917,7 @@ Ensambla las partes en S3, verifica el tamaño real y crea el `StoredFile` defin
 - Consulta las partes confirmadas en el storage con `ListParts`. Si faltan partes, responde `400`.
 - Ensambla el objeto multipart con `CompleteMultipartUpload`.
 - **Invariante S1 (Verificación `HeadObject`)**: Consulta el tamaño real del objeto ensamblado en S3. Si supera `AppSettings.maxUploadSizeMb`, lo borra inmediatamente con `DeleteObject`, marca la sesión como `FAILED` y rechaza con `400`.
+- **Tipo real**: lee los primeros 4 KiB del objeto (con `Range`) y detecta su tipo. Si no coincide con el declarado y `AppSettings.fileTypeRestrictionMode` lo rechaza (ver sección 9), lo borra, marca la sesión como `FAILED` y rechaza con `400` (`File type "<tipo>" is not allowed` / `is blocked`).
 - Crea el `StoredFile` definitivo con `provider = "S3"` y marca la sesión como `COMPLETED`.
 
 → `200` con la respuesta estándar de `StoredFileResponse` (`id`, `name`, `size`, `url`).

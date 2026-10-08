@@ -3,6 +3,7 @@ import path from "path";
 import { FileProvider, FileTypeRestrictionMode, FileUploadStatus } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { getProvider } from "../../storage";
+import type { StorageProvider } from "../../storage";
 import {
   BadRequestError,
   ConflictError,
@@ -12,9 +13,10 @@ import {
 } from "../../utils/errors";
 import { isConversationMember } from "../conversations/conversation.repository";
 import * as FileRepository from "../files/file.repository";
+import { SIGNATURE_BYTES, detectMimeFromSignature } from "../files/file-signature";
 import {
+  assertFileTypeAllowed,
   buildStorageDir,
-  matchesFileTypePattern,
   safeExtension,
   toStoredFileResponse,
 } from "../files/file.service";
@@ -37,6 +39,26 @@ export const PART_URL_EXPIRES_IN_SECONDS = 15 * 60; // 15 minutos de TTL (§4.4)
 export const UPLOAD_SESSION_TTL_HOURS = 24; // Sesión vive 24 horas antes de expirar
 export const MAX_ACTIVE_UPLOADS_PER_USER = 5; // Máximo de sesiones activas simultáneas (S5)
 
+/// Los primeros `bytes` de un objeto, para reconocer su tipo real. Pide un rango
+/// (`Range`) y corta la lectura: nunca baja el archivo entero.
+async function readHead(
+  provider: Pick<StorageProvider, "createReadStream">,
+  objectKey: string,
+  bytes: number,
+): Promise<Buffer> {
+  const stream = await provider.createReadStream(objectKey, { start: 0, end: bytes - 1 });
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream as AsyncIterable<Buffer | string>) {
+    const buffer = Buffer.from(chunk);
+    chunks.push(buffer);
+    total += buffer.length;
+    if (total >= bytes) break;
+  }
+  (stream as { destroy?: () => void }).destroy?.();
+  return Buffer.concat(chunks).subarray(0, bytes);
+}
+
 /// Inicia una sesión de subida multipart en S3 y crea el registro PENDING en Postgres (§4.3).
 export async function initiateUpload(
   userId: string,
@@ -52,15 +74,9 @@ export async function initiateUpload(
     throw new BadRequestError(`File exceeds the maximum allowed size of ${settings.maxUploadSizeMb}MB`);
   }
 
-  if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.ALLOWLIST) {
-    if (!settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, input.mimeType))) {
-      throw new BadRequestError(`File type "${input.mimeType}" is not allowed`);
-    }
-  } else if (settings.fileTypeRestrictionMode === FileTypeRestrictionMode.BLOCKLIST) {
-    if (settings.fileTypeList.some((pattern) => matchesFileTypePattern(pattern, input.mimeType))) {
-      throw new BadRequestError(`File type "${input.mimeType}" is blocked`);
-    }
-  }
+  // Todavía no hay bytes que mirar: acá solo vale el tipo declarado. El contenido
+  // real se verifica al completar la subida (`completeUpload`).
+  assertFileTypeAllowed(settings, input.mimeType, null);
 
   // Mitigación S5: limitar sesiones activas por usuario para prevenir agotamiento de disco/recursos
   const activeCount = await UploadRepository.countActiveUploadsByUser(userId);
@@ -284,6 +300,29 @@ export async function completeUpload(
     throw new BadRequestError(
       `File exceeds maximum allowed size of ${settings.maxUploadSizeMb}MB (actual size: ${realSize} bytes)`,
     );
+  }
+
+  // El tipo declarado se validó al iniciar; ahora que el objeto está armado, también
+  // el real, según sus primeros bytes. Si miente, se borra igual que si excediera
+  // el tamaño.
+  try {
+    assertFileTypeAllowed(
+      settings,
+      upload.mimeType,
+      detectMimeFromSignature(await readHead(s3, upload.objectKey, SIGNATURE_BYTES)),
+    );
+  } catch (error) {
+    if (error instanceof BadRequestError) {
+      try {
+        await s3.delete(upload.objectKey);
+      } catch {
+        // Ignorar error secundario de borrado pero registrar estado FAILED
+      }
+      await UploadRepository.updateStatus(upload.id, FileUploadStatus.FAILED, {
+        closedAt: new Date(),
+      });
+    }
+    throw error;
   }
 
   // Crear StoredFile definitivo con provider=S3
