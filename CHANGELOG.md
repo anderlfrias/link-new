@@ -8,6 +8,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ## [Unreleased]
 
 ### Añadido
+- **`npm run setup`**: crea el `.env` (para Docker) o `backend/.env` y `frontend/.env.local` (con `--dev`) con la contraseña de PostgreSQL, las claves VAPID y los secretos ya generados. No pisa valores existentes ni imprime secretos. Reemplaza los pasos manuales del inicio rápido.
 - **Licencia**: LINK pasa a ser software libre bajo la GNU Affero General Public License v3.0 (`AGPL-3.0-only`). Ver `LICENSE` y la sección "Licencia" del README.
 - **Docker**: `Dockerfile` de backend y frontend y `docker-compose.yml` (PostgreSQL + backend + frontend). El backend aplica las migraciones pendientes al arrancar.
 - **Migraciones de base de datos**: migración inicial `0_init` en `backend/prisma/migrations` y scripts `db:migrate`, `db:migrate:dev` y `db:baseline` (para instalaciones creadas con `prisma db push`).

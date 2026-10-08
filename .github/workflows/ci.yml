@@ -25,6 +25,8 @@ jobs:
       # El postinstall del backend genera el cliente de Prisma (Prisma 7 ya no
       # lo hace solo al instalar).
       - run: npm ci
+      - name: Tests de scripts
+        run: npm run test:scripts
       - name: Tests backend
         run: npm run test:coverage --workspace=backend
       - name: Tests frontend

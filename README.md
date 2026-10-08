@@ -36,17 +36,25 @@ Levanta PostgreSQL, el backend y el frontend. Las migraciones de base de datos s
 al arrancar el backend.
 
 ```bash
-cp .env.example .env
+npm run setup
 ```
 
-Completar en `.env` como mínimo:
+Crea `.env` a partir de `.env.example` y genera lo que hace falta para arrancar: la contraseña de
+PostgreSQL, las claves VAPID de las notificaciones push y los secretos de las sesiones y de las
+URLs de archivos. No necesita `npm ci`, nunca pisa un valor que ya esté en el archivo (se puede
+volver a correr sin riesgo) y no imprime ningún secreto. Con `--vapid-subject mailto:equipo@example.org`
+se reemplaza el contacto de las notificaciones push.
 
-- `POSTGRES_PASSWORD`.
-- `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY`. Generarlas con `npx web-push generate-vapid-keys`
-  o, sin Node instalado, con
-  `docker run --rm node:24-bookworm-slim npx -y web-push generate-vapid-keys`.
-- La autenticación: las tres `EXTERNAL_AUTH_*`, o `LOCAL_AUTH_JWT_SECRET` (ver
-  [Autenticación](#autenticación)).
+Sin Node instalado, el mismo script corre dentro de un contenedor:
+
+```bash
+docker run --rm -v "$PWD":/work -w /work node:24-bookworm-slim node scripts/setup.js
+```
+
+(En PowerShell, `${PWD}` en lugar de `"$PWD"`.)
+
+Si la instalación usa EXTERNAL_AUTH en lugar de cuentas propias (ver [Autenticación](#autenticación)), completar
+las tres `EXTERNAL_AUTH_*` en `.env` y borrar `LOCAL_AUTH_JWT_SECRET`, que en ese modo no se usa.
 
 ```bash
 docker compose up -d --build
@@ -90,12 +98,12 @@ Notas:
 3. Configurar el entorno:
 
    ```bash
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env.local
+   npm run setup -- --dev
    ```
 
-   En `backend/.env`, completar las claves VAPID y la autenticación. El `DATABASE_URL` de ejemplo
-   ya apunta al contenedor del paso 2.
+   Crea `backend/.env` y `frontend/.env.local` a partir de sus `.env.example`, y genera en el del
+   backend las claves VAPID y los secretos. El `DATABASE_URL` de ejemplo ya apunta al contenedor
+   del paso 2.
 
 4. Aplicar las migraciones:
 

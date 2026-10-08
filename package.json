@@ -22,7 +22,9 @@
     "start": "concurrently \"npm:start:backend\" \"npm:start:frontend\"",
     "start:backend": "npm run start --workspace=backend",
     "start:frontend": "npm run start --workspace=frontend",
-    "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
+    "setup": "node scripts/setup.js",
+    "test": "npm run test:scripts && npm run test --workspace=backend && npm run test --workspace=frontend",
+    "test:scripts": "node --test \"scripts/*.test.js\"",
     "version:sync": "node scripts/sync-version.js"
   },
   "devDependencies": {
