@@ -239,6 +239,7 @@ socket.on("connect_error", (err) => {
 
 - La conexión se autentica **una sola vez, en el handshake** (no hay un evento de "login" por socket). Si el token es inválido o expiró, la conexión falla directamente con `connect_error` — no llega a `connect`.
 - **El servidor corta el socket cuando vence el token** (`exp`): `socket.disconnect(true)`, y el cliente ve el evento `disconnect` con `reason === "io server disconnect"` (no reconecta solo). Es la misma razón con la que se cortan los sockets al desactivar la cuenta o revocar sus sesiones, así que significa que la sesión terminó. Se corta en el `exp` firmado, no antes: bajar `localSessionTtlHours` no acorta las conexiones que ya existen.
+- **Hay un límite de frecuencia de eventos por socket**: hasta 60 de golpe y una recarga de 20 por segundo. Lo que lo supera se descarta sin respuesta (un evento con callback no lo recibe) y el socket sigue conectado; no hay desconexión por abuso, así que un `io server disconnect` sigue significando siempre que la sesión terminó.
 - Reconectar (ej. tras perder la red) vuelve a mandar el mismo `auth.token` automáticamente (comportamiento default de socket.io-client) — si el token ya expiró para ese momento, hay que refrescarlo (re-loguear) antes de reconectar.
 - Conectarse **no** te suscribe a nada todavía. Para recibir eventos de una conversación hay que unirse explícitamente a su room (ver 3.1) — esto es intencional, para que un socket no reciba tráfico de conversaciones que el usuario no tiene abiertas.
 
@@ -573,6 +574,8 @@ Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están e
 `type: "CONTACT"` comparte una tarjeta de contacto: `content` es un JSON con el `id` de la cuenta (`{ "id": "<userId>" }`) y no lleva adjuntos. El servidor solo toma el `id`: el contenido que guarda y devuelve lo arma con los datos reales de la cuenta, `{ "id", "name", "username", "email", "avatarFileId" }`, ignorando cualquier otro dato que mande el cliente (nombre, correo o foto). `400` (`Contacto inválido`) si el JSON no es válido o la cuenta no existe o está desactivada. La foto se resuelve con `avatarFileId` (sección 9).
 
 `replyToId` opcional — responder a un mensaje puntual de la conversación (tipo WhatsApp/Telegram). Solo se valida que el id exista y pertenezca a **esta misma** conversación (`400` si no); a propósito no se exige que siga sin borrar — si alguien lo borra justo mientras vos tenías la cita armada en tu campo de texto, el envío igual funciona (ver `replyTo` más abajo).
+
+`429` si se superan los 120 envíos por minuto por usuario (límite compartido por este endpoint y `POST /forward`, 6.1.1).
 
 → `201` con el mensaje completo (`receipts` recién nacidos: `"delivered"` para quien ya estaba conectado y unido a la room en ese instante, `"sent"` para el resto). Emite `message:created` (mismo objeto) a la room, y `conversation:updated` a la room personal de cada miembro (ver sección 5) para refrescar la lista de conversaciones.
 

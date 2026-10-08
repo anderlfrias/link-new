@@ -7,6 +7,7 @@ import {
   loginIpRateLimiter,
   loginUserIpRateLimiter,
   loginUserRateLimiter,
+  messageSendRateLimiter,
   partUrlsRateLimiter,
   uploadRateLimiter,
 } from "./rate-limit.middleware";
@@ -298,6 +299,65 @@ function buildUploadApp() {
   app.post("/upload", (_req, res) => res.status(201).json({ ok: true }));
   return app;
 }
+
+describe("messageSendRateLimiter", () => {
+  // Como `buildApp`, pero el handler responde 201 (un envío exitoso): el limiter NO
+  // usa skipSuccessfulRequests, así que igual tiene que gastar cupo.
+  function buildSendApp(userId: string | undefined) {
+    const app = express();
+    app.use((req, _res, next) => {
+      if (userId) req.user = { internalUserId: userId } as any;
+      next();
+    });
+    app.use(messageSendRateLimiter);
+    app.post("/messages", (_req, res) => res.status(201).json({ ok: true }));
+    return app;
+  }
+
+  it("permite 120 envíos por minuto por usuario y bloquea el 121", async () => {
+    const app = buildSendApp(uniqueKey("sender"));
+
+    for (let i = 0; i < 120; i++) {
+      const res = await request(app).post("/messages").send({});
+      expect(res.status).toBe(201);
+    }
+
+    const blocked = await request(app).post("/messages").send({});
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({
+      error: "Estás enviando mensajes demasiado rápido. Esperá un momento y volvé a intentar.",
+    });
+  });
+
+  it("usuarios distintos tienen cupos independientes", async () => {
+    const appA = buildSendApp(uniqueKey("senderA"));
+    const appB = buildSendApp(uniqueKey("senderB"));
+
+    for (let i = 0; i < 121; i++) {
+      await request(appA).post("/messages").send({});
+    }
+
+    const res = await request(appB).post("/messages").send({});
+    expect(res.status).toBe(201);
+  });
+
+  it("sin usuario autenticado cae al fallback de IP y sigue limitando", async () => {
+    const app = express();
+    app.use((req, _res, next) => {
+      Object.defineProperty(req, "ip", { value: "192.0.2.99" });
+      next();
+    });
+    app.use(messageSendRateLimiter);
+    app.post("/messages", (_req, res) => res.status(201).json({ ok: true }));
+
+    for (let i = 0; i < 120; i++) {
+      await request(app).post("/messages").send({});
+    }
+
+    const blocked = await request(app).post("/messages").send({});
+    expect(blocked.status).toBe(429);
+  });
+});
 
 describe("uploadRateLimiter", () => {
   it("permite 60 subidas por usuario y bloquea la 61ra con el mensaje esperado", async () => {

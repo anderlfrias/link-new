@@ -102,6 +102,22 @@ export const loginUserRateLimiter = rateLimit({
   message: TOO_MANY_ATTEMPTS_MESSAGE,
 });
 
+// Envío de mensajes (`POST /` y `POST /forward` de messages): sin esto, un usuario
+// autenticado podía saturar la base, los recibos y los push de los demás. Por
+// usuario (`internalUserId`), no por IP, por la misma razón que los limiters de
+// archivos. NO usa `skipSuccessfulRequests`: un envío exitoso es justamente el
+// costo que se quiere acotar. 120 por minuto es generoso a propósito: el reenvío
+// múltiple hace un request por mensaje y por destino (use-forward-message.ts), y
+// una persona escribiendo rápido no llega a 2 por segundo sostenidos.
+export const messageSendRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.internalUserId ?? getClientIp(req) ?? "unknown",
+  message: { error: "Estás enviando mensajes demasiado rápido. Esperá un momento y volvé a intentar." },
+});
+
 // Antes de que exista el upload chunked (ver LARGE_FILES_PLAN.md, Fase 4+),
 // este es el único freno contra un usuario autenticado que abre muchas
 // subidas seguidas para agotar memoria/disco (ese plan, S5 y S14) — hasta

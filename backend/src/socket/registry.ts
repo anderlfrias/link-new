@@ -3,6 +3,7 @@ import { registerConversationSocket } from "../modules/conversations/conversatio
 import { registerMessageSocket } from "../modules/messages/message.socket";
 import { registerPresenceSocket } from "../modules/presence/presence.socket";
 import { SOCKET_LIFECYCLE_EVENTS } from "./events";
+import { registerSocketRateLimit } from "./rate-limit";
 import { AppServer, SocketModuleRegistrar } from "./types";
 
 const registrars: SocketModuleRegistrar[] = [];
@@ -18,6 +19,9 @@ export function registerSocketModule(registrar: SocketModuleRegistrar): void {
 /// nueva, ejecuta el registrar de cada módulo ya registrado.
 export function attachSocketModules(io: AppServer): void {
   io.on(SOCKET_LIFECYCLE_EVENTS.CONNECTION, (socket) => {
+    // Primero y para todos los módulos por igual: el límite de frecuencia no
+    // depende de ningún módulo (ver rate-limit.ts).
+    registerSocketRateLimit(socket);
     registrars.forEach((registrar) => registrar(socket, io));
   });
 }

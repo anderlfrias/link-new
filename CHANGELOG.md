@@ -65,6 +65,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - La conexión en tiempo real seguía abierta, recibiendo mensajes, después de que vencía la sesión.
 - Cualquiera podía impedirle a otra persona iniciar sesión durante 15 minutos con cinco intentos fallidos usando su usuario. Ahora el límite de cinco intentos es por usuario y por IP, con un tope más alto por usuario desde cualquier IP.
 - El texto de los mensajes borrados (por su autor o por la retención automática) quedaba guardado en la base, junto con sus encuestas y la relación con sus archivos. Ahora se descarta al borrar.
+- Se limita la frecuencia de envío de mensajes (120 por minuto por usuario) y de eventos en tiempo real (por socket), para que nadie pueda saturar el servidor ni a otros usuarios.
 - Las restricciones de tipo de archivo de la configuración global se podían evadir declarando otro tipo al subir. Ahora también se verifica el contenido real de los formatos más comunes (ejecutables, comprimidos, PDF, imágenes, audio y video). Los formatos de texto no tienen firma y siguen validándose por el tipo declarado. Un avatar tiene que ser una imagen real (PNG, JPEG, GIF o WebP).
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.

@@ -11,7 +11,9 @@ import { AppServer, SocketMiddleware } from "./types";
 ///   4. logging — listo, ver request-context.ts (adjunta el logger/meta del
 ///      socket; el contexto en sí se abre por evento con withRequestContext,
 ///      no acá — ver el comentario de ese archivo)
-///   5. rate limiting
+///   5. rate limiting — listo, pero no es un middleware global de conexión: limita
+///      los eventos de cada socket, así que se registra por socket con
+///      `socket.use` (ver rate-limit.ts y registry.ts)
 export const socketMiddlewares: SocketMiddleware[] = [authenticateSocket, attachSocketContext];
 
 export function applyMiddlewares(io: AppServer, middlewares: SocketMiddleware[]): void {

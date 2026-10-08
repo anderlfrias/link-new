@@ -40,12 +40,15 @@ describe("socket registry", () => {
     const mockSocket = {
       id: "sock-1",
       on: vi.fn(),
+      use: vi.fn(),
       join: vi.fn(),
       leave: vi.fn(),
       data: { user: { internalUserId: "u-1" } },
     };
     connectionHandler!(mockSocket);
 
+    // El límite de frecuencia se registra en cada socket nuevo (socket.use), antes de los módulos.
+    expect(mockSocket.use).toHaveBeenCalledTimes(1);
     expect(customModuleA).toHaveBeenCalledWith(mockSocket, mockIo);
     expect(customModuleB).toHaveBeenCalledWith(mockSocket, mockIo);
   });

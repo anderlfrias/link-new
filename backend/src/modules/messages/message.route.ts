@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
+import { messageSendRateLimiter } from "../../middlewares/rate-limit.middleware";
 import { validateBody } from "../../middlewares/validate.middleware";
 import * as MessageController from "./message.controller";
 import {
@@ -17,10 +18,10 @@ const router = Router({ mergeParams: true });
 
 router.use(authenticate, attachInternalUser);
 
-router.post("/", validateBody(createMessageSchema), MessageController.create);
+router.post("/", messageSendRateLimiter, validateBody(createMessageSchema), MessageController.create);
 // Antes de "/:id" (PATCH/DELETE) a propósito — mismo criterio que POST /self
 // en conversations: es una ruta fija, no colisiona con esas (ni con GET /files).
-router.post("/forward", validateBody(forwardMessageSchema), MessageController.forward);
+router.post("/forward", messageSendRateLimiter, validateBody(forwardMessageSchema), MessageController.forward);
 router.get("/", MessageController.list);
 router.get("/files", MessageController.listFiles);
 router.patch("/:id", validateBody(updateMessageSchema), MessageController.update);
