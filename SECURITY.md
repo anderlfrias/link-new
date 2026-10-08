@@ -90,3 +90,40 @@ servicio no puede suscribirse hasta que se agregue su dominio en
 `backend/src/modules/push/push-endpoint.ts`. La notificación lleva el texto del mensaje: se borran
 las suscripciones de una cuenta al desactivarla o al restablecer su contraseña, y el frontend da de
 baja la del navegador al cerrar sesión.
+
+## Limitaciones conocidas
+
+Cosas que LINK hace así a propósito, o que todavía no resuelve. No son vulnerabilidades por
+reportar: si encontrás una forma de abusar de alguna que no esté descrita acá, sí lo es.
+
+- **El directorio muestra el correo de todas las cuentas activas.** Es intencional para un chat
+  interno: el correo es el identificador de login en modo local, y el directorio de una
+  organización suele ser visible para todos sus miembros. Sin búsqueda, el directorio devuelve
+  como máximo 100 cuentas.
+- **Los avatares se descargan sin autenticación.** El frontend los carga con `<img>`, que no manda
+  token. Los ids son UUID v4 (no se pueden adivinar) y un avatar es visible para toda la
+  instalación de todos modos.
+- **Los mensajes no tienen cifrado de extremo a extremo.** El contenido vive en claro en la base,
+  como en cualquier chat con moderación y auditoría. Al borrar un mensaje para todos (o al vencer la
+  retención) su contenido se descarta de forma irreversible, pero un backup anterior lo conserva.
+- **Las notificaciones push llevan el texto del mensaje.** El payload viaja cifrado entre el
+  backend y el navegador (RFC 8291), pero la notificación se muestra en la pantalla de bloqueo del
+  dispositivo. No hay una opción para ocultar el texto.
+- **El push sigue activo después de que la sesión vence sin cerrar sesión.** Se da de baja al
+  cerrar sesión, al desactivar la cuenta y al restablecer o cambiar la contraseña, pero no cuando el
+  token vence solo: el dispositivo sigue recibiendo notificaciones hasta el próximo inicio o cierre
+  de sesión.
+- **Las URLs firmadas de archivos valen 1 hora y son portadoras:** quien tiene la URL descarga el
+  archivo. Alguien quitado de un grupo puede usar las que ya recibió hasta que vencen.
+- **El socket se corta en el vencimiento firmado del token**, no antes: bajar la duración de sesión
+  en la configuración (modo local) no acorta las conexiones que ya existen.
+- **La restricción de tipos de archivo no cubre los formatos de texto.** Además del tipo que declara
+  el cliente se mira el contenido real, pero solo de los formatos con firma conocida (ejecutables,
+  comprimidos, PDF, imágenes, audio y video más comunes). CSV, TXT, JSON y scripts (`.bat`, `.ps1`,
+  `.sh`) se validan solo por el tipo declarado.
+- **El token de sesión vive en `localStorage` y la CSP no restringe scripts.** No hay un punto de
+  XSS conocido, pero una cookie `httpOnly` o una CSP con `nonce` limitarían el daño de uno. Está
+  pendiente de decidir.
+- **Los límites de frecuencia viven en memoria de un solo proceso.** Con varias instancias del
+  backend se multiplican; ver "Una sola instancia del backend" arriba. Aplica a los límites de
+  inicio de sesión, de envío de mensajes, de subida y descarga de archivos, y de eventos del socket.

@@ -280,6 +280,22 @@ Documentación técnica:
 - [`docs/design/`](docs/design/): decisiones de diseño (logging y auditoría, archivos grandes,
   testing, autenticación local).
 
+## Estado del proyecto
+
+Limitaciones de seguridad conocidas (el detalle está en
+[SECURITY.md](SECURITY.md#limitaciones-conocidas)):
+
+- El directorio de usuarios muestra el correo de todas las cuentas activas, y los avatares se
+  descargan sin autenticación.
+- Los mensajes no tienen cifrado de extremo a extremo.
+- Las notificaciones push llevan el texto del mensaje, y siguen activas si la sesión vence sin
+  cerrar sesión.
+- Las URLs firmadas de archivos valen 1 hora y son portadoras.
+- La restricción de tipos de archivo mira el contenido real solo de los formatos con firma conocida;
+  los formatos de texto se validan por el tipo declarado.
+- El token de sesión vive en `localStorage` y la CSP no restringe scripts.
+- Los límites de frecuencia viven en memoria: el backend tiene que correr como una sola instancia.
+
 ## Contribuir y seguridad
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): cómo preparar el entorno, convenciones y reglas de tests.
