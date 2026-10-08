@@ -43,6 +43,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Actualización de Next.js a 16.3.8 y de Prisma a 7.10.0.
 
 ### Corregido
+- Con almacenamiento en disco (el valor por defecto), los archivos de más de 16 MiB fallaban: se mandaban por la subida por partes, que solo existe con S3, y la pantalla anunciaba un límite de 2048 MB. Ahora se suben directo hasta 32 MB, la interfaz muestra el límite real (y rechaza un archivo demasiado grande antes de subirlo), el panel de administración avisa cuando el máximo configurado no se puede alcanzar sin S3, y `POST /api/v1/uploads` responde `503` con `code: "chunked_uploads_unavailable"`. La subida por partes sigue necesitando S3.
 - En una base de datos nueva, el primer arranque del backend se caía: los workers creaban la configuración global en paralelo y chocaban por la clave única.
 - Dos archivos de tests de socket no llegaban a ejecutarse desde que las llamadas envían notificaciones push.
 - Errores de tipos en tests del frontend que bloqueaban el build con Next.js 16.3, y el tipo de la acción de reacciones (faltaba `"updated"`).

@@ -7,7 +7,8 @@ import { useUpdateAdminSettings } from "@/features/admin/hooks/use-update-admin-
 import type { AdminSettings } from "@/features/admin/types/admin-settings.types";
 import type { AuthMode } from "@/features/auth/types/auth.types";
 import { useAuth } from "@/providers/auth-provider";
-import { createMockSession } from "@/test/test-utils";
+import { usePublicSettings } from "@/providers/public-settings-provider";
+import { createMockPublicSettings, createMockSession } from "@/test/test-utils";
 
 vi.mock("@/features/admin/hooks/use-admin-settings", () => ({
   useAdminSettings: vi.fn(),
@@ -15,6 +16,10 @@ vi.mock("@/features/admin/hooks/use-admin-settings", () => ({
 
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: vi.fn(),
+}));
+
+vi.mock("@/providers/public-settings-provider", () => ({
+  usePublicSettings: vi.fn(),
 }));
 
 /** Sin `authProvider` la sesión es de modo external-auth, como las guardadas antes del modo local. */
@@ -95,10 +100,49 @@ describe("AdminSettingsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSessionMode();
+    vi.mocked(usePublicSettings).mockReturnValue(null);
     vi.mocked(useUpdateAdminSettings).mockReturnValue({
       save: mockSave,
       pending: false,
       error: null,
+    });
+  });
+
+  describe("nota del tamaño máximo sin almacenamiento S3", () => {
+    function renderReady() {
+      vi.mocked(useAdminSettings).mockReturnValue({
+        settings: { ...defaultSettings, maxUploadSizeMb: 2048 },
+        status: "ready",
+        error: null,
+        refetch: mockRefetch,
+      });
+      render(<AdminSettingsPanel />);
+    }
+
+    it("aparece cuando no hay subida por partes (sin S3)", () => {
+      vi.mocked(usePublicSettings).mockReturnValue(createMockPublicSettings({ chunkedUploads: false }));
+
+      renderReady();
+
+      expect(screen.getByTestId("max-upload-no-s3-note")).toHaveTextContent("32 MB");
+      // El campo conserva el valor configurado: la nota explica por qué no se alcanza.
+      expect(screen.getByLabelText(/Tamaño máximo \(MB\)/)).toHaveValue(2048);
+    });
+
+    it("no aparece con almacenamiento S3", () => {
+      vi.mocked(usePublicSettings).mockReturnValue(createMockPublicSettings({ chunkedUploads: true }));
+
+      renderReady();
+
+      expect(screen.queryByTestId("max-upload-no-s3-note")).not.toBeInTheDocument();
+    });
+
+    it("no aparece mientras los ajustes públicos no cargaron", () => {
+      vi.mocked(usePublicSettings).mockReturnValue(null);
+
+      renderReady();
+
+      expect(screen.queryByTestId("max-upload-no-s3-note")).not.toBeInTheDocument();
     });
   });
 

@@ -92,9 +92,107 @@ describe("useMessageAttachments", () => {
       expireSession: vi.fn(),
       completePasswordChange: vi.fn(),
     });
+    // Por defecto, una instalación con almacenamiento S3 (subida por partes disponible).
     vi.mocked(usePublicSettings).mockReturnValue(
-      createMockPublicSettings({ maxFilesPerMessage: 5 }),
+      createMockPublicSettings({ maxFilesPerMessage: 5, chunkedUploads: true, maxUploadSizeMb: 2048 }),
     );
+  });
+
+  describe("sin subida por partes (almacenamiento en disco)", () => {
+    beforeEach(() => {
+      vi.mocked(usePublicSettings).mockReturnValue(
+        createMockPublicSettings({ chunkedUploads: false, maxUploadSizeMb: 32 }),
+      );
+    });
+
+    it("un archivo de 20 MiB sube por el camino directo y nunca crea un ChunkedUploader", async () => {
+      const file = new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", { type: "video/mp4" });
+      vi.mocked(uploadFile).mockResolvedValueOnce({
+        id: "f-direct",
+        originalName: "video.mp4",
+        size: file.size,
+        mimeType: "video/mp4",
+        extension: "mp4",
+        url: "/api/v1/files/f-direct/content",
+        createdAt: "2026-09-10",
+      });
+
+      const { result } = renderHook(() => useMessageAttachments("conv-1"));
+      act(() => {
+        result.current.addFiles([file]);
+      });
+
+      await waitFor(() => {
+        expect(result.current.attachments[0].status).toBe("done");
+      });
+      expect(uploadFile).toHaveBeenCalledWith("attach-token", file, "conv-1");
+      expect(ChunkedUploader).not.toHaveBeenCalled();
+    });
+
+    it("un archivo de 40 MiB se rechaza por tamaño, sin subir nada", async () => {
+      const file = new File([new Uint8Array(40 * 1024 * 1024)], "pelicula.mkv", { type: "video/x-matroska" });
+
+      const { result } = renderHook(() => useMessageAttachments("conv-1"));
+      act(() => {
+        result.current.addFiles([file]);
+      });
+
+      await waitFor(() => {
+        expect(result.current.attachments[0].status).toBe("error");
+      });
+      expect(uploadFile).not.toHaveBeenCalled();
+      expect(ChunkedUploader).not.toHaveBeenCalled();
+      expect(result.current.validationErrors).toEqual([
+        expect.objectContaining({ fileName: "pelicula.mkv", reason: { kind: "size-limit" } }),
+      ]);
+    });
+
+    it("sin los ajustes cargados no se asume subida por partes: va por el camino directo", async () => {
+      vi.mocked(usePublicSettings).mockReturnValue(null);
+      const file = new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", { type: "video/mp4" });
+
+      const { result } = renderHook(() => useMessageAttachments("conv-1"));
+      act(() => {
+        result.current.addFiles([file]);
+      });
+
+      await waitFor(() => {
+        expect(uploadFile).toHaveBeenCalledTimes(1);
+      });
+      expect(ChunkedUploader).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("con subida por partes (S3)", () => {
+    it("un archivo de 20 MiB va por ChunkedUploader", () => {
+      const file = new File([new Uint8Array(20 * 1024 * 1024)], "video.mp4", { type: "video/mp4" });
+
+      const { result } = renderHook(() => useMessageAttachments("conv-1"));
+      act(() => {
+        result.current.addFiles([file]);
+      });
+
+      expect(ChunkedUploader).toHaveBeenCalledTimes(1);
+      expect(uploadFile).not.toHaveBeenCalled();
+    });
+
+    it("un archivo que supera el máximo configurado se rechaza antes de subir", async () => {
+      vi.mocked(usePublicSettings).mockReturnValue(
+        createMockPublicSettings({ chunkedUploads: true, maxUploadSizeMb: 25 }),
+      );
+      const file = new File([new Uint8Array(30 * 1024 * 1024)], "grande.zip", { type: "application/zip" });
+
+      const { result } = renderHook(() => useMessageAttachments("conv-1"));
+      act(() => {
+        result.current.addFiles([file]);
+      });
+
+      await waitFor(() => {
+        expect(result.current.validationErrors).toHaveLength(1);
+      });
+      expect(ChunkedUploader).not.toHaveBeenCalled();
+      expect(uploadFile).not.toHaveBeenCalled();
+    });
   });
 
   it("agrega y sube archivos por camino directo si tamaño <= 16 MiB", async () => {

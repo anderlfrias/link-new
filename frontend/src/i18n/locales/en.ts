@@ -464,6 +464,8 @@ export const en: TranslationSchema = {
       migrationIntervalError: "Must be an integer greater than 0.",
 
       maxUploadSizeMb: "Maximum upload size (MB)",
+      maxUploadSizeNoS3Note:
+        "Without S3 storage, the effective maximum is 32 MB, whatever this value is: larger files need multipart uploads.",
       maxFilesPerMessage: "Maximum files per message (empty = unlimited)",
       fileTypeRestrictionMode: "File type restriction",
       restrictionDisabled: "No restriction",

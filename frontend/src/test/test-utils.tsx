@@ -35,6 +35,7 @@ export function createMockPublicSettings(
 ): PublicAppSettings {
   return {
     maxUploadSizeMb: 25,
+    chunkedUploads: false,
     maxVoiceNoteDurationSeconds: 120,
     maxGroupMembers: 100,
     maxFilesPerMessage: 10,

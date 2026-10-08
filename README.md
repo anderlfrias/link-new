@@ -242,7 +242,9 @@ pm2 start ecosystem.config.js   # o: npm start
 ## Almacenamiento S3
 
 Por defecto los archivos se guardan en disco (`backend/uploads`, o el volumen `uploads` con
-Docker). Para usar un servicio compatible con S3:
+Docker). Con ese almacenamiento, el tamaño máximo de un archivo es **32 MB**, sin importar lo que
+se configure en el panel de administración: la subida por partes de archivos grandes (hasta 2 GB
+por defecto) necesita S3. Para usar un servicio compatible con S3:
 
 - Definir `STORAGE_WRITE_PROVIDER=S3` y las variables `S3_*`.
 - El navegador sube y descarga **directo** contra `S3_ENDPOINT` con URLs firmadas, así que esa URL

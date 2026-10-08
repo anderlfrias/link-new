@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { FileProvider, FileTypeRestrictionMode, FileUploadStatus } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
+import env from "../../config/env";
 import { getProvider } from "../../storage";
 import type { StorageProvider } from "../../storage";
 import {
@@ -64,6 +65,14 @@ export async function initiateUpload(
   userId: string,
   input: InitiateUploadInput,
 ): Promise<InitiateUploadResponse> {
+  // La subida por partes solo existe con S3. Sin esto, con almacenamiento en disco
+  // el cliente de AWS tardaba unos segundos en rendirse por falta de credenciales
+  // y el usuario veía un 500 genérico. Un cliente que ignore `chunkedUploads`
+  // (ver `getPublicSettings`) recibe un error con un código estable.
+  if (env.STORAGE_WRITE_PROVIDER !== "S3") {
+    throw new ServiceUnavailableError("Chunked uploads require S3 storage", "chunked_uploads_unavailable");
+  }
+
   if (input.conversationId && !(await isConversationMember(input.conversationId, userId))) {
     throw new ForbiddenError("You are not a member of this conversation");
   }

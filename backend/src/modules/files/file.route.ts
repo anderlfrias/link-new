@@ -6,6 +6,7 @@ import { authenticate, requireRoles } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import { downloadRateLimiter, uploadRateLimiter } from "../../middlewares/rate-limit.middleware";
 import * as FileController from "./file.controller";
+import { DIRECT_UPLOAD_MAX_BYTES } from "./upload-limits";
 
 // memoryStorage: el StorageProvider (src/storage) trabaja siempre con buffers,
 // nunca con el disco directamente — así un futuro proveedor (S3, MinIO) no
@@ -20,14 +21,13 @@ import * as FileController from "./file.controller";
 // dejar que multer bufferee en memoria un body absurdamente grande antes de
 // que corra cualquier código de aplicación — no lo edita un admin.
 //
-// 32 MB (antes 500 MB): con 500 MB, una sola subida grande alcanzaba (y
-// superaba) el `max_memory_restart: "500M"` de PM2 (ver ecosystem.config.js)
-// y reiniciaba el backend entero — bug activo, ver LARGE_FILES_PLAN.md B2.
-// Este camino directo queda pensado para adjuntos chicos/medianos; archivos
-// más grandes esperan el upload chunked de una fase posterior de ese plan —
-// hasta entonces, `AppSettings.maxUploadSizeMb` puede declarar un techo
-// mayor sin que este camino pueda entregarlo: multer corta acá primero.
-const ABSOLUTE_MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
+// 32 MB (antes 500 MB, ver `upload-limits.ts`): con 500 MB, una sola subida
+// grande alcanzaba (y superaba) el `max_memory_restart: "500M"` de PM2 (ver
+// ecosystem.config.js) y reiniciaba el backend entero. Este camino directo es
+// para adjuntos chicos/medianos; los archivos más grandes van por partes
+// (`/v1/uploads`), que solo existe con almacenamiento S3. Sin S3, este techo es
+// el máximo real, aunque `AppSettings.maxUploadSizeMb` declare uno mayor: el
+// cliente recibe el límite efectivo en `GET /v1/settings/public`.
 
 // Además del archivo, el frontend manda a lo sumo `conversationId` y `kind`
 // (ver file.controller.ts#upload). Sin estos topes, multer acepta campos de
@@ -35,7 +35,7 @@ const ABSOLUTE_MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 // cargar cientos de MB de campos basura.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: ABSOLUTE_MAX_UPLOAD_BYTES, files: 1, fields: 10, fieldSize: 64 * 1024 },
+  limits: { fileSize: DIRECT_UPLOAD_MAX_BYTES, files: 1, fields: 10, fieldSize: 64 * 1024 },
 });
 
 const router = Router();

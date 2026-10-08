@@ -21,6 +21,8 @@ Base: `/api/v1/uploads`
 
 Todas las rutas requieren autenticación (`authenticate` + `attachInternalUser`).
 
+**Solo con almacenamiento S3.** Con `STORAGE_WRITE_PROVIDER=LOCAL` (el valor por defecto) este módulo no está disponible: `POST /` responde `503` con `code: "chunked_uploads_unavailable"` antes de tocar nada, y todo archivo va por el camino directo (`POST /api/v1/files`, hasta 32 MB). Los clientes lo saben de antemano por `chunkedUploads` en `GET /api/v1/settings/public` (ver `backend/API.md`, 12.2).
+
 ---
 
 ## Ciclo de vida y máquina de estados (`FileUploadStatus`)

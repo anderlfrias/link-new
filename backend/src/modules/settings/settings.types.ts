@@ -75,7 +75,15 @@ export interface LocalAuthPolicy {
 /// archivo, grabar una nota de voz o crear un grupo, sin exponer el resto de
 /// la configuración administrativa.
 export interface PublicAppSettingsDTO {
+  /// Máximo **efectivo** de un archivo: lo configurado por el admin
+  /// (`AppSettings.maxUploadSizeMb`) con almacenamiento S3, y como mucho
+  /// `DIRECT_UPLOAD_MAX_MB` (32) sin S3, donde no hay subida por partes. Es lo
+  /// que el cliente usa para validar antes de subir.
   maxUploadSizeMb: number;
+  /// `true` si la subida por partes (`/v1/uploads`) está disponible, es decir,
+  /// con `STORAGE_WRITE_PROVIDER=S3`. Sin eso, todo archivo va por el camino
+  /// directo (`POST /v1/files`).
+  chunkedUploads: boolean;
   maxVoiceNoteDurationSeconds: number;
   maxGroupMembers: number;
   /// null = sin límite. Expuesto para que el compositor de mensajes pueda

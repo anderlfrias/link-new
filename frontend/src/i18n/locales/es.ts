@@ -460,6 +460,8 @@ export const es = {
       migrationIntervalError: "Debe ser un número entero mayor a 0.",
 
       maxUploadSizeMb: "Tamaño máximo (MB)",
+      maxUploadSizeNoS3Note:
+        "Sin almacenamiento S3, el máximo efectivo es 32 MB, sin importar este valor: los archivos más grandes necesitan la subida por partes.",
       maxFilesPerMessage: "Máximo de archivos por mensaje (vacío = sin límite)",
       fileTypeRestrictionMode: "Restricción de tipo de archivo",
       restrictionDisabled: "Sin restricción",

@@ -1,6 +1,7 @@
 import { AppSettings, AuditAction, ConversationGroupSettings } from "@prisma/client";
 import env from "../../config/env";
 import { prisma } from "../../config/prisma";
+import { DIRECT_UPLOAD_MAX_MB } from "../files/upload-limits";
 import { effectiveMinLength } from "../auth/password";
 import * as AuditRepository from "../audit/audit.repository";
 import * as AuditService from "../audit/audit.service";
@@ -50,8 +51,15 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function getPublicSettings(): Promise<PublicAppSettingsDTO> {
   const settings = await getSettings();
+  // La subida por partes solo existe con S3. Sin ella, todo archivo va por el
+  // camino directo, que tiene un techo fijo: informar el límite configurado
+  // (por defecto 2048 MB) haría prometer una subida que nunca se completa.
+  const chunkedUploads = env.STORAGE_WRITE_PROVIDER === "S3";
   return {
-    maxUploadSizeMb: settings.maxUploadSizeMb,
+    maxUploadSizeMb: chunkedUploads
+      ? settings.maxUploadSizeMb
+      : Math.min(settings.maxUploadSizeMb, DIRECT_UPLOAD_MAX_MB),
+    chunkedUploads,
     maxVoiceNoteDurationSeconds: settings.maxVoiceNoteDurationSeconds,
     maxGroupMembers: settings.maxGroupMembers,
     maxFilesPerMessage: settings.maxFilesPerMessage,

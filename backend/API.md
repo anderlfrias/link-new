@@ -1015,6 +1015,7 @@ Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesi
 ```json
 {
   "maxUploadSizeMb": 25,
+  "chunkedUploads": true,
   "maxVoiceNoteDurationSeconds": 300,
   "maxGroupMembers": 256,
   "maxFilesPerMessage": 10,
@@ -1027,6 +1028,8 @@ Subconjunto de solo lectura, sin requerir rol admin — lo que un cliente necesi
   "allowStickersAndGifs": true
 }
 ```
+
+`maxUploadSizeMb` es el máximo **efectivo** de un archivo, no necesariamente el configurado en 12.1: con almacenamiento S3 (`STORAGE_WRITE_PROVIDER=S3`) es el configurado, y sin S3 es como mucho **32 MB** (el techo del camino directo, `POST /api/v1/files`), porque la subida por partes (sección 10) solo existe con S3. `chunkedUploads` dice si esa subida por partes está disponible: con `false`, un cliente tiene que mandar todo archivo por el camino directo (y `POST /api/v1/uploads` responde `503` con `code: "chunked_uploads_unavailable"`). El valor configurado, sin ajustar, sigue en `GET /admin/settings`.
 
 ---
 

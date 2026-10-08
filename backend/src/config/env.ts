@@ -35,10 +35,10 @@ const schema = yup.object({
   LOCAL_AUTH_JWT_SECRET: optionalString(),
   // Solo semilla de AppSettings.maxUploadSizeMb en el primer arranque (ver
   // settings.repository.ts#getOrCreate) — después la fila en la base manda.
-  // 2048 (antes 25): techo que un admin puede habilitar una vez completado
-  // el upload chunked de LARGE_FILES_PLAN.md. El camino directo de hoy
-  // (`POST /v1/files`) sigue tope-ado por `ABSOLUTE_MAX_UPLOAD_BYTES` (32 MB,
-  // ver file.route.ts) hasta esa fase, sin importar este valor.
+  // 2048: techo que un admin puede habilitar con almacenamiento S3, donde los
+  // archivos grandes van por partes (`/v1/uploads`). Sin S3 el único camino es
+  // `POST /v1/files`, tope-ado por `DIRECT_UPLOAD_MAX_BYTES` (32 MB, ver
+  // files/upload-limits.ts): el máximo efectivo es 32 MB, sin importar este valor.
   MAX_UPLOAD_SIZE_MB: yup.number().default(2048),
   VAPID_PUBLIC_KEY: yup.string().required(),
   VAPID_PRIVATE_KEY: yup.string().required(),

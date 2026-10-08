@@ -168,6 +168,7 @@ describe("settings.controller", () => {
     it("GET /settings/public accepts regular authenticated non-admin users with 200", async () => {
       vi.mocked(SettingsService.getPublicSettings).mockResolvedValue({
         maxUploadSizeMb: 50,
+        chunkedUploads: true,
         maxVoiceNoteDurationSeconds: 120,
         maxGroupMembers: 100,
         maxFilesPerMessage: 10,

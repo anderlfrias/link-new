@@ -19,7 +19,8 @@ import { compressImage, IMAGE_COMPRESSION_PRESETS } from "@/utils/compress-image
 import { isImageMimeType } from "@/utils/file-format";
 import type { UploadedFile } from "@/features/files/types/file.types";
 
-/** Umbral interno que divide el camino directo (≤ 16 MiB) del chunked (> 16 MiB) (§4, §12). */
+/** Umbral interno que divide el camino directo (≤ 16 MiB) del chunked (> 16 MiB, solo con
+ * almacenamiento S3: ver `PublicAppSettings.chunkedUploads`) (§4, §12). */
 export const CHUNKED_UPLOAD_THRESHOLD_BYTES = 16 * 1024 * 1024;
 
 export type AttachmentStatus = ChunkedUploadStatus;
@@ -88,6 +89,10 @@ export function useMessageAttachments(conversationId: string) {
   // la autoridad real es `message.service.ts#sendMessage`, que rechaza el
   // POST si de verdad hay más de la cuenta.
   const maxFilesPerMessage = publicSettings?.maxFilesPerMessage ?? null;
+  // Sin los ajustes cargados no se asume subida por partes (solo existe con S3): el camino
+  // directo es el que siempre funciona. El máximo es el efectivo que informa el backend.
+  const chunkedUploads = publicSettings?.chunkedUploads ?? false;
+  const maxUploadBytes = publicSettings ? publicSettings.maxUploadSizeMb * 1024 * 1024 : null;
 
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   // Cola en vez de un solo valor: soltar varios archivos rechazados a la vez
@@ -117,7 +122,28 @@ export function useMessageAttachments(conversationId: string) {
     (fileToUpload: File, localId: string, existingSessionId?: string) => {
       if (!token) return;
 
-      if (fileToUpload.size > CHUNKED_UPLOAD_THRESHOLD_BYTES) {
+      // Se valida acá, después de comprimir las imágenes, con el tamaño que de verdad se sube.
+      // Sin esto, un archivo demasiado grande se subía entero antes de que el servidor lo rechazara.
+      if (maxUploadBytes != null && fileToUpload.size > maxUploadBytes) {
+        setAttachments((prev) =>
+          prev.map((att) =>
+            att.localId === localId
+              ? {
+                  ...att,
+                  status: "error",
+                  error: `File exceeds the maximum allowed size of ${Math.round(maxUploadBytes / (1024 * 1024))}MB`,
+                }
+              : att,
+          ),
+        );
+        setValidationErrors((prev) => [
+          ...prev,
+          { id: localId, fileName: fileToUpload.name, reason: { kind: "size-limit" } },
+        ]);
+        return;
+      }
+
+      if (chunkedUploads && fileToUpload.size > CHUNKED_UPLOAD_THRESHOLD_BYTES) {
         // Camino chunked (> 16 MiB) directo a S3 vía multipart
         const uploader = new ChunkedUploader({
           file: fileToUpload,
@@ -187,7 +213,8 @@ export function useMessageAttachments(conversationId: string) {
             }
           });
       } else {
-        // Camino directo (≤ 16 MiB) vía POST /v1/files
+        // Camino directo vía POST /v1/files: hasta 16 MiB, y hasta el máximo efectivo (32 MB)
+        // cuando no hay subida por partes.
         uploadFile(token, fileToUpload, conversationId)
           .then((uploaded) => {
             setAttachments((prev) =>
@@ -214,7 +241,7 @@ export function useMessageAttachments(conversationId: string) {
           });
       }
     },
-    [token, conversationId],
+    [token, conversationId, chunkedUploads, maxUploadBytes],
   );
 
   const addFiles = useCallback(

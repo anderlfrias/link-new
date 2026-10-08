@@ -147,6 +147,7 @@ describe("settings.service", () => {
 
   describe("getPublicSettings", () => {
     const originalGiphyApiKey = env.GIPHY_API_KEY;
+    const originalStorageWriteProvider = env.STORAGE_WRITE_PROVIDER;
 
     beforeEach(() => {
       env.GIPHY_API_KEY = "test-giphy-api-key";
@@ -154,6 +155,43 @@ describe("settings.service", () => {
 
     afterEach(() => {
       env.GIPHY_API_KEY = originalGiphyApiKey;
+      env.STORAGE_WRITE_PROVIDER = originalStorageWriteProvider;
+    });
+
+    describe("límite de subida efectivo según el almacenamiento", () => {
+      it("sin S3 (LOCAL) el máximo efectivo es 32 MB aunque el admin configure más, y no hay subida por partes", async () => {
+        env.STORAGE_WRITE_PROVIDER = "LOCAL";
+        vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({ ...defaultMockSettings, maxUploadSizeMb: 2048 });
+
+        const publicSettings = await getPublicSettings();
+
+        expect(publicSettings.maxUploadSizeMb).toBe(32);
+        expect(publicSettings.chunkedUploads).toBe(false);
+      });
+
+      it("con S3 el máximo efectivo es el configurado y hay subida por partes", async () => {
+        env.STORAGE_WRITE_PROVIDER = "S3";
+        vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({ ...defaultMockSettings, maxUploadSizeMb: 2048 });
+
+        const publicSettings = await getPublicSettings();
+
+        expect(publicSettings.maxUploadSizeMb).toBe(2048);
+        expect(publicSettings.chunkedUploads).toBe(true);
+      });
+
+      it("sin S3 un máximo configurado menor que 32 MB se respeta (es un mínimo, no un piso)", async () => {
+        env.STORAGE_WRITE_PROVIDER = "LOCAL";
+        vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({ ...defaultMockSettings, maxUploadSizeMb: 10 });
+
+        expect((await getPublicSettings()).maxUploadSizeMb).toBe(10);
+      });
+
+      it("no toca el valor configurado que ve el admin (getSettings)", async () => {
+        env.STORAGE_WRITE_PROVIDER = "LOCAL";
+        vi.mocked(SettingsRepository.getOrCreate).mockResolvedValue({ ...defaultMockSettings, maxUploadSizeMb: 2048 });
+
+        expect((await getSettings()).maxUploadSizeMb).toBe(2048);
+      });
     });
 
     it("reports GIFs and stickers as disabled when GIPHY_API_KEY is not configured, even if the admin toggle is on", async () => {
@@ -179,7 +217,9 @@ describe("settings.service", () => {
       const publicSettings = await getPublicSettings();
 
       expect(publicSettings).toEqual({
-        maxUploadSizeMb: 50,
+        // Con el almacenamiento en disco de los tests (LOCAL), el máximo efectivo es 32 MB.
+        maxUploadSizeMb: 32,
+        chunkedUploads: false,
         maxVoiceNoteDurationSeconds: 120,
         maxGroupMembers: 100,
         maxFilesPerMessage: 10,

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { useAuth } from "@/providers/auth-provider";
 import { useTranslation } from "@/i18n";
+import { usePublicSettings } from "@/providers/public-settings-provider";
 
 interface DraftState {
   maxUploadSizeMb: string;
@@ -443,6 +444,9 @@ function GroupPermissionField({
 export function AdminSettingsPanel() {
   const { t } = useTranslation();
   const { session } = useAuth();
+  // Ajustes que ve cualquier usuario: `chunkedUploads` dice si hay subida por partes (S3).
+  // Mientras no cargaron (`null`) no se muestra la nota.
+  const publicSettings = usePublicSettings();
   // Modo de la instalación según la sesión del propio admin (ausente = external-auth).
   const local = session?.user.authProvider === "local";
   const { settings, status, error: loadError, refetch } = useAdminSettings();
@@ -528,6 +532,11 @@ export function AdminSettingsPanel() {
                   onChange={(event) => updateField("maxUploadSizeMb", event.target.value)}
                   error={errors.maxUploadSizeMb}
                 />
+                {publicSettings && !publicSettings.chunkedUploads && (
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400" data-testid="max-upload-no-s3-note">
+                    {t("admin.settings.maxUploadSizeNoS3Note")}
+                  </span>
+                )}
               </label>
               <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
                 {t("admin.settings.maxFilesPerMessage")}

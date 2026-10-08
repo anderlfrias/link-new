@@ -1,5 +1,6 @@
 import { Readable } from "stream";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import env from "../../config/env";
 import { FileProvider, FileTypeRestrictionMode, FileUploadStatus } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import {
@@ -7,6 +8,7 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  ServiceUnavailableError,
 } from "../../utils/errors";
 
 const {
@@ -80,6 +82,35 @@ describe("UploadService", () => {
   });
 
   describe("initiateUpload", () => {
+    const originalStorageWriteProvider = env.STORAGE_WRITE_PROVIDER;
+
+    // La subida por partes solo existe con almacenamiento S3.
+    beforeEach(() => {
+      env.STORAGE_WRITE_PROVIDER = "S3";
+    });
+
+    afterEach(() => {
+      env.STORAGE_WRITE_PROVIDER = originalStorageWriteProvider;
+    });
+
+    it("sin almacenamiento S3 (LOCAL) lanza ServiceUnavailableError con un código estable y no toca nada", async () => {
+      env.STORAGE_WRITE_PROVIDER = "LOCAL";
+
+      const attempt = UploadService.initiateUpload("user-1", {
+        name: "video.mp4",
+        mimeType: "video/mp4",
+        size: 40 * 1024 * 1024,
+        conversationId: "conv-1",
+      });
+
+      await expect(attempt).rejects.toThrow(ServiceUnavailableError);
+      await expect(attempt).rejects.toMatchObject({ code: "chunked_uploads_unavailable", statusCode: 503 });
+      expect(mockConversationRepo.isConversationMember).not.toHaveBeenCalled();
+      expect(mockSettingsService.getSettings).not.toHaveBeenCalled();
+      expect(mockS3Storage.createMultipartUpload).not.toHaveBeenCalled();
+      expect(mockUploadRepo.createUpload).not.toHaveBeenCalled();
+    });
+
     it("inicia sesión multipart correctamente y calcula totalParts con partes de 8 MiB", async () => {
       mockUploadRepo.createUpload.mockResolvedValue({
         id: "upload-session-1",
