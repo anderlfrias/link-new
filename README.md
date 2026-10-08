@@ -78,6 +78,11 @@ Notas:
 - `CORS_ORIGIN` tiene que ser el origen con el que se abre el frontend (por defecto
   `http://localhost:3000`). Detrás de un proxy inverso, ajustar también `TRUST_PROXY` (ver
   [SECURITY.md](SECURITY.md#reverse-proxy-e-ip-del-cliente)).
+- **Imágenes publicadas.** Cada versión (tag `vX.Y.Z`) publica en GHCR `ghcr.io/<dueño>/link-backend:X.Y.Z` y
+  `link-frontend:X.Y.Z`, así que con Docker se puede actualizar cambiando el número de versión, sin
+  reconstruir el backend. La imagen del backend es la base para agregar un proveedor de autenticación
+  ([guía](docs/auth-providers.md)). La del frontend sale con las URLs de `localhost` (se embeben en el build):
+  detrás de un dominio hay que reconstruirla con las propias, como se explica arriba.
 - Los archivos subidos quedan en el volumen `uploads`, y la base de datos en `postgres-data`.
 - Ver logs: `docker compose logs -f backend`. Bajar todo: `docker compose down`. Bajar y
   **borrar los datos**: `docker compose down -v`.

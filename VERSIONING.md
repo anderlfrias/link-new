@@ -162,6 +162,10 @@ Envía el commit y los tags al repositorio central:
 git push origin main --follow-tags
 ```
 
+Al llegar el tag `v*`, el workflow [Publicar imágenes](.github/workflows/release-images.yml) verifica que el tag
+coincida con la versión de los `package.json` y publica en GHCR `link-backend` y `link-frontend` con ese número
+de versión (`X.Y.Z` y `X.Y`; `latest` solo en versiones finales).
+
 ---
 
 ### Paso 7: Actualizar una instalación
@@ -195,6 +199,12 @@ git pull origin main
 docker compose up -d --build
 docker compose ps
 ```
+
+Con las imágenes publicadas (ver el README), alcanza con cambiar el número de versión de la imagen del backend
+(y reconstruir la del frontend con las URLs propias): sin merges ni compilar el backend en el servidor. Un
+proveedor de autenticación externo que se agrega extendiendo la imagen del backend se actualiza igual:
+nueva versión de la imagen base, reconstruir, y correr los tests del proveedor (ver
+[docs/auth-providers.md](docs/auth-providers.md)).
 
 ---
 

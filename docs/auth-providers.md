@@ -199,11 +199,13 @@ tal cual cada vez que actualices LINK; no importa nada).
 
 ### Con Docker
 
-Una imagen derivada de la del backend, sin tocar el código de LINK:
+Una imagen derivada de la del backend, sin tocar el código de LINK. Cada versión de LINK publica la suya en
+GHCR (`ghcr.io/<dueño>/link-backend:<version>`); también se puede construir con
+`docker build -f backend/Dockerfile -t link-backend:<version> .`:
 
 ```dockerfile
 ARG LINK_VERSION
-FROM link-backend:${LINK_VERSION}
+FROM ghcr.io/<dueño>/link-backend:${LINK_VERSION}
 COPY dist/provider.cjs /opt/link-plugins/provider.cjs
 ENV AUTH_PROVIDER_MODULE=/opt/link-plugins/provider.cjs
 ```
