@@ -1,0 +1,36 @@
+name: CodeQL
+
+# Análisis estático de seguridad del código (backend y frontend). Gratis en repositorios públicos.
+# Los resultados aparecen en la pestaña Security > Code scanning.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Una vez por semana (lunes), por si aparecen consultas nuevas sin que cambie el código.
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Análisis (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v4
+        with:
+          # JavaScript y TypeScript comparten extractor. No hace falta un build.
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"
