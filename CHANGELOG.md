@@ -26,6 +26,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Cabeceras de seguridad en todas las respuestas del frontend (`Content-Security-Policy` con `frame-ancestors`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`).
 
 ### Cambiado
+- El healthcheck del contenedor del backend comprueba la conexión con la base de datos (`GET /health`), no solo que el proceso responda: si PostgreSQL se cae, el contenedor pasa a `unhealthy`.
 - **Acción requerida en producción:** con `NODE_ENV=production`, el backend no arranca sin `CORS_ORIGIN`. Definirla con el origen del frontend (o con `*` para aceptar cualquier origen a propósito). Antes, sin definirla, la API aceptaba cualquier origen.
 - **Acción requerida detrás de Cloudflare:** el backend ya no toma la IP del cliente de `CF-Connecting-IP` salvo con `TRUST_CF_CONNECTING_IP=true`. Si hay un proxy entre Cloudflare y el backend y no se define, el rate limiting y la auditoría ven la IP del proxy. `trust proxy` sigue en `1` por defecto (`TRUST_PROXY`).
 - LINK ya no se puede embeber en un iframe de otro origen.
@@ -44,6 +45,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Actualización de Next.js a 16.3.8 y de Prisma a 7.10.0.
 
 ### Corregido
+- `ecosystem.config.js` levanta el frontend en el puerto 3000 (antes 3027), el que usan el README y `docker-compose.yml`.
 - Con almacenamiento en disco (el valor por defecto), los archivos de más de 16 MiB fallaban: se mandaban por la subida por partes, que solo existe con S3, y la pantalla anunciaba un límite de 2048 MB. Ahora se suben directo hasta 32 MB, la interfaz muestra el límite real (y rechaza un archivo demasiado grande antes de subirlo), el panel de administración avisa cuando el máximo configurado no se puede alcanzar sin S3, y `POST /api/v1/uploads` responde `503` con `code: "chunked_uploads_unavailable"`. La subida por partes sigue necesitando S3.
 - En una base de datos nueva, el primer arranque del backend se caía: los workers creaban la configuración global en paralelo y chocaban por la clave única.
 - Dos archivos de tests de socket no llegaban a ejecutarse desde que las llamadas envían notificaciones push.

@@ -124,4 +124,15 @@ describe("shouldIgnoreRequest", () => {
   it('devuelve false para "/api/v1/conversations"', () => {
     expect(shouldIgnoreRequest({ url: "/api/v1/conversations" } as IncomingMessage)).toBe(false);
   });
+
+  it("ignora GET /health, el healthcheck del contenedor (con o sin query)", () => {
+    expect(shouldIgnoreRequest({ url: "/health" } as IncomingMessage)).toBe(true);
+    expect(shouldIgnoreRequest({ url: "/health?probe=1" } as IncomingMessage)).toBe(true);
+  });
+
+  it("no ignora rutas que solo se parecen a /health", () => {
+    expect(shouldIgnoreRequest({ url: "/healthz" } as IncomingMessage)).toBe(false);
+    expect(shouldIgnoreRequest({ url: "/api/health" } as IncomingMessage)).toBe(false);
+    expect(shouldIgnoreRequest({ url: "/health/extra" } as IncomingMessage)).toBe(false);
+  });
 });

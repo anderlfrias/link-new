@@ -59,9 +59,13 @@ module.exports = {
       // Los NEXT_PUBLIC_* (frontend/.env.local) quedan embebidos en el bundle
       // al momento del build — cambiarlos acá o reiniciar con PM2 no alcanza,
       // hay que correr "npm run build --workspace=frontend" de nuevo.
+      //
+      // PORT es el puerto del frontend (Next.js lo lee de esta variable): 3000, el
+      // que usan el README y docker-compose.yml. Si se cambia, actualizar también
+      // CORS_ORIGIN del backend (el origen con el que se abre el frontend).
       env: {
         NODE_ENV: "production",
-        PORT: 3027,
+        PORT: 3000,
       },
       // Next.js sí es stateless (sin Socket.IO) — a diferencia del backend,
       // subir `instances` acá es seguro si hace falta escalar.

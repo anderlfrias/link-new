@@ -29,9 +29,11 @@ export function customLogLevel(_req: IncomingMessage, res: ServerResponse, err?:
   return "info" as const;
 }
 
-/// GET / es el health check ("Backend is running") — ruido puro, no se loguea.
+/// GET / ("Backend is running") y GET /health son los health checks (el del contenedor
+/// corre cada 15 s) — ruido puro, no se loguean.
 export function shouldIgnoreRequest(req: IncomingMessage) {
-  return req.url === "/";
+  const pathname = req.url?.split("?")[0];
+  return pathname === "/" || pathname === "/health";
 }
 
 /// Serializer de `req`: SOLO el pathname, nunca el query string. Las URLs de

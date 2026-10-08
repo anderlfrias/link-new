@@ -47,6 +47,7 @@ WORKDIR /app/backend
 RUN mkdir -p uploads && chown node:node uploads
 USER node
 EXPOSE 4000
+# /health, no /: además de que el proceso responda, comprueba la conexión con la base de datos.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
-  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 4000) + '/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 4000) + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 CMD ["sh", "-c", "npm run db:migrate && exec node dist/server.js"]

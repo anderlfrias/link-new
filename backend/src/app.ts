@@ -7,6 +7,7 @@ import { corsOrigin } from "./config/cors-origins";
 import { errorHandler } from "./middlewares/error.middleware";
 import { httpLogger } from "./middlewares/http-logger.middleware";
 import { requestContext } from "./middlewares/request-context.middleware";
+import healthRoutes from "./modules/health/health.route";
 import routes from "./route";
 
 const app = express();
@@ -29,9 +30,12 @@ app.use(requestContext);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// "El proceso responde". El chequeo que también mira la base de datos es `/health`.
 app.get("/", (_req, res) => {
   res.send("Backend is running");
 });
+
+app.use("/health", healthRoutes);
 
 app.use("/api", routes);
 

@@ -35,6 +35,9 @@ Solo se corrigen vulnerabilidades sobre la última versión publicada (rama `mai
   - Nunca reutilizar los valores de ejemplo.
 - **No exponer PostgreSQL** fuera de la red interna. En el `docker-compose.yml` incluido, la
   base no publica puertos hacia el host.
+- **`GET /health` es público** (Docker no se autentica) y hace un `SELECT 1` por request, sin
+  caché. No devuelve ningún detalle de la base. Si el backend se expone a internet, filtrarlo en el
+  proxy y dejarlo accesible solo desde la red interna.
 - **Una sola instancia del backend.** Varias instancias, además de romper los eventos en tiempo
   real, multiplican los límites de rate limiting, que viven en memoria.
 - **Almacenamiento S3.** Restringir el CORS del bucket al origen del frontend y no dar acceso

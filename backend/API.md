@@ -956,6 +956,8 @@ npm run dev   # ts-node, puerto 4000 por default
 
 Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL` y, según el modo de autenticación, las tres `EXTERNAL_AUTH_*` (`EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`) para usar EXTERNAL_AUTH, o ninguna de ellas y `LOCAL_AUTH_JWT_SECRET` para cuentas locales (ver [`docs/design/LOCAL_AUTH_PLAN.md`](../docs/design/LOCAL_AUTH_PLAN.md)). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
 
+**Health check.** `GET /health` (fuera de `/api`, sin autenticación) responde `200 { "status": "ok" }` si el backend llega a la base de datos (hace un `SELECT 1`, con un tope de 3 s), y `503 { "status": "unavailable" }` si no. Nunca devuelve el error ni detalles de la base. Es el chequeo del contenedor (`HEALTHCHECK` de `backend/Dockerfile`) y no se registra en el log de accesos. `GET /` responde "Backend is running" solo para decir que el proceso está vivo.
+
 Para más detalle de arquitectura interna (no necesario para consumir el API, pero útil si algo no se comporta como se documenta acá): [`README.md`](./README.md) (arquitectura general y modelo de datos), y el README de cada módulo — [`auth`](./src/modules/auth/README.md), [`conversations`](./src/modules/conversations/README.md), [`messages`](./src/modules/messages/README.md), [`files`](./src/modules/files/README.md), [`users`](./src/modules/users/README.md), [`settings`](./src/modules/settings/README.md), [`socket`](./src/socket/README.md).
 
 ---
