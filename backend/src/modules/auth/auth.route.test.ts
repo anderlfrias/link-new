@@ -1,9 +1,6 @@
 import express from "express";
-import jwt from "jsonwebtoken";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requireExternalUserConfig } from "../../config/auth-config";
-import env from "../../config/env";
 import { errorHandler } from "../../middlewares/error.middleware";
 import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
 import { BadRequestError } from "../../utils/errors";
@@ -31,7 +28,7 @@ vi.mock("../../config/prisma", () => ({
         name: "Ana",
         username: null,
         status: "ACTIVE",
-        localRoles: [],
+        roles: [],
         tokensValidAfter: null,
       }),
     },
@@ -39,7 +36,7 @@ vi.mock("../../config/prisma", () => ({
 }));
 
 import authRouter from "./auth.route";
-import { signLocalToken } from "./jwt";
+import { signSessionToken } from "./jwt";
 import * as LocalAuthService from "./local-auth.service";
 
 function buildApp() {
@@ -51,7 +48,7 @@ function buildApp() {
 }
 
 function localToken(mustChangePassword: boolean): string {
-  return signLocalToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword });
+  return signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword });
 }
 
 // Cada test usa un usuario distinto para no compartir el cupo del rate limiter
@@ -74,16 +71,10 @@ describe("GET /auth/config", () => {
 });
 
 describe("PATCH /auth/password", () => {
-  it("en modo external-auth no existe: 404 aunque el token de EXTERNAL_AUTH sea válido", async () => {
-    const external-authToken = jwt.sign(
-      { id: "ext-1", email: "ana@example.com", username: "ana", name: "Ana", roles: [], app: "x" },
-      requireExternalUserConfig(env.auth).jwtSecret,
-      { algorithm: "HS256", expiresIn: 3600 },
-    );
-
+  it("en modo external-auth no existe: 404 aunque la sesión sea válida", async () => {
     const res = await request(app)
       .patch("/auth/password")
-      .set("Authorization", `Bearer ${external-authToken}`)
+      .set("Authorization", `Bearer ${localToken(false)}`)
       .send({ currentPassword: "a", newPassword: "b" });
 
     expect(res.status).toBe(404);

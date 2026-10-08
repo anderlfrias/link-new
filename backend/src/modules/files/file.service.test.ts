@@ -130,8 +130,8 @@ describe("file.service", () => {
     });
   });
 
-  // Respaldo cuando no hay FILE_URL_SIGNING_SECRET (LOCAL_AUTH_PLAN.md §6):
-  // antes era siempre EXTERNAL_AUTH_JWT_SECRET, que en modo local no existe.
+  // Respaldo cuando no hay FILE_URL_SIGNING_SECRET: el secreto de sesión, que existe
+  // en todos los modos (antes era EXTERNAL_AUTH_JWT_SECRET, que en modo local no existe).
   describe("generateFileToken — secreto de firma", () => {
     const originalSigningSecret = env.FILE_URL_SIGNING_SECRET;
     const originalAuth = env.auth;
@@ -155,23 +155,29 @@ describe("file.service", () => {
       expect(isSignedWith("dedicated-file-secret", "file-1", token)).toBe(true);
     });
 
-    it("sin FILE_URL_SIGNING_SECRET, en modo external-auth firma con EXTERNAL_AUTH_JWT_SECRET", () => {
+    it("sin FILE_URL_SIGNING_SECRET, en modo external-auth firma con SESSION_JWT_SECRET, no con el de EXTERNAL_AUTH", () => {
+      const sessionSecret = "s".repeat(32);
       env.FILE_URL_SIGNING_SECRET = undefined;
-      env.auth = { mode: "external-auth", external-auth: { apiUrl: "https://external-auth.test", appCode: "app", jwtSecret: "external-auth-secret" } };
+      env.auth = {
+        mode: "external-auth",
+        sessionSecret,
+        external-auth: { apiUrl: "https://external-auth.test", appCode: "app", jwtSecret: "external-auth-secret" },
+      };
 
       const token = generateFileToken("file-1", "u-user");
 
-      expect(isSignedWith("external-auth-secret", "file-1", token)).toBe(true);
+      expect(isSignedWith(sessionSecret, "file-1", token)).toBe(true);
+      expect(isSignedWith("external-auth-secret", "file-1", token)).toBe(false);
     });
 
-    it("sin FILE_URL_SIGNING_SECRET, en modo local firma con LOCAL_AUTH_JWT_SECRET y el token verifica", () => {
-      const localSecret = "l".repeat(32);
+    it("sin FILE_URL_SIGNING_SECRET, en modo local firma con SESSION_JWT_SECRET y el token verifica", () => {
+      const sessionSecret = "l".repeat(32);
       env.FILE_URL_SIGNING_SECRET = undefined;
-      env.auth = { mode: "local", local: { jwtSecret: localSecret } };
+      env.auth = { mode: "local", sessionSecret };
 
       const token = generateFileToken("file-1", "u-user");
 
-      expect(isSignedWith(localSecret, "file-1", token)).toBe(true);
+      expect(isSignedWith(sessionSecret, "file-1", token)).toBe(true);
       expect(verifyFileToken("file-1", token).userId).toBe("u-user");
     });
   });

@@ -54,7 +54,7 @@ docker run --rm -v "$PWD":/work -w /work node:24-bookworm-slim node scripts/setu
 (En PowerShell, `${PWD}` en lugar de `"$PWD"`.)
 
 Si la instalación usa EXTERNAL_AUTH en lugar de cuentas propias (ver [Autenticación](#autenticación)), completar
-las tres `EXTERNAL_AUTH_*` en `.env` y borrar `LOCAL_AUTH_JWT_SECRET`, que en ese modo no se usa.
+las tres `EXTERNAL_AUTH_*` en `.env`. `SESSION_JWT_SECRET` (que el script genera) se usa en los dos modos.
 
 ```bash
 docker compose up -d --build
@@ -146,13 +146,13 @@ Las más importantes del backend:
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `DATABASE_URL` | sí | Conexión a PostgreSQL. |
-| `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET` | según el modo | Las tres activan el modo EXTERNAL_AUTH. |
-| `LOCAL_AUTH_JWT_SECRET` | según el modo | Sin EXTERNAL_AUTH, activa el modo local. 32 caracteres o más. |
+| `SESSION_JWT_SECRET` | sí | Firma las sesiones de LINK, en todos los modos. 32 caracteres o más; cambiarla cierra todas las sesiones. (`LOCAL_AUTH_JWT_SECRET`, su nombre anterior, se sigue aceptando con un aviso.) |
+| `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET` | según el modo | Las tres activan el modo EXTERNAL_AUTH; sin ninguna, el modo es local. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | sí | Notificaciones push. Con claves inválidas el backend no arranca. |
 | `CORS_ORIGIN` | en producción | Origen(es) del frontend, separados por coma. Con `NODE_ENV=production` es obligatoria (sin ella el backend no arranca); `*` acepta cualquier origen a propósito. Fuera de producción, sin definir acepta cualquier origen. |
 | `TRUST_PROXY` | no | Proxies delante del backend: `1` (por defecto), `2`, o `false` si el backend está expuesto directo. Ver [SECURITY.md](SECURITY.md#reverse-proxy-e-ip-del-cliente). |
 | `TRUST_CF_CONNECTING_IP` | no | `true` solo si todo el tráfico entra por Cloudflare. Por defecto `false`. |
-| `FILE_URL_SIGNING_SECRET` | recomendada | Firma de las URLs de archivos. Sin definir, usa el secreto JWT del modo activo. |
+| `FILE_URL_SIGNING_SECRET` | recomendada | Firma de las URLs de archivos. Sin definir, usa `SESSION_JWT_SECRET`. |
 | `GIPHY_API_KEY` | no | GIFs/stickers vía GIPHY. Sin definir quedan deshabilitados. Antes de activarlos, ver [Requisitos de GIPHY](backend/src/modules/giphy/README.md#requisitos-de-giphy). |
 | `STORAGE_WRITE_PROVIDER`, `S3_*` | no | Almacenamiento en disco (`LOCAL`, por defecto) o S3. |
 | `LOG_LEVEL`, `LOG_PRETTY` | no | Nivel y formato del log (JSON por defecto). |
@@ -169,10 +169,11 @@ la base.
 El modo se deduce de las variables de entorno del backend:
 
 - **EXTERNAL_AUTH** (las tres `EXTERNAL_AUTH_*` definidas): el login se delega en un servicio de identidad
-  externo compatible con EXTERNAL_AUTH, que emite un JWT HS256. LINK verifica ese token, crea o actualiza
-  el perfil local del usuario, y toma los roles (por ejemplo `admin`) del token. Los detalles del
+  externo compatible con EXTERNAL_AUTH, que emite un JWT HS256. LINK verifica ese token **solo en el login**,
+  crea o actualiza el perfil local del usuario, guarda sus roles (por ejemplo `admin`) y emite su
+  propia sesión: de ahí en más ese token de EXTERNAL_AUTH no se acepta en ningún lado. Los detalles del
   contrato están en [`backend/src/modules/auth/README.md`](backend/src/modules/auth/README.md).
-- **Local** (ninguna `EXTERNAL_AUTH_*`, con `LOCAL_AUTH_JWT_SECRET`): las cuentas y sus contraseñas viven
+- **Local** (ninguna `EXTERNAL_AUTH_*`): las cuentas y sus contraseñas viven
   en la base de LINK. Se inicia sesión con el correo o el nombre de usuario.
   - El primer admin se crea por terminal con `npm run auth:admin -- create-admin --email <correo>`
     (con Docker, `docker compose exec backend npm run auth:admin -- …`; sin compilar,

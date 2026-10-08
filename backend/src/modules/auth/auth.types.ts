@@ -35,11 +35,11 @@ export interface ExternalUserLoginResponse {
   error?: string;
 }
 
-/// Usuario ya mapeado a la estructura interna, a partir del token del modo
-/// activo (el JWT de EXTERNAL_AUTH, o el propio del modo local).
+/// Usuario ya mapeado a la estructura interna: a partir del token de sesión de
+/// LINK en cada request, o del JWT de EXTERNAL_AUTH en el login (`mapTokenToUser`).
 ///
-/// En modo local, `id === internalUserId` (el token lleva el id interno en
-/// `sub`) y `permissions` siempre es `[]`: las restricciones por rol son un
+/// En la sesión de LINK, `id === internalUserId` (el token lleva el id interno
+/// en `sub`) y `permissions` siempre es `[]`: las restricciones por rol son un
 /// concepto de EXTERNAL_AUTH.
 export interface MappedUser {
   id: string;
@@ -60,8 +60,8 @@ export interface MappedUser {
   internalUserId?: string;
 }
 
-/// Payload del token que firma este backend en modo local (D5).
-export interface LocalTokenPayload extends JwtPayload {
+/// Payload del token de sesión que firma este backend, en todos los modos de login (D5).
+export interface SessionTokenPayload extends JwtPayload {
   /// Id interno (`User.id`).
   sub: string;
   email: string;
@@ -101,13 +101,12 @@ export type PublicAuthConfig =
       };
     };
 
-/// Resultado de verificar un token con el verificador del modo activo (D6).
+/// Resultado de verificar el token de sesión de LINK (D6).
 export interface AuthenticatedIdentity {
-  mode: AuthMode;
   user: MappedUser;
   /// Token restringido (`pcr`): solo sirve para `PATCH /auth/password`.
   mustChangePassword: boolean;
-  /// `iat` del token, en segundos. En modo local lo comparan
-  /// `tokensValidAfter` y la duración de sesión vigente (D7).
+  /// `iat` del token, en segundos. Lo comparan `tokensValidAfter` y la duración
+  /// de sesión vigente (D7).
   iat?: number;
 }

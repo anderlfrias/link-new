@@ -13,45 +13,42 @@ vi.mock("./settings.service", () => ({
   updateSettings: vi.fn(),
 }));
 
-vi.mock("../auth/jwt", () => {
-  const verifyToken = vi.fn((token: string) => {
-    if (token === "invalid-token") {
-      throw new Error("Invalid token");
-    }
-    if (token === "admin-token") {
-      return { id: "ext-admin", email: "admin@example.com", roles: ["admin", "user"] };
-    }
-    if (token === "user-token") {
-      return { id: "ext-user", email: "user@example.com", roles: ["user"] };
-    }
-    throw new Error("Unknown token");
-  });
-  const mapTokenToUser = vi.fn((payload: any) => ({
-    id: payload.id,
-    email: payload.email,
-    roles: payload.roles,
-  }));
-  return {
-    verifyToken,
-    mapTokenToUser,
-    // Los middlewares usan el verificador único (LOCAL_AUTH_PLAN.md, Fase 4):
-    // en modo external-auth equivale a verificar el JWT de EXTERNAL_AUTH y mapearlo.
-    verifyAccessToken: vi.fn((token: string) => ({
-      mode: "external-auth",
-      user: mapTokenToUser(verifyToken(token)),
+// El verificador de sesión solo da la identidad del token: los roles salen de la
+// base (mock de prisma, abajo), igual que en producción.
+vi.mock("../auth/jwt", () => ({
+  verifyAccessToken: vi.fn((token: string) => {
+    if (token !== "admin-token" && token !== "user-token") throw new Error("Unknown token");
+    const id = token === "admin-token" ? "admin-1" : "user-1";
+    return {
       mustChangePassword: false,
-    })),
-  };
-});
+      iat: Math.floor(Date.now() / 1000),
+      user: {
+        id: id,
+        email: `${id}@example.com`,
+        username: null,
+        fullName: "",
+        roles: [],
+        permissions: [],
+        app: "link",
+        exp: 0,
+        authProvider: "external-auth",
+      },
+    };
+  }),
+}));
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
     user: {
-      findUnique: vi.fn().mockResolvedValue({
-        id: "internal-uuid-1",
-        email: "user@example.com",
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        email: `${where.id}@example.com`,
+        name: "X",
+        username: null,
         status: "ACTIVE",
-      }),
+        roles: where.id === "admin-1" ? ["admin", "user"] : ["user"],
+        tokensValidAfter: null,
+      })),
     },
   },
 }));
@@ -160,6 +157,11 @@ describe("settings.controller", () => {
 
     const app = buildTestApp();
 
+    // `attachInternalUser` lee la duración de sesión de los ajustes en cada request.
+    beforeEach(() => {
+      vi.mocked(SettingsService.getSettings).mockResolvedValue({ localSessionTtlHours: 12 } as any);
+    });
+
     it("GET /settings/public rejects unauthenticated requests with 401", async () => {
       const res = await request(app).get("/settings/public");
       expect(res.status).toBe(401);
@@ -208,6 +210,7 @@ describe("settings.controller", () => {
         id: "singleton",
         maxUploadSizeMb: 50,
         whoCanCreateGroups: "ALL_MEMBERS",
+        localSessionTtlHours: 12,
       } as any;
       vi.mocked(SettingsService.getSettings).mockResolvedValue(mockAdminSettings);
 

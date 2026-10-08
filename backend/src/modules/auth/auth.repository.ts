@@ -112,7 +112,14 @@ type ExternalUserProfileFields = Pick<MappedUser, "id" | "email" | "username" | 
 /// - En modo external-auth manda el username de EXTERNAL_AUTH: si otra cuenta lo tiene, se le
 ///   quita en la misma transacción. Antes, ese choque terminaba en un 500 por
 ///   el índice único.
-export async function upsertUserFromExternalUser(mappedUser: ExternalUserProfileFields): Promise<User> {
+///
+/// `options.roles`: los roles que entrega el proveedor en el login. Se
+/// guardan siempre que vengan (se sobrescriben en cada login); al sincronizar
+/// contactos (sin roles) los de la cuenta quedan como están.
+export async function upsertUserFromExternalUser(
+  mappedUser: ExternalUserProfileFields,
+  options: { roles?: string[] } = {},
+): Promise<User> {
   const existing =
     (await prisma.user.findUnique({ where: { email: mappedUser.email } })) ??
     (await prisma.user.findFirst({ where: { email: { equals: mappedUser.email, mode: "insensitive" } } }));
@@ -124,6 +131,7 @@ export async function upsertUserFromExternalUser(mappedUser: ExternalUserProfile
           username: mappedUser.username,
           ...(existing.email !== mappedUser.email ? { email: mappedUser.email } : {}),
           ...(existing.syncProfileWithIntegration ? { name: mappedUser.fullName } : {}),
+          ...(options.roles ? { roles: options.roles } : {}),
         },
       })
     : prisma.user.create({
@@ -133,6 +141,7 @@ export async function upsertUserFromExternalUser(mappedUser: ExternalUserProfile
           username: mappedUser.username,
           externalId: mappedUser.id,
           identityProvider: IDENTITY_PROVIDER.EXTERNAL_AUTH,
+          ...(options.roles ? { roles: options.roles } : {}),
         },
       });
 

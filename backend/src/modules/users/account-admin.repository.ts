@@ -48,13 +48,13 @@ export async function isUsernameTaken(tx: Tx, username: string, exceptUserId?: s
 /// Admins activos del modo local, sin contar a `exceptUserId`.
 export function countOtherActiveAdmins(tx: Tx, exceptUserId: string): Promise<number> {
   return tx.user.count({
-    where: { status: UserStatus.ACTIVE, localRoles: { has: ADMIN_ROLE }, id: { not: exceptUserId } },
+    where: { status: UserStatus.ACTIVE, roles: { has: ADMIN_ROLE }, id: { not: exceptUserId } },
   });
 }
 
 export function createAccount(
   tx: Tx,
-  data: { name: string; email: string; username: string | null; localRoles: string[] },
+  data: { name: string; email: string; username: string | null; roles: string[] },
   credential: { passwordHash: string },
 ): Promise<Account> {
   return tx.user.create({

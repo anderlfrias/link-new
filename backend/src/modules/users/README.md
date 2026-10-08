@@ -48,8 +48,8 @@ Filtros adicionales: `status` (`ACTIVE` o `INACTIVE`, los dos modos) y `hasPassw
 
 ### Roles en cada modo
 
-- **Modo external-auth:** los roles vienen exclusivamente del JWT de EXTERNAL_AUTH, decodificado por request (`req.user.roles`), y **nunca se persisten**. No existe ninguna llamada a EXTERNAL_AUTH en este backend que devuelva el rol de un usuario que no sea el que está haciendo el request (`getAppUsers`, usado por `syncAppUsers`, solo trae `id/email/username/fullName`). Por eso esta vista no puede mostrar "es admin" para un tercero: no es una omisión, es una restricción de la arquitectura de roles de EXTERNAL_AUTH.
-- **Modo local:** la app asigna los roles (`User.localRoles`, hoy solo `"admin"`), así que el panel los muestra y un admin los edita.
+- **Modo external-auth:** los roles se guardan en `User.roles` en cada login, a partir del JWT de EXTERNAL_AUTH (solo los que la app conoce, hoy `"admin"`), y de ahí se leen en cada request. Es lo que EXTERNAL_AUTH dijo la última vez que esa persona inició sesión: no hay ninguna llamada a EXTERNAL_AUTH que devuelva el rol de un tercero (`getAppUsers`, usado por `syncAppUsers`, solo trae `id/email/username/fullName`), así que quien nunca inició sesión acá no tiene roles. Se administran en EXTERNAL_AUTH: el panel no los edita.
+- **Modo local:** la app asigna los roles (`User.roles`, hoy solo `"admin"`), así que el panel los muestra y un admin los edita. En la API se siguen llamando `localRoles`.
 
 ### Desactivar cuentas (`status`)
 

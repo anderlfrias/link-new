@@ -31,7 +31,7 @@ Todas las rutas salvo `POST /api/v1/auth/login` y `GET /api/v1/auth/config` requ
 Authorization: Bearer <token>
 ```
 
-El `token` es exactamente el que devuelve el login: en modo `external-auth`, el de EXTERNAL_AUTH reenviado tal cual; en modo `local`, uno firmado por este backend (ver sección 2). Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo. En modo local también responde `401` si la sesión fue revocada (cambio o restablecimiento de contraseña) o si la cuenta fue desactivada.
+El `token` es exactamente el que devuelve el login: la sesión de LINK, un JWT firmado por este backend en los dos modos (ver sección 2). El token de EXTERNAL_AUTH nunca llega al cliente y no sirve para autenticar. Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo. También responde `401` si la sesión fue revocada (cambio o restablecimiento de contraseña, en modo local) o si la cuenta fue desactivada.
 
 ### Ids: interno vs externo
 
@@ -101,8 +101,10 @@ Público, sin token. Dice el modo de autenticación de la instalación y, en mod
 
 Mismo request en los dos modos; `user` puede ser un nombre de usuario o un correo.
 
-- **Modo external-auth:** reenvía las credenciales al microservicio EXTERNAL_AUTH; no hay contraseñas propias de este backend.
-- **Modo local:** valida contra las cuentas locales y emite un token propio (`iss: "link-local"`). Ver [`auth/README.md`](./src/modules/auth/README.md#modo-local).
+- **Modo external-auth:** reenvía las credenciales al microservicio EXTERNAL_AUTH; no hay contraseñas propias de este backend. Con su respuesta correcta, guarda el perfil y los roles y emite la sesión de LINK.
+- **Modo local:** valida contra las cuentas locales y emite la sesión de LINK.
+
+En los dos modos el token es un JWT HS256 propio (`iss` y `aud` `link`). Ver [`auth/README.md`](./src/modules/auth/README.md).
 
 Request (JSON o `application/x-www-form-urlencoded`):
 ```json
@@ -112,7 +114,7 @@ Request (JSON o `application/x-www-form-urlencoded`):
 Response `200` (modo external-auth):
 ```json
 {
-  "token": "<jwt emitido por EXTERNAL_AUTH, reenviado tal cual>",
+  "token": "<sesión de LINK (JWT propio)>",
   "user": {
     "id": "<id externo en EXTERNAL_AUTH — NO USAR para relacionar nada>",
     "email": "jdoe@empresa.com",
@@ -121,7 +123,7 @@ Response `200` (modo external-auth):
     "roles": ["admin"],
     "permissions": ["chat.read", "chat.write"],
     "app": "chat-interno",
-    "exp": 1735000000,
+    "exp": 1735000000, // vencimiento de la sesión de LINK
     "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>",
     "authProvider": "external-auth",
     "mustChangePassword": false,
@@ -954,7 +956,7 @@ npm install
 npm run dev   # ts-node, puerto 4000 por default
 ```
 
-Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL` y, según el modo de autenticación, las tres `EXTERNAL_AUTH_*` (`EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`) para usar EXTERNAL_AUTH, o ninguna de ellas y `LOCAL_AUTH_JWT_SECRET` para cuentas locales (ver [`docs/design/LOCAL_AUTH_PLAN.md`](../docs/design/LOCAL_AUTH_PLAN.md)). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
+Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `SESSION_JWT_SECRET` (firma las sesiones, en los dos modos) y, según el modo de autenticación, las tres `EXTERNAL_AUTH_*` (`EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`) para usar EXTERNAL_AUTH, o ninguna de ellas para cuentas locales (ver [`docs/design/LOCAL_AUTH_PLAN.md`](../docs/design/LOCAL_AUTH_PLAN.md)). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
 
 **Health check.** `GET /health` (fuera de `/api`, sin autenticación) responde `200 { "status": "ok" }` si el backend llega a la base de datos (hace un `SELECT 1`, con un tope de 3 s), y `503 { "status": "unavailable" }` si no. Nunca devuelve el error ni detalles de la base. Es el chequeo del contenedor (`HEALTHCHECK` de `backend/Dockerfile`) y no se registra en el log de accesos. `GET /` responde "Backend is running" solo para decir que el proceso está vivo.
 

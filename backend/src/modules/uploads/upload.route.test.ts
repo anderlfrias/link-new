@@ -14,38 +14,47 @@ vi.mock("./upload.service", () => ({
   abortUpload: vi.fn(),
 }));
 
-vi.mock("../auth/jwt", () => {
-  const verifyToken = vi.fn((token: string) => {
-    if (token.startsWith("user-token:")) {
-      const id = token.slice("user-token:".length);
-      return { id: `ext-${id}`, email: `${id}@example.com`, roles: ["user"] };
-    }
-    throw new Error("Unknown token");
-  });
-  const mapTokenToUser = vi.fn((payload: any) => ({
-    id: payload.id,
-    email: payload.email,
-    roles: payload.roles,
-  }));
-  return {
-    verifyToken,
-    mapTokenToUser,
-    // Los middlewares usan el verificador único (LOCAL_AUTH_PLAN.md, Fase 4):
-    // en modo external-auth equivale a verificar el JWT de EXTERNAL_AUTH y mapearlo.
-    verifyAccessToken: vi.fn((token: string) => ({
-      mode: "external-auth",
-      user: mapTokenToUser(verifyToken(token)),
+// El verificador de sesión solo da la identidad del token: los roles salen de la
+// base (mock de prisma, abajo), igual que en producción. Los tokens son
+// "user-token:<id>" y el id interno es `internal-<id>@example.com`.
+vi.mock("../auth/jwt", () => ({
+  verifyAccessToken: vi.fn((token: string) => {
+    const [kind, id] = token.split(":");
+    if (!id || kind !== "user-token") throw new Error("Unknown token");
+    return {
       mustChangePassword: false,
-    })),
-  };
-});
+      iat: Math.floor(Date.now() / 1000),
+      user: {
+        id: `internal-${id}@example.com`,
+        email: `${id}@example.com`,
+        username: null,
+        fullName: "",
+        roles: [],
+        permissions: [],
+        app: "link",
+        exp: 0,
+        authProvider: "external-auth",
+      },
+    };
+  }),
+}));
+
+vi.mock("../settings/settings.service", () => ({
+  getSettings: vi.fn().mockResolvedValue({ localSessionTtlHours: 12 }),
+}));
 
 vi.mock("../../config/prisma", () => ({
   prisma: {
     user: {
-      findUnique: vi.fn((args: any) =>
-        Promise.resolve({ id: `internal-${args.where.email}`, email: args.where.email, status: "ACTIVE" }),
-      ),
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        email: where.id.replace(/^internal-/, ""),
+        name: "X",
+        username: null,
+        status: "ACTIVE",
+        roles: ["user"],
+        tokensValidAfter: null,
+      })),
     },
   },
 }));

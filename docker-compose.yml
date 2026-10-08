@@ -37,12 +37,12 @@ services:
       # IP real del cliente detrás de un reverse proxy. Ver .env.example y SECURITY.md.
       TRUST_PROXY: ${TRUST_PROXY:-1}
       TRUST_CF_CONNECTING_IP: ${TRUST_CF_CONNECTING_IP:-false}
-      # Autenticación: las tres EXTERNAL_AUTH_* (modo external-auth) o LOCAL_AUTH_JWT_SECRET
-      # (modo local). Vacías cuentan como no definidas. Ver .env.example.
+      # Autenticación: SESSION_JWT_SECRET (obligatoria, firma las sesiones) y, para el
+      # modo external-auth, las tres EXTERNAL_AUTH_*. Vacías cuentan como no definidas. Ver .env.example.
+      SESSION_JWT_SECRET: ${SESSION_JWT_SECRET:-}
       EXTERNAL_AUTH_API_URL: ${EXTERNAL_AUTH_API_URL:-}
       APP_CODE_EXTERNAL_AUTH: ${APP_CODE_EXTERNAL_AUTH:-}
       EXTERNAL_AUTH_JWT_SECRET: ${EXTERNAL_AUTH_JWT_SECRET:-}
-      LOCAL_AUTH_JWT_SECRET: ${LOCAL_AUTH_JWT_SECRET:-}
       FILE_URL_SIGNING_SECRET: ${FILE_URL_SIGNING_SECRET:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?Falta VAPID_PUBLIC_KEY en .env (ver .env.example)}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?Falta VAPID_PRIVATE_KEY en .env (ver .env.example)}

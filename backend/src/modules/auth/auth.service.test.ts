@@ -310,14 +310,14 @@ describe("auth.service", () => {
   });
 
   describe("upsertUsuario", () => {
-    it("delega la llamada a upsertUserFromExternalUser del repositorio", async () => {
+    it("delega la llamada a upsertUserFromExternalUser del repositorio, junto con los roles a persistir", async () => {
       const mappedUser = { id: "1", email: "a@b.com", username: "u", fullName: "User" } as any;
       const expectedUser = { id: "internal-1" } as any;
       vi.mocked(upsertUserFromExternalUser).mockResolvedValue(expectedUser);
 
-      const result = await upsertUsuario(mappedUser);
+      const result = await upsertUsuario(mappedUser, ["admin"]);
 
-      expect(upsertUserFromExternalUser).toHaveBeenCalledWith(mappedUser);
+      expect(upsertUserFromExternalUser).toHaveBeenCalledWith(mappedUser, { roles: ["admin"] });
       expect(result).toBe(expectedUser);
     });
   });
@@ -890,7 +890,7 @@ describe("auth.service", () => {
     const originalAuth = env.auth;
 
     beforeEach(() => {
-      env.auth = { mode: "local", local: { jwtSecret: "l".repeat(32) } };
+      env.auth = { mode: "local", sessionSecret: "l".repeat(32) };
       vi.stubGlobal("fetch", vi.fn());
     });
 

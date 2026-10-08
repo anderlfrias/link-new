@@ -21,13 +21,12 @@ vi.mock("../settings/settings.service", () => ({
 }));
 
 // Tokens de prueba: "<rol>-token" es un admin o un usuario común, en el modo
-// que esté activo. En modo local los roles salen de la base (localRoles).
+// que esté activo. Los roles salen de la base (roles), no del token.
 vi.mock("../auth/jwt", () => ({
   verifyAccessToken: vi.fn((token: string) => {
     const role = token.split("-")[0];
     if (role !== "admin" && role !== "user") throw new Error("Unknown token");
     return {
-      mode: process.env.__TEST_AUTH_MODE ?? "external-auth",
       iat: Math.floor(Date.now() / 1000),
       mustChangePassword: false,
       user: {
@@ -35,9 +34,9 @@ vi.mock("../auth/jwt", () => ({
         email: `${role}@example.com`,
         username: null,
         fullName: "",
-        roles: role === "admin" ? ["admin"] : [],
+        roles: [],
         permissions: [],
-        app: "x",
+        app: "link",
         exp: 0,
         authProvider: "external-auth",
       },
@@ -57,7 +56,7 @@ vi.mock("../../config/prisma", () => ({
           name: "X",
           username: null,
           status: "ACTIVE",
-          localRoles: isAdmin ? ["admin"] : [],
+          roles: isAdmin ? ["admin"] : [],
           tokensValidAfter: null,
         };
       }),
@@ -119,13 +118,6 @@ describe("admin users routes — modo external-auth", () => {
 describe("admin users routes — modo local", () => {
   useAuthMode(LOCAL_AUTH_CONFIG);
 
-  beforeEach(() => {
-    process.env.__TEST_AUTH_MODE = "local";
-    return () => {
-      delete process.env.__TEST_AUTH_MODE;
-    };
-  });
-
   it("POST / crea la cuenta y devuelve la temporal (201)", async () => {
     vi.mocked(AccountAdminService.createLocalUser).mockResolvedValue({
       user: { id: "new-1" } as any,
@@ -158,7 +150,7 @@ describe("admin users routes — modo local", () => {
     expect(AccountAdminService.createLocalUser).not.toHaveBeenCalled();
   });
 
-  it("los roles salen de la base: un usuario sin admin en localRoles -> 403", async () => {
+  it("los roles salen de la base: un usuario sin admin en roles -> 403", async () => {
     const res = await request(app).post("/admin/users").set("Authorization", "Bearer user-token").send({ name: "B", email: "b@example.com" });
 
     expect(res.status).toBe(403);

@@ -1,17 +1,16 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it } from "vitest";
-import { mapTokenToUser, signLocalToken } from "../modules/auth/jwt";
-import env from "../config/env";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../test/auth-mode";
+import { signSessionToken } from "../modules/auth/jwt";
+import { LOCAL_AUTH_CONFIG, TEST_SESSION_JWT_SECRET, useAuthMode } from "../test/auth-mode";
 import type { MappedUser, ExternalUserTokenPayload } from "../modules/auth/auth.types";
 import { ForbiddenError, UnauthorizedError } from "../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
 import { authenticate, authenticateForPasswordChange, requireRoles } from "./auth.middleware";
 
 // Mismo secret que EXTERNAL_AUTH_JWT_SECRET en vitest.config.ts.
-const JWT_SECRET = "test-jwt-secret";
+const EXTERNAL_AUTH_JWT_SECRET = "test-jwt-secret";
 
-function buildPayload(overrides: Partial<ExternalUserTokenPayload> = {}): ExternalUserTokenPayload {
+function buildExternalUserPayload(overrides: Partial<ExternalUserTokenPayload> = {}): ExternalUserTokenPayload {
   return {
     id: "ext-1",
     email: "user@example.com",
@@ -25,13 +24,24 @@ function buildPayload(overrides: Partial<ExternalUserTokenPayload> = {}): Extern
   };
 }
 
-function signToken(payload: ExternalUserTokenPayload): string {
-  // El payload ya trae `exp` propio — no pasar `expiresIn` acá, jsonwebtoken
-  // tira si vienen los dos a la vez.
-  return jwt.sign(payload, JWT_SECRET, { algorithm: "HS256" });
+function signSession(mustChangePassword = false): string {
+  return signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword });
 }
 
-describe("authenticate", () => {
+function run(middleware: typeof authenticate, token: string) {
+  const req = createMockRequest({ headers: { authorization: `Bearer ${token}` } });
+  const next = createMockNext();
+  middleware(req, createMockResponse(), next);
+  return { req, error: next.mock.calls[0][0] };
+}
+
+// `authenticate` verifica con el mismo verificador en los dos modos: solo la sesión de LINK.
+describe.each([
+  { label: "modo external-auth", config: undefined, authProvider: "external-auth" },
+  { label: "modo local", config: LOCAL_AUTH_CONFIG, authProvider: "local" },
+])("authenticate — $label", ({ config, authProvider }) => {
+  if (config) useAuthMode(config);
+
   it("sin header Authorization -> UnauthorizedError 'Missing token'", () => {
     const req = createMockRequest();
     const next = createMockNext();
@@ -55,51 +65,83 @@ describe("authenticate", () => {
   });
 
   it("token con formato inválido -> UnauthorizedError 'Invalid token'", () => {
-    const req = createMockRequest({ headers: { authorization: "Bearer no-es-un-jwt" } });
-    const next = createMockNext();
+    const { error } = run(authenticate, "no-es-un-jwt");
 
-    authenticate(req, createMockResponse(), next);
-
-    const error = next.mock.calls[0][0];
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("Invalid token");
   });
 
   it("token firmado con otro secret -> UnauthorizedError 'Invalid token'", () => {
-    const token = jwt.sign(buildPayload(), "otro-secret-distinto", { algorithm: "HS256" });
-    const req = createMockRequest({ headers: { authorization: `Bearer ${token}` } });
-    const next = createMockNext();
+    const token = jwt.sign({ email: "ana@example.com" }, "otro-secret-distinto-de-32-caracteres!!", {
+      algorithm: "HS256",
+      subject: "user-1",
+      issuer: "link",
+      audience: "link",
+      expiresIn: 3600,
+    });
 
-    authenticate(req, createMockResponse(), next);
+    const { error } = run(authenticate, token);
 
-    const error = next.mock.calls[0][0];
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("Invalid token");
   });
 
   it("token vencido -> UnauthorizedError 'Token expired' (branch dedicado, no el genérico)", () => {
-    const expiredPayload = buildPayload({ exp: Math.floor(Date.now() / 1000) - 10 });
-    const token = signToken(expiredPayload);
-    const req = createMockRequest({ headers: { authorization: `Bearer ${token}` } });
-    const next = createMockNext();
+    const token = jwt.sign({ email: "ana@example.com" }, TEST_SESSION_JWT_SECRET, {
+      algorithm: "HS256",
+      subject: "user-1",
+      issuer: "link",
+      audience: "link",
+      expiresIn: -10,
+    });
 
-    authenticate(req, createMockResponse(), next);
+    const { error } = run(authenticate, token);
 
-    const error = next.mock.calls[0][0];
     expect(error).toBeInstanceOf(UnauthorizedError);
     expect(error.message).toBe("Token expired");
   });
 
-  it("token válido -> req.user = mapTokenToUser(payload) y next() sin argumentos", () => {
-    const payload = buildPayload();
-    const token = signToken(payload);
-    const req = createMockRequest({ headers: { authorization: `Bearer ${token}` } });
+  it("el JWT de EXTERNAL_AUTH -> 401 Invalid token: ya no autentica, ni firmado con el secreto de EXTERNAL_AUTH ni con el de sesión (invariante 1)", () => {
+    for (const secret of [EXTERNAL_AUTH_JWT_SECRET, TEST_SESSION_JWT_SECRET]) {
+      const token = jwt.sign(buildExternalUserPayload(), secret, { algorithm: "HS256" });
+
+      const { error } = run(authenticate, token);
+
+      expect(error).toBeInstanceOf(UnauthorizedError);
+      expect(error.message).toBe("Invalid token");
+    }
+  });
+
+  it("acepta la sesión de LINK, con roles vacíos hasta que attachInternalUser los lea de la base", () => {
+    const { req, error } = run(authenticate, signSession());
+
+    expect(error).toBeUndefined();
+    expect(req.user).toMatchObject({ id: "user-1", email: "ana@example.com", roles: [], authProvider });
+    expect(req.authIdentity).toMatchObject({ mustChangePassword: false, iat: expect.any(Number) });
+  });
+
+  it("un token restringido (pcr) -> 403 password_change_required, no 401 (invariante 8)", () => {
+    const { req, error } = run(authenticate, signSession(true));
+
+    expect(error).toBeInstanceOf(ForbiddenError);
+    expect(error.code).toBe("password_change_required");
+    expect(req.user).toBeUndefined();
+  });
+
+  it("authenticateForPasswordChange sí acepta el token restringido", () => {
+    const { req, error } = run(authenticateForPasswordChange, signSession(true));
+
+    expect(error).toBeUndefined();
+    expect(req.authIdentity?.mustChangePassword).toBe(true);
+  });
+
+  it("requireRoles montado sin attachInternalUser falla cerrado aunque la cuenta sea admin (D7)", () => {
+    const { req } = run(authenticate, signSession());
     const next = createMockNext();
 
-    authenticate(req, createMockResponse(), next);
+    requireRoles("admin")(req, createMockResponse(), next);
 
-    expect(req.user).toEqual(mapTokenToUser(payload));
-    expect(next).toHaveBeenCalledWith();
+    expect(next.mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
   });
 });
 
@@ -150,87 +192,5 @@ describe("requireRoles", () => {
     requireRoles("admin", "owner")(req, createMockResponse(), next);
 
     expect(next).toHaveBeenCalledWith();
-  });
-});
-
-function signLocal(mustChangePassword = false): string {
-  const original = env.auth;
-  env.auth = LOCAL_AUTH_CONFIG;
-  try {
-    return signLocalToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword });
-  } finally {
-    env.auth = original;
-  }
-}
-
-function run(middleware: typeof authenticate, token: string) {
-  const req = createMockRequest({ headers: { authorization: `Bearer ${token}` } });
-  const next = createMockNext();
-  middleware(req, createMockResponse(), next);
-  return { req, error: next.mock.calls[0][0] };
-}
-
-describe("authenticate — según el modo (LOCAL_AUTH_PLAN.md, Fase 4)", () => {
-  describe("modo external-auth", () => {
-    it("un token local -> 401 Invalid token (invariante 1)", () => {
-      const { error } = run(authenticate, signLocal());
-
-      expect(error).toBeInstanceOf(UnauthorizedError);
-      expect(error.message).toBe("Invalid token");
-    });
-
-    it("guarda la identidad verificada para attachInternalUser", () => {
-      const token = jwt.sign(buildPayload(), JWT_SECRET, { algorithm: "HS256" });
-
-      const { req, error } = run(authenticate, token);
-
-      expect(error).toBeUndefined();
-      expect(req.authIdentity).toMatchObject({ mode: "external-auth", mustChangePassword: false });
-    });
-  });
-
-  describe("modo local", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
-
-    it("acepta un token local, con roles vacíos hasta que attachInternalUser los lea de la base", () => {
-      const { req, error } = run(authenticate, signLocal());
-
-      expect(error).toBeUndefined();
-      expect(req.user).toMatchObject({ id: "user-1", email: "ana@example.com", roles: [], authProvider: "local" });
-      expect(req.authIdentity?.iat).toEqual(expect.any(Number));
-    });
-
-    it("un token de EXTERNAL_AUTH -> 401 Invalid token (invariante 1)", () => {
-      const external-authToken = jwt.sign(buildPayload(), JWT_SECRET, { algorithm: "HS256" });
-
-      const { error } = run(authenticate, external-authToken);
-
-      expect(error).toBeInstanceOf(UnauthorizedError);
-      expect(error.message).toBe("Invalid token");
-    });
-
-    it("un token restringido (pcr) -> 403 password_change_required, no 401 (invariante 8)", () => {
-      const { req, error } = run(authenticate, signLocal(true));
-
-      expect(error).toBeInstanceOf(ForbiddenError);
-      expect(error.code).toBe("password_change_required");
-      expect(req.user).toBeUndefined();
-    });
-
-    it("authenticateForPasswordChange sí acepta el token restringido", () => {
-      const { req, error } = run(authenticateForPasswordChange, signLocal(true));
-
-      expect(error).toBeUndefined();
-      expect(req.authIdentity?.mustChangePassword).toBe(true);
-    });
-
-    it("requireRoles montado sin attachInternalUser falla cerrado aunque la cuenta sea admin (D7)", () => {
-      const { req } = run(authenticate, signLocal());
-      const next = createMockNext();
-
-      requireRoles("admin")(req, createMockResponse(), next);
-
-      expect(next.mock.calls[0][0]).toBeInstanceOf(ForbiddenError);
-    });
   });
 });

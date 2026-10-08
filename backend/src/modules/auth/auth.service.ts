@@ -97,8 +97,9 @@ export async function login(user: string, password: string, clientIp?: string): 
   return data.token;
 }
 
-export function upsertUsuario(mappedUser: MappedUser): Promise<User> {
-  return upsertUserFromExternalUser(mappedUser);
+/// Roles ya filtrados a los que la app conoce: se guardan en la cuenta en cada login.
+export function upsertUsuario(mappedUser: MappedUser, roles: string[]): Promise<User> {
+  return upsertUserFromExternalUser(mappedUser, { roles });
 }
 
 export interface ProfilePicture {

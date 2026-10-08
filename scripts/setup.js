@@ -10,7 +10,7 @@
 //
 // Reglas:
 //   - Nunca pisa un valor existente: solo completa lo que está vacío. Cambiar
-//     LOCAL_AUTH_JWT_SECRET cierra todas las sesiones, cambiar las claves VAPID
+//     SESSION_JWT_SECRET cierra todas las sesiones, cambiar las claves VAPID
 //     invalida las suscripciones push y cambiar POSTGRES_PASSWORD con un volumen
 //     ya creado deja a la app sin acceso a su base.
 //   - No imprime ningún secreto, solo los nombres de las variables.
@@ -24,7 +24,6 @@ const ROOT = path.join(__dirname, "..");
 
 const POSTGRES_PASSWORD_PLACEHOLDER = "change-me";
 const VAPID_SUBJECT_PLACEHOLDER = "mailto:admin@example.com";
-const EXTERNAL_AUTH_VARS = ["EXTERNAL_AUTH_API_URL", "APP_CODE_EXTERNAL_AUTH", "EXTERNAL_AUTH_JWT_SECRET"];
 
 const USAGE = `Uso: npm run setup -- [opciones]
 
@@ -123,10 +122,9 @@ function fillEnv(content, options = {}) {
     }
   }
 
-  // Con las tres EXTERNAL_AUTH_*, la instalación usa el proveedor externo y LOCAL_AUTH_JWT_SECRET se ignora.
-  if (has("LOCAL_AUTH_JWT_SECRET") && isEmpty("LOCAL_AUTH_JWT_SECRET")) {
-    const externalAuthConfigured = EXTERNAL_AUTH_VARS.some((key) => readValue(next, key) !== "");
-    if (!externalAuthConfigured) fill("LOCAL_AUTH_JWT_SECRET", randomSecret(48));
+  // Firma las sesiones de LINK en los dos modos de login: se genera siempre.
+  if (has("SESSION_JWT_SECRET") && isEmpty("SESSION_JWT_SECRET")) {
+    fill("SESSION_JWT_SECRET", randomSecret(48));
   }
 
   if (has("FILE_URL_SIGNING_SECRET") && isEmpty("FILE_URL_SIGNING_SECRET")) {

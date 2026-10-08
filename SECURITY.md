@@ -29,8 +29,8 @@ Solo se corrigen vulnerabilidades sobre la última versión publicada (rama `mai
   imagen Docker y `ecosystem.config.js` lo fijan) el backend no arranca sin esa variable.
   `CORS_ORIGIN=*` abre la API y el socket a cualquier origen, y solo conviene a propósito.
 - **Usar secretos propios y fuertes:**
-  - `LOCAL_AUTH_JWT_SECRET` o `EXTERNAL_AUTH_JWT_SECRET`.
-  - Un `FILE_URL_SIGNING_SECRET` dedicado, distinto del secreto JWT.
+  - `SESSION_JWT_SECRET` (firma las sesiones de LINK) y, en modo EXTERNAL_AUTH, `EXTERNAL_AUTH_JWT_SECRET`.
+  - Un `FILE_URL_SIGNING_SECRET` dedicado, distinto de `SESSION_JWT_SECRET`.
   - Claves VAPID generadas para la instalación.
   - Nunca reutilizar los valores de ejemplo.
 - **No exponer PostgreSQL** fuera de la red interna. En el `docker-compose.yml` incluido, la

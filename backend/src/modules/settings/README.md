@@ -11,7 +11,7 @@ adminSettingsRouter.use(authenticate, attachInternalUser, requireRoles("admin"))
 publicSettingsRouter.use(authenticate, attachInternalUser)
 ```
 
-`requireRoles("admin")` (`src/middlewares/auth.middleware.ts`) exige que `"admin"` esté presente en `req.user.roles`. De dónde salen esos roles depende del modo de autenticación: en modo external-auth, del arreglo que EXTERNAL_AUTH embebe en su JWT; en modo local, de `User.localRoles`, que completa `attachInternalUser` y asigna un admin desde el panel de usuarios o el CLI (ver [`../auth/README.md`](../auth/README.md)). Es la primera ruta de la app que usa este guard.
+`requireRoles("admin")` (`src/middlewares/auth.middleware.ts`) exige que `"admin"` esté presente en `req.user.roles`. Los roles salen siempre de `User.roles`, que completa `attachInternalUser`. Qué los escribe depende del modo: en modo local, un admin desde el panel de usuarios o el CLI; en modo external-auth, cada login, a partir de los roles que entrega EXTERNAL_AUTH (solo los que la app conoce). Ver [`../auth/README.md`](../auth/README.md). Es la primera ruta de la app que usa este guard.
 
 ## Endpoints
 

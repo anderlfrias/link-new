@@ -155,6 +155,42 @@ describe("auth.repository", () => {
       expect(result).toBe(mockUpdatedUser);
     });
 
+    it("con roles (los del proveedor en el login) los guarda al crear la cuenta", async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.user.create).mockResolvedValue({ id: "internal-1" } as any);
+
+      await upsertUserFromExternalUser(mappedUser, { roles: ["admin"] });
+
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ email: mappedUser.email, roles: ["admin"] }),
+      });
+    });
+
+    it("con roles los sobrescribe en la cuenta existente, también para dejarla sin ninguno", async () => {
+      const existingUser = { id: "internal-1", email: "test@example.com", roles: ["admin"], syncProfileWithIntegration: true } as any;
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(existingUser);
+      vi.mocked(prisma.user.update).mockResolvedValue(existingUser);
+
+      await upsertUserFromExternalUser(mappedUser, { roles: [] });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "internal-1" },
+        data: expect.objectContaining({ roles: [] }),
+      });
+    });
+
+    it("sin roles (sincronizar contactos) no toca los de la cuenta ni al crearla ni al actualizarla", async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(null);
+      vi.mocked(prisma.user.create).mockResolvedValue({ id: "internal-1" } as any);
+      await upsertUserFromExternalUser(mappedUser);
+      expect(vi.mocked(prisma.user.create).mock.calls[0][0].data).not.toHaveProperty("roles");
+
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ id: "internal-1", email: "test@example.com", syncProfileWithIntegration: true } as any);
+      vi.mocked(prisma.user.update).mockResolvedValue({ id: "internal-1" } as any);
+      await upsertUserFromExternalUser(mappedUser);
+      expect(vi.mocked(prisma.user.update).mock.calls[0][0].data).not.toHaveProperty("roles");
+    });
+
     it("actualiza solo username y preserva name si syncProfileWithIntegration es false", async () => {
       const existingUser = {
         id: "internal-1",

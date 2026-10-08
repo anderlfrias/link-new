@@ -1,7 +1,7 @@
 import { User, UserStatus } from "@prisma/client";
 import { ForbiddenError, UnauthorizedError } from "../../utils/errors";
 import * as SettingsService from "../settings/settings.service";
-import { findUserByEmail, findUserById } from "./auth.repository";
+import { findUserById } from "./auth.repository";
 import { AuthenticatedIdentity, MappedUser } from "./auth.types";
 import { verifyAccessToken } from "./jwt";
 
@@ -20,23 +20,16 @@ function toSeconds(date: Date): number {
 /// `attachInternalUser`, el handshake del socket y `/files/:id/content`: antes
 /// eran tres copias de la misma búsqueda.
 ///
-/// - Modo external-auth: busca por email, como siempre. Los roles siguen saliendo del
-///   JWT de EXTERNAL_AUTH.
-/// - Modo local: busca por id (`sub`), así un cambio de email hecho por un
-///   admin no rompe ni redirige sesiones; rechaza el token si es anterior a
-///   `tokensValidAfter` o más viejo que la duración de sesión vigente (D16), y
-///   toma email, nombre, username y roles de la fila.
-/// - Los dos: la cuenta tiene que estar `ACTIVE` (D19).
+/// Una sola ruta para todos los modos de login (el token siempre es la sesión
+/// de LINK, ver `signSessionToken`): busca por id (`sub`), así un cambio de
+/// email hecho por un admin no rompe ni redirige sesiones; rechaza el token si
+/// es anterior a `tokensValidAfter` o más viejo que la duración de sesión
+/// vigente (D16); exige que la cuenta esté `ACTIVE` (D19), y toma email,
+/// nombre, username y roles de la fila.
 ///
 /// Tira `UnauthorizedError`: para el cliente, una cuenta desactivada o una
 /// sesión revocada es una sesión que terminó.
 export async function resolveInternalUser(identity: AuthenticatedIdentity): Promise<ResolvedUser> {
-  if (identity.mode === "external-auth") {
-    const record = await findUserByEmail(identity.user.email);
-    assertActive(record);
-    return { record, user: { ...identity.user, internalUserId: record.id } };
-  }
-
   const record = await findUserById(identity.user.id);
   assertActive(record);
   if (identity.iat === undefined) {
@@ -61,7 +54,7 @@ export async function resolveInternalUser(identity: AuthenticatedIdentity): Prom
       email: record.email,
       username: record.username,
       fullName: record.name,
-      roles: record.localRoles,
+      roles: record.roles,
       internalUserId: record.id,
     },
   };
@@ -87,8 +80,8 @@ export function assertNotPasswordChangeOnly(identity: AuthenticatedIdentity): vo
 
 /// Verificación completa de un token suelto, para los caminos que no pasan
 /// por los middlewares de Express (el handshake del socket y la rama Bearer de
-/// `/files/:id/content`): verifica con el modo activo, rechaza tokens
-/// restringidos y resuelve el usuario.
+/// `/files/:id/content`): verifica la sesión, rechaza tokens restringidos y
+/// resuelve el usuario.
 export async function authenticateAccessToken(token: string): Promise<ResolvedUser> {
   const identity = verifyAccessToken(token);
   assertNotPasswordChangeOnly(identity);

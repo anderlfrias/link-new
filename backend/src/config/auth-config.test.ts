@@ -3,11 +3,10 @@ import { ServiceUnavailableError } from "../utils/errors";
 import {
   AuthConfig,
   AuthConfigError,
-  getAuthJwtSecret,
-  LOCAL_AUTH_JWT_SECRET_MIN_LENGTH,
-  requireLocalConfig,
+  requireLocalAuth,
   requireExternalUserConfig,
   resolveAuthConfig,
+  SESSION_JWT_SECRET_MIN_LENGTH,
 } from "./auth-config";
 
 const EXTERNAL_AUTH_VARS = {
@@ -16,7 +15,7 @@ const EXTERNAL_AUTH_VARS = {
   EXTERNAL_AUTH_JWT_SECRET: "external-auth-secret",
 };
 
-const VALID_LOCAL_SECRET = "s".repeat(LOCAL_AUTH_JWT_SECRET_MIN_LENGTH);
+const VALID_SECRET = "s".repeat(SESSION_JWT_SECRET_MIN_LENGTH);
 
 function captureAuthConfigError(fn: () => unknown): AuthConfigError {
   try {
@@ -29,59 +28,78 @@ function captureAuthConfigError(fn: () => unknown): AuthConfigError {
 }
 
 describe("resolveAuthConfig", () => {
-  it("con las tres EXTERNAL_AUTH_* -> modo external-auth con sus valores, sin avisos", () => {
-    const result = resolveAuthConfig(EXTERNAL_AUTH_VARS);
+  it("con las tres EXTERNAL_AUTH_* y SESSION_JWT_SECRET -> modo external-auth con sus valores, sin avisos", () => {
+    const result = resolveAuthConfig({ ...EXTERNAL_AUTH_VARS, SESSION_JWT_SECRET: VALID_SECRET });
 
     expect(result).toEqual({
       config: {
         mode: "external-auth",
+        sessionSecret: VALID_SECRET,
         external-auth: { apiUrl: "https://external-auth.example.com", appCode: "chat-interno", jwtSecret: "external-auth-secret" },
       },
       warnings: [],
     });
   });
 
-  it("modo external-auth con LOCAL_AUTH_JWT_SECRET sobrante -> lo ignora y deja un aviso", () => {
-    const result = resolveAuthConfig({ ...EXTERNAL_AUTH_VARS, LOCAL_AUTH_JWT_SECRET: VALID_LOCAL_SECRET });
-
-    expect(result.config.mode).toBe("external-auth");
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain("LOCAL_AUTH_JWT_SECRET");
-  });
-
-  it("modo external-auth con un LOCAL_AUTH_JWT_SECRET corto -> no falla (en este modo no se usa)", () => {
-    const result = resolveAuthConfig({ ...EXTERNAL_AUTH_VARS, LOCAL_AUTH_JWT_SECRET: "corto" });
-
-    expect(result.config.mode).toBe("external-auth");
-  });
-
-  it("sin ninguna EXTERNAL_AUTH_* y con LOCAL_AUTH_JWT_SECRET -> modo local", () => {
-    const result = resolveAuthConfig({ LOCAL_AUTH_JWT_SECRET: VALID_LOCAL_SECRET });
+  it("sin ninguna EXTERNAL_AUTH_* y con SESSION_JWT_SECRET -> modo local", () => {
+    const result = resolveAuthConfig({ SESSION_JWT_SECRET: VALID_SECRET });
 
     expect(result).toEqual({
-      config: { mode: "local", local: { jwtSecret: VALID_LOCAL_SECRET } },
+      config: { mode: "local", sessionSecret: VALID_SECRET },
       warnings: [],
     });
   });
 
-  it("sin ninguna EXTERNAL_AUTH_* ni LOCAL_AUTH_JWT_SECRET -> error que pide el secreto local", () => {
-    const error = captureAuthConfigError(() => resolveAuthConfig({}));
+  it("el secreto de sesión es obligatorio también en modo external-auth", () => {
+    const error = captureAuthConfigError(() => resolveAuthConfig(EXTERNAL_AUTH_VARS));
 
     expect(error.errors).toHaveLength(1);
-    expect(error.errors[0]).toContain("LOCAL_AUTH_JWT_SECRET is required");
+    expect(error.errors[0]).toContain("SESSION_JWT_SECRET is required");
   });
 
-  it("modo local con un secreto de 31 caracteres -> error de largo mínimo", () => {
+  it("sin nada configurado -> error que pide el secreto de sesión", () => {
+    const error = captureAuthConfigError(() => resolveAuthConfig({}));
+
+    expect(error.errors[0]).toContain("SESSION_JWT_SECRET is required");
+  });
+
+  it.each([
+    ["modo local", {}],
+    ["modo external-auth", EXTERNAL_AUTH_VARS],
+  ])("%s con un secreto de 31 caracteres -> error de largo mínimo", (_label, vars) => {
     const error = captureAuthConfigError(() =>
-      resolveAuthConfig({ LOCAL_AUTH_JWT_SECRET: "s".repeat(LOCAL_AUTH_JWT_SECRET_MIN_LENGTH - 1) }),
+      resolveAuthConfig({ ...vars, SESSION_JWT_SECRET: "s".repeat(SESSION_JWT_SECRET_MIN_LENGTH - 1) }),
     );
 
-    expect(error.errors[0]).toContain(`at least ${LOCAL_AUTH_JWT_SECRET_MIN_LENGTH} characters`);
+    expect(error.errors[0]).toContain(`at least ${SESSION_JWT_SECRET_MIN_LENGTH} characters`);
+  });
+
+  it("LOCAL_AUTH_JWT_SECRET sigue valiendo como secreto de sesión, con aviso de que está deprecado", () => {
+    const result = resolveAuthConfig({ LOCAL_AUTH_JWT_SECRET: VALID_SECRET });
+
+    expect(result.config).toEqual({ mode: "local", sessionSecret: VALID_SECRET });
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("rename it to SESSION_JWT_SECRET");
+  });
+
+  it("el alias deprecado también pasa por el largo mínimo", () => {
+    const error = captureAuthConfigError(() => resolveAuthConfig({ LOCAL_AUTH_JWT_SECRET: "corto" }));
+
+    expect(error.errors[0]).toContain(`at least ${SESSION_JWT_SECRET_MIN_LENGTH} characters`);
+  });
+
+  it("con las dos variables gana SESSION_JWT_SECRET y se avisa que la vieja se ignora", () => {
+    const other = "o".repeat(SESSION_JWT_SECRET_MIN_LENGTH);
+    const result = resolveAuthConfig({ SESSION_JWT_SECRET: VALID_SECRET, LOCAL_AUTH_JWT_SECRET: other });
+
+    expect(result.config.sessionSecret).toBe(VALID_SECRET);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("ignored");
   });
 
   it("solo EXTERNAL_AUTH_API_URL -> error que nombra exactamente las dos que faltan", () => {
     const error = captureAuthConfigError(() =>
-      resolveAuthConfig({ EXTERNAL_AUTH_API_URL: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL }),
+      resolveAuthConfig({ EXTERNAL_AUTH_API_URL: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL, SESSION_JWT_SECRET: VALID_SECRET }),
     );
 
     expect(error.errors[0]).toContain("Incomplete EXTERNAL_AUTH configuration: missing APP_CODE_EXTERNAL_AUTH, EXTERNAL_AUTH_JWT_SECRET.");
@@ -89,15 +107,19 @@ describe("resolveAuthConfig", () => {
 
   it("falta solo EXTERNAL_AUTH_JWT_SECRET -> error que nombra solo esa", () => {
     const error = captureAuthConfigError(() =>
-      resolveAuthConfig({ EXTERNAL_AUTH_API_URL: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL, APP_CODE_EXTERNAL_AUTH: EXTERNAL_AUTH_VARS.APP_CODE_EXTERNAL_AUTH }),
+      resolveAuthConfig({
+        EXTERNAL_AUTH_API_URL: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL,
+        APP_CODE_EXTERNAL_AUTH: EXTERNAL_AUTH_VARS.APP_CODE_EXTERNAL_AUTH,
+        SESSION_JWT_SECRET: VALID_SECRET,
+      }),
     );
 
     expect(error.errors[0]).toContain("missing EXTERNAL_AUTH_JWT_SECRET.");
   });
 
-  it("EXTERNAL_AUTH a medias nunca cae a modo local, aunque haya un secreto local válido", () => {
+  it("EXTERNAL_AUTH a medias nunca cae a modo local, aunque haya un secreto de sesión válido", () => {
     const error = captureAuthConfigError(() =>
-      resolveAuthConfig({ EXTERNAL_AUTH_JWT_SECRET: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_JWT_SECRET, LOCAL_AUTH_JWT_SECRET: VALID_LOCAL_SECRET }),
+      resolveAuthConfig({ EXTERNAL_AUTH_JWT_SECRET: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_JWT_SECRET, SESSION_JWT_SECRET: VALID_SECRET }),
     );
 
     expect(error.errors[0]).toContain("Incomplete EXTERNAL_AUTH configuration");
@@ -106,7 +128,7 @@ describe("resolveAuthConfig", () => {
 
 describe("requireExternalUserConfig", () => {
   it("en modo external-auth devuelve su configuración", () => {
-    const { config } = resolveAuthConfig(EXTERNAL_AUTH_VARS);
+    const { config } = resolveAuthConfig({ ...EXTERNAL_AUTH_VARS, SESSION_JWT_SECRET: VALID_SECRET });
 
     expect(requireExternalUserConfig(config)).toEqual({
       apiUrl: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL,
@@ -116,7 +138,7 @@ describe("requireExternalUserConfig", () => {
   });
 
   it("en modo local tira ServiceUnavailableError con code external-auth_not_configured", () => {
-    const localConfig: AuthConfig = { mode: "local", local: { jwtSecret: VALID_LOCAL_SECRET } };
+    const localConfig: AuthConfig = { mode: "local", sessionSecret: VALID_SECRET };
 
     let thrown: unknown;
     try {
@@ -130,35 +152,22 @@ describe("requireExternalUserConfig", () => {
   });
 });
 
-describe("getAuthJwtSecret", () => {
-  it("en modo external-auth devuelve EXTERNAL_AUTH_JWT_SECRET", () => {
-    const { config } = resolveAuthConfig(EXTERNAL_AUTH_VARS);
-
-    expect(getAuthJwtSecret(config)).toBe(EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_JWT_SECRET);
-  });
-
-  it("en modo local devuelve LOCAL_AUTH_JWT_SECRET", () => {
-    const { config } = resolveAuthConfig({ LOCAL_AUTH_JWT_SECRET: VALID_LOCAL_SECRET });
-
-    expect(getAuthJwtSecret(config)).toBe(VALID_LOCAL_SECRET);
-  });
-});
-
-describe("requireLocalConfig", () => {
-  it("devuelve la config local en modo local", () => {
-    expect(requireLocalConfig({ mode: "local", local: { jwtSecret: "s".repeat(32) } })).toEqual({
-      jwtSecret: "s".repeat(32),
-    });
+describe("requireLocalAuth", () => {
+  it("en modo local no tira", () => {
+    expect(() => requireLocalAuth({ mode: "local", sessionSecret: VALID_SECRET })).not.toThrow();
   });
 
   it("en modo external-auth tira ServiceUnavailableError con code local_auth_not_enabled", () => {
-    const config = { mode: "external-auth" as const, external-auth: { apiUrl: "https://x.test", appCode: "app", jwtSecret: "x" } };
+    const { config } = resolveAuthConfig({ ...EXTERNAL_AUTH_VARS, SESSION_JWT_SECRET: VALID_SECRET });
 
-    expect(() => requireLocalConfig(config)).toThrow(ServiceUnavailableError);
+    let thrown: unknown;
     try {
-      requireLocalConfig(config);
+      requireLocalAuth(config);
     } catch (error) {
-      expect((error as ServiceUnavailableError).code).toBe("local_auth_not_enabled");
+      thrown = error;
     }
+
+    expect(thrown).toBeInstanceOf(ServiceUnavailableError);
+    expect((thrown as ServiceUnavailableError).code).toBe("local_auth_not_enabled");
   });
 });

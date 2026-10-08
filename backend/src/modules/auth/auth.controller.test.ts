@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockNext, createMockRequest, createMockResponse } from "../../test/http-mocks";
 
@@ -14,9 +15,16 @@ vi.mock("./auth.service", () => ({
   updatePreferences: vi.fn(),
 }));
 
-vi.mock("./jwt", () => ({
+// Solo se reemplaza lo que depende de EXTERNAL_AUTH: `signSessionToken` es el real, así los tests
+// verifican la sesión que LINK emite de verdad.
+vi.mock("./jwt", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./jwt")>()),
   mapTokenToUser: vi.fn(),
   verifyToken: vi.fn(),
+}));
+
+vi.mock("../settings/settings.service", () => ({
+  getLocalAuthPolicy: vi.fn().mockResolvedValue({ sessionTtlHours: 12 }),
 }));
 
 vi.mock("../audit/audit.service");
@@ -39,7 +47,7 @@ import {
 import * as AuthService from "./auth.service";
 import { LocalLoginError } from "./auth.errors";
 import * as LocalAuthService from "./local-auth.service";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
+import { LOCAL_AUTH_CONFIG, TEST_SESSION_JWT_SECRET, useAuthMode } from "../../test/auth-mode";
 import { mapTokenToUser, verifyToken } from "./jwt";
 import {
   deleteProfilePicture,
@@ -56,21 +64,21 @@ describe("auth.controller", () => {
   });
 
   describe("login", () => {
-    it("responde con token y usuario mapeado cuando las credenciales son correctas y audita LOGIN", async () => {
+    it("responde con la sesión de LINK (no el token de EXTERNAL_AUTH) y el usuario mapeado, y audita LOGIN", async () => {
       const req = createMockRequest({
         body: { user: "testuser", password: "password123" },
       });
       const res = createMockResponse();
       const next = createMockNext();
 
-      const mockToken = "signed-jwt-token";
+      const providerToken = "external-auth-jwt-token";
       const mockPayload = { id: "ext-1", username: "testuser" } as any;
       const mockMapped = {
         id: "ext-1",
         email: "test@example.com",
         username: "testuser",
         fullName: "External Name",
-        roles: ["user"],
+        roles: ["user", "admin"],
         permissions: [],
         app: "chat-interno",
         exp: 123456,
@@ -84,9 +92,11 @@ describe("auth.controller", () => {
         language: "es",
         syncProfileWithIntegration: true,
         status: "ACTIVE",
+        email: "test@example.com",
+        roles: ["admin"],
       } as any;
 
-      vi.mocked(AuthService.login).mockResolvedValue(mockToken);
+      vi.mocked(AuthService.login).mockResolvedValue(providerToken);
       vi.mocked(verifyToken).mockReturnValue(mockPayload);
       vi.mocked(mapTokenToUser).mockReturnValue(mockMapped);
       vi.mocked(AuthService.upsertUsuario).mockResolvedValue(mockInternalUser);
@@ -94,9 +104,10 @@ describe("auth.controller", () => {
       await login(req, res, next);
 
       expect(AuthService.login).toHaveBeenCalledWith("testuser", "password123", undefined);
-      expect(verifyToken).toHaveBeenCalledWith(mockToken);
+      expect(verifyToken).toHaveBeenCalledWith(providerToken);
       expect(mapTokenToUser).toHaveBeenCalledWith(mockPayload);
-      expect(AuthService.upsertUsuario).toHaveBeenCalledWith(mockMapped);
+      // Los roles de EXTERNAL_AUTH que la app conoce se guardan en la cuenta; los demás se descartan.
+      expect(AuthService.upsertUsuario).toHaveBeenCalledWith(mockMapped, ["admin"]);
 
       expect(AuditService.record).toHaveBeenCalledWith({
         action: AuditAction.LOGIN,
@@ -105,10 +116,20 @@ describe("auth.controller", () => {
         metadata: { provider: "external-auth" },
       });
 
+      const { token } = vi.mocked(res.json).mock.calls[0][0] as { token: string };
+      expect(token).not.toBe(providerToken);
+      const session = jwt.verify(token, TEST_SESSION_JWT_SECRET, { issuer: "link", audience: "link" }) as jwt.JwtPayload;
+      expect(session).toMatchObject({ sub: "internal-id-1", email: "test@example.com" });
+      expect(session.exp! - session.iat!).toBe(12 * 3600);
+      expect(session).not.toHaveProperty("pcr");
+
       expect(res.json).toHaveBeenCalledWith({
-        token: mockToken,
+        token,
         user: {
           ...mockMapped,
+          // La sesión vence cuando vence su token, y los roles salen de la cuenta.
+          exp: session.exp,
+          roles: ["admin"],
           fullName: "Local Name",
           internalUserId: "internal-id-1",
           notificationSoundEnabled: true,
@@ -118,14 +139,14 @@ describe("auth.controller", () => {
         },
       });
 
+      // EXTERNAL_AUTH solo se usa en el login: la foto y el directorio se piden con SU token.
       expect(AuthService.syncProfilePicture).toHaveBeenCalledWith(
         "internal-id-1",
         "avatar-1",
-        mockToken,
+        providerToken,
         true,
       );
-      // El directorio se sincroniza con el token del login (con throttle, ver auth.service.ts).
-      expect(AuthService.syncDirectoryThrottled).toHaveBeenCalledWith(mockToken);
+      expect(AuthService.syncDirectoryThrottled).toHaveBeenCalledWith(providerToken);
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -135,7 +156,7 @@ describe("auth.controller", () => {
       const next = createMockNext();
       vi.mocked(AuthService.login).mockResolvedValue("mock-token");
       vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
-      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser", roles: [] } as any);
       vi.mocked(AuthService.upsertUsuario).mockResolvedValue({
         id: "int-1",
         name: "User",
@@ -164,7 +185,7 @@ describe("auth.controller", () => {
 
       vi.mocked(AuthService.login).mockResolvedValue("mock-token");
       vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
-      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser", roles: [] } as any);
       vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User", status: "ACTIVE" } as any);
 
       await login(req, res, next);
@@ -187,7 +208,7 @@ describe("auth.controller", () => {
         });
         vi.mocked(AuthService.login).mockResolvedValue("mock-token");
         vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
-        vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+        vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser", roles: [] } as any);
         vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User", status: "ACTIVE" } as any);
         await login(req, createMockResponse(), createMockNext());
       }
@@ -259,7 +280,7 @@ describe("auth.controller", () => {
       const next = createMockNext();
       vi.mocked(AuthService.login).mockResolvedValue("mock-token");
       vi.mocked(verifyToken).mockReturnValue({ id: "ext-1", username: "testuser" } as any);
-      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser" } as any);
+      vi.mocked(mapTokenToUser).mockReturnValue({ id: "ext-1", email: "test@example.com", username: "testuser", roles: [] } as any);
       vi.mocked(AuthService.upsertUsuario).mockResolvedValue({ id: "int-1", name: "User", status: "INACTIVE" } as any);
 
       await login(req, res, next);

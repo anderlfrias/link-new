@@ -22,7 +22,7 @@ import { endLiveSessions } from "./live-sessions";
 import { LoginUserResponse, MustChangePasswordReason, PublicAuthConfig } from "./auth.types";
 
 export { LocalLoginError };
-import { LOCAL_TOKEN_AUDIENCE, signLocalToken } from "./jwt";
+import { SESSION_TOKEN_AUDIENCE, signSessionToken } from "./jwt";
 import {
   evaluatePasswordPolicy,
   hashPassword,
@@ -156,7 +156,7 @@ export async function loginWithLocalAccount(identifier: string, password: string
   }
 
   const reason = mustChangePasswordReason(credential, password, policy);
-  const token = signLocalToken(account, { ttlHours: policy.sessionTtlHours, mustChangePassword: reason !== null });
+  const token = signSessionToken(account, { ttlHours: policy.sessionTtlHours, mustChangePassword: reason !== null });
 
   return {
     record: account,
@@ -167,9 +167,9 @@ export async function loginWithLocalAccount(identifier: string, password: string
         email: account.email,
         username: account.username,
         fullName: account.name,
-        roles: account.localRoles,
+        roles: account.roles,
         permissions: [],
-        app: LOCAL_TOKEN_AUDIENCE,
+        app: SESSION_TOKEN_AUDIENCE,
         exp: tokenExp(token),
         authProvider: "local",
         internalUserId: account.id,
@@ -240,7 +240,7 @@ export async function changeOwnPassword(
 
   // Emitido después del corte y en el mismo segundo o uno posterior: es
   // válido aunque los anteriores ya no (D9).
-  const token = signLocalToken(account, { ttlHours: policy.sessionTtlHours, mustChangePassword: false });
+  const token = signSessionToken(account, { ttlHours: policy.sessionTtlHours, mustChangePassword: false });
 
   void AuditService.record({
     action: AuditAction.CHANGE_PASSWORD,

@@ -2,12 +2,14 @@ import { afterEach, beforeEach } from "vitest";
 import type { AuthConfig } from "../config/auth-config";
 import env from "../config/env";
 
-/// 40 caracteres: cumple el mínimo de 32 de LOCAL_AUTH_JWT_SECRET.
-export const TEST_LOCAL_JWT_SECRET = "test-local-jwt-secret-0123456789abcdefgh";
+/// Mismo secreto de sesión que define vitest.config.ts (SESSION_JWT_SECRET), de 32
+/// caracteres o más: así un token firmado con `env.auth.sessionSecret` verifica en
+/// cualquiera de los dos modos.
+export const TEST_SESSION_JWT_SECRET = "test-session-jwt-secret-0123456789abcdef";
 
 export const LOCAL_AUTH_CONFIG: AuthConfig = {
   mode: "local",
-  local: { jwtSecret: TEST_LOCAL_JWT_SECRET },
+  sessionSecret: TEST_SESSION_JWT_SECRET,
 };
 
 /// Pone la instalación en el modo dado durante cada test del `describe` que lo

@@ -45,7 +45,7 @@ export async function listUsersForAdmin(
   const groupAdminByUser = new Map(groupAdminRows.map((row) => [row.userId, row._count]));
 
   const local = env.auth.mode === "local";
-  const users = rows.map(({ _count, localRoles, localCredential, ...user }) => ({
+  const users = rows.map(({ _count, roles, localCredential, ...user }) => ({
     ...user,
     storage: storageByUser.get(user.id) ?? { fileCount: 0, totalSize: 0 },
     activity: {
@@ -58,7 +58,7 @@ export async function listUsersForAdmin(
     // los roles vienen de EXTERNAL_AUTH y no se conocen para un tercero.
     ...(local
       ? {
-          localRoles,
+          localRoles: roles,
           hasPassword: localCredential !== null,
           mustChangePassword: localCredential?.mustChangePassword ?? false,
           locked: Boolean(localCredential?.lockedUntil && localCredential.lockedUntil.getTime() > Date.now()),

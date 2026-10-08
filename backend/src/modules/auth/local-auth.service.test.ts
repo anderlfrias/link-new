@@ -1,7 +1,7 @@
 import { LocalCredential, UserStatus } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LOCAL_AUTH_CONFIG, TEST_LOCAL_JWT_SECRET, useAuthMode } from "../../test/auth-mode";
+import { LOCAL_AUTH_CONFIG, TEST_SESSION_JWT_SECRET, useAuthMode } from "../../test/auth-mode";
 import { BadRequestError } from "../../utils/errors";
 
 vi.mock("./auth.repository", () => ({
@@ -103,7 +103,7 @@ function buildAccount(overrides: Partial<UserWithCredential> = {}): UserWithCred
     status: UserStatus.ACTIVE,
     notificationSoundEnabled: true,
     language: "es",
-    localRoles: ["admin"],
+    roles: ["admin"],
     tokensValidAfter: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -143,8 +143,8 @@ describe("loginWithLocalAccount", () => {
       notificationSoundEnabled: true,
       language: "es",
     });
-    const payload = jwt.verify(response.token, TEST_LOCAL_JWT_SECRET) as jwt.JwtPayload;
-    expect(payload).toMatchObject({ sub: "user-1", iss: "link-local", aud: "link" });
+    const payload = jwt.verify(response.token, TEST_SESSION_JWT_SECRET) as jwt.JwtPayload;
+    expect(payload).toMatchObject({ sub: "user-1", iss: "link", aud: "link" });
     expect(payload.exp! - payload.iat!).toBe(12 * 3600);
     expect(payload).not.toHaveProperty("pcr");
   });
@@ -294,7 +294,7 @@ describe("changeOwnPassword", () => {
     await expect(verifyPassword("otra contraseña larga y nueva", saved.passwordHash)).resolves.toMatchObject({ valid: true });
     expect(saved.tokensValidAfter.getMilliseconds()).toBe(0);
 
-    const payload = jwt.verify(token, TEST_LOCAL_JWT_SECRET) as jwt.JwtPayload;
+    const payload = jwt.verify(token, TEST_SESSION_JWT_SECRET) as jwt.JwtPayload;
     expect(payload.exp).toBe(exp);
     expect(payload).not.toHaveProperty("pcr");
     // El token nuevo es del mismo segundo que el corte, o posterior: vale.

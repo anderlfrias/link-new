@@ -37,7 +37,7 @@ const read = (root, file) => fs.readFileSync(path.join(root, file), "utf8");
 const SAMPLE = [
   "# Variables de ejemplo",
   "POSTGRES_PASSWORD=change-me",
-  "LOCAL_AUTH_JWT_SECRET=",
+  "SESSION_JWT_SECRET=",
   'FILE_URL_SIGNING_SECRET=""',
   "VAPID_PUBLIC_KEY=",
   "VAPID_PRIVATE_KEY=",
@@ -86,14 +86,14 @@ test("fillEnv completa solo las variables vacías, con y sin comillas, y conserv
 
   assert.deepEqual(filled, [
     "POSTGRES_PASSWORD",
-    "LOCAL_AUTH_JWT_SECRET",
+    "SESSION_JWT_SECRET",
     "FILE_URL_SIGNING_SECRET",
     "VAPID_PUBLIC_KEY",
     "VAPID_PRIVATE_KEY",
   ]);
   assert.deepEqual(warnings, []);
   assert.notEqual(readValue(content, "POSTGRES_PASSWORD"), "change-me");
-  assert.ok(readValue(content, "LOCAL_AUTH_JWT_SECRET").length >= 32);
+  assert.ok(readValue(content, "SESSION_JWT_SECRET").length >= 32);
   // Conservó las comillas de la variable que las tenía.
   assert.match(content, /^FILE_URL_SIGNING_SECRET="[A-Za-z0-9_-]{64}"$/m);
   // El resto, intacto y en el mismo orden.
@@ -103,14 +103,14 @@ test("fillEnv completa solo las variables vacías, con y sin comillas, y conserv
 });
 
 test("fillEnv no pisa valores existentes y respeta el final de línea CRLF", () => {
-  const withValues = SAMPLE.replace("LOCAL_AUTH_JWT_SECRET=", "LOCAL_AUTH_JWT_SECRET=ya-existente-y-largo-de-sobra-0123456789")
+  const withValues = SAMPLE.replace("SESSION_JWT_SECRET=", "SESSION_JWT_SECRET=ya-existente-y-largo-de-sobra-0123456789")
     .replace("VAPID_PUBLIC_KEY=", "VAPID_PUBLIC_KEY=pub")
     .replace("VAPID_PRIVATE_KEY=", "VAPID_PRIVATE_KEY=priv")
     .replace(/\n/g, "\r\n");
 
   const { content, filled } = fillEnv(withValues, { created: false });
 
-  assert.equal(readValue(content, "LOCAL_AUTH_JWT_SECRET"), "ya-existente-y-largo-de-sobra-0123456789");
+  assert.equal(readValue(content, "SESSION_JWT_SECRET"), "ya-existente-y-largo-de-sobra-0123456789");
   assert.equal(readValue(content, "VAPID_PUBLIC_KEY"), "pub");
   assert.equal(readValue(content, "VAPID_PRIVATE_KEY"), "priv");
   assert.deepEqual(filled, ["FILE_URL_SIGNING_SECRET"]);
@@ -133,7 +133,7 @@ test("main en modo Docker crea el .env sin pasos manuales", () => {
   const env = read(root, ".env");
   assert.notEqual(readValue(env, "POSTGRES_PASSWORD"), "change-me");
   assert.ok(readValue(env, "POSTGRES_PASSWORD").length >= 24);
-  assert.ok(readValue(env, "LOCAL_AUTH_JWT_SECRET").length >= 32);
+  assert.ok(readValue(env, "SESSION_JWT_SECRET").length >= 32);
   assert.ok(readValue(env, "FILE_URL_SIGNING_SECRET").length >= 32);
   assert.equal(readValue(env, "VAPID_PUBLIC_KEY").length, 87);
   assert.equal(readValue(env, "VAPID_PRIVATE_KEY").length, 43);
@@ -158,7 +158,7 @@ test("main no imprime ningún secreto generado", () => {
   const { out, err } = run(root);
 
   const env = read(root, ".env");
-  for (const key of ["POSTGRES_PASSWORD", "LOCAL_AUTH_JWT_SECRET", "FILE_URL_SIGNING_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"]) {
+  for (const key of ["POSTGRES_PASSWORD", "SESSION_JWT_SECRET", "FILE_URL_SIGNING_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"]) {
     const value = readValue(env, key);
     assert.ok(!out.includes(value) && !err.includes(value), `${key} apareció en la salida`);
     assert.ok(out.includes(key), `${key} no figura entre las completadas`);
@@ -176,7 +176,7 @@ test("main sobre un .env ya completo lo deja idéntico, byte por byte, sin mostr
   assert.equal(read(root, ".env"), before);
   assert.match(out, /\.env ya existía/);
   assert.match(out, /sin variables por completar/);
-  for (const key of ["LOCAL_AUTH_JWT_SECRET", "VAPID_PRIVATE_KEY"]) {
+  for (const key of ["SESSION_JWT_SECRET", "VAPID_PRIVATE_KEY"]) {
     assert.ok(!out.includes(readValue(before, key)));
   }
 });
@@ -191,16 +191,17 @@ test("main no cambia POSTGRES_PASSWORD=change-me de un .env existente y avisa", 
   assert.equal(readValue(env, "POSTGRES_PASSWORD"), "change-me");
   assert.match(out, /POSTGRES_PASSWORD sigue en el valor de ejemplo/);
   // Lo demás que estaba vacío sí se completó.
-  assert.ok(readValue(env, "LOCAL_AUTH_JWT_SECRET").length >= 32);
+  assert.ok(readValue(env, "SESSION_JWT_SECRET").length >= 32);
 });
 
-test("con las tres EXTERNAL_AUTH_* definidas no genera LOCAL_AUTH_JWT_SECRET", () => {
-  const withProvider = SAMPLE + "EXTERNAL_AUTH_API_URL=https://external-auth.example.com\nAPP_CODE_EXTERNAL_AUTH=link\nEXTERNAL_AUTH_JWT_SECRET=secreto\n";
+test("genera SESSION_JWT_SECRET también cuando hay un proveedor de login externo configurado", () => {
+  const withProvider = SAMPLE + "EXTERNAL_AUTH_API_URL=https://auth.example.com\nAPP_CODE_EXTERNAL_AUTH=link\nEXTERNAL_AUTH_JWT_SECRET=secreto\n";
 
   const { content, filled } = fillEnv(withProvider, { created: false });
 
-  assert.equal(readValue(content, "LOCAL_AUTH_JWT_SECRET"), "");
-  assert.ok(!filled.includes("LOCAL_AUTH_JWT_SECRET"));
+  // LINK emite su propia sesión en todos los modos, así que el secreto siempre hace falta.
+  assert.ok(readValue(content, "SESSION_JWT_SECRET").length >= 32);
+  assert.ok(filled.includes("SESSION_JWT_SECRET"));
 });
 
 test("con solo una clave VAPID cargada no genera ninguna de las dos y avisa", () => {
@@ -249,7 +250,7 @@ test("--dev crea backend/.env y frontend/.env.local, y deja la raíz sin tocar",
 
   assert.equal(code, 0);
   const backendEnv = read(root, "backend/.env");
-  assert.ok(readValue(backendEnv, "LOCAL_AUTH_JWT_SECRET").length >= 32);
+  assert.ok(readValue(backendEnv, "SESSION_JWT_SECRET").length >= 32);
   assert.equal(readValue(backendEnv, "VAPID_PUBLIC_KEY").length, 87);
   // El DATABASE_URL de ejemplo apunta al contenedor de la guía: no se toca.
   assert.match(backendEnv, /^DATABASE_URL="postgresql:\/\/link:link@localhost:5432\/link\?schema=public"$/m);

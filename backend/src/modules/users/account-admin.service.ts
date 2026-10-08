@@ -1,5 +1,5 @@
 import { AuditAction, Prisma, UserStatus } from "@prisma/client";
-import { requireLocalConfig } from "../../config/auth-config";
+import { requireLocalAuth } from "../../config/auth-config";
 import env from "../../config/env";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { BadRequestError, ConflictError, NotFoundError } from "../../utils/errors";
@@ -36,7 +36,7 @@ export function toAccountView(account: Repo.Account): AdminAccountView {
     email: account.email,
     username: account.username,
     status: account.status,
-    localRoles: account.localRoles,
+    localRoles: account.roles,
     hasPassword: account.localCredential !== null,
     mustChangePassword: account.localCredential?.mustChangePassword ?? false,
     locked: isLocked(account),
@@ -119,7 +119,7 @@ export async function updateUserAccount(
       name: local && input.name !== undefined ? input.name : target.name,
       email: local && input.email !== undefined ? input.email : target.email,
       username: local && input.username !== undefined ? input.username : target.username,
-      roles: local && input.roles !== undefined ? input.roles : target.localRoles,
+      roles: local && input.roles !== undefined ? input.roles : target.roles,
       status: input.status ?? target.status,
     };
 
@@ -127,14 +127,14 @@ export async function updateUserAccount(
     if (next.name !== target.name) changed.name = { from: target.name, to: next.name };
     if (next.email !== target.email) changed.email = { from: target.email, to: next.email };
     if (next.username !== target.username) changed.username = { from: target.username, to: next.username };
-    if (!sameRoles(next.roles, target.localRoles)) changed.roles = { from: target.localRoles, to: next.roles };
+    if (!sameRoles(next.roles, target.roles)) changed.roles = { from: target.roles, to: next.roles };
     if (next.status !== target.status) changed.status = { from: target.status, to: next.status };
     if (Object.keys(changed).length === 0) {
       return { account: target, deactivated: false };
     }
 
     const deactivates = target.status === UserStatus.ACTIVE && next.status !== UserStatus.ACTIVE;
-    const wasAdmin = target.localRoles.includes(ADMIN_ROLE);
+    const wasAdmin = target.roles.includes(ADMIN_ROLE);
     const removesAdmin = local && wasAdmin && !next.roles.includes(ADMIN_ROLE);
     if (actor.userId === target.id && (deactivates || removesAdmin)) {
       throw new ConflictError("No podés desactivar tu propia cuenta ni quitarte el rol de admin.", "cannot_modify_self");
@@ -159,7 +159,7 @@ export async function updateUserAccount(
       ...(changed.name ? { name: next.name } : {}),
       ...(changed.email ? { email: next.email } : {}),
       ...(changed.username ? { username: next.username } : {}),
-      ...(changed.roles ? { localRoles: next.roles } : {}),
+      ...(changed.roles ? { roles: next.roles } : {}),
       ...(changed.status ? { status: next.status } : {}),
       // En modo local, desactivar también revoca los tokens emitidos (D9). En
       // external-auth no hace falta: `resolveInternalUser` rechaza la cuenta inactiva.
@@ -190,7 +190,7 @@ export async function createLocalUser(
   actor: AccountAdminActor,
   input: CreateLocalUserInput,
 ): Promise<{ user: AdminAccountView; temporaryPassword?: string }> {
-  requireLocalConfig(env.auth);
+  requireLocalAuth(env.auth);
   const policy = await SettingsService.getLocalAuthPolicy();
   const { password, generated } = resolveAssignedPassword(input.password, policy);
   // El hash antes de abrir la transacción: scrypt tarda y no necesita la base.
@@ -201,7 +201,7 @@ export async function createLocalUser(
     await assertAvailable(tx, { email: input.email, username: input.username ?? null });
     const created = await Repo.createAccount(
       tx,
-      { name: input.name, email: input.email, username: input.username ?? null, localRoles: roles },
+      { name: input.name, email: input.email, username: input.username ?? null, roles },
       { passwordHash },
     );
     await Repo.createAuditEntry(
@@ -228,7 +228,7 @@ export async function resetLocalPassword(
   targetId: string,
   input: { password?: string },
 ): Promise<{ temporaryPassword?: string }> {
-  requireLocalConfig(env.auth);
+  requireLocalAuth(env.auth);
   const policy = await SettingsService.getLocalAuthPolicy();
   const { password, generated } = resolveAssignedPassword(input.password, policy);
   const passwordHash = await hashPassword(password);
@@ -261,7 +261,7 @@ export async function resetLocalPassword(
 /// Desbloqueo por un admin (POST /admin/users/:id/unlock, D17): reinicia el
 /// contador de intentos. Se audita solo si la cuenta estaba bloqueada.
 export async function unlockLocalUser(actor: AccountAdminActor, targetId: string): Promise<void> {
-  requireLocalConfig(env.auth);
+  requireLocalAuth(env.auth);
   await Repo.runInTransaction(async (tx) => {
     const target = await Repo.findAccount(tx, targetId);
     if (!target) {
@@ -296,7 +296,7 @@ export async function bootstrapAdmin(input: {
   name?: string;
   username?: string;
 }): Promise<{ userId: string; created: boolean; temporaryPassword: string }> {
-  requireLocalConfig(env.auth);
+  requireLocalAuth(env.auth);
   const via: AccountAdminVia = "cli";
   const policy = await SettingsService.getLocalAuthPolicy();
   const temporaryPassword = generateTemporaryPassword(policy);
@@ -312,7 +312,7 @@ export async function bootstrapAdmin(input: {
           name: input.name ?? input.email.split("@")[0],
           email: input.email,
           username: input.username ?? null,
-          localRoles: [ADMIN_ROLE],
+          roles: [ADMIN_ROLE],
         },
         { passwordHash },
       );
@@ -328,9 +328,9 @@ export async function bootstrapAdmin(input: {
       return { userId: created.id, created: true };
     }
 
-    const roles = existing.localRoles.includes(ADMIN_ROLE) ? existing.localRoles : [...existing.localRoles, ADMIN_ROLE];
+    const roles = existing.roles.includes(ADMIN_ROLE) ? existing.roles : [...existing.roles, ADMIN_ROLE];
     const changed: Changes = {};
-    if (!sameRoles(roles, existing.localRoles)) changed.roles = { from: existing.localRoles, to: roles };
+    if (!sameRoles(roles, existing.roles)) changed.roles = { from: existing.roles, to: roles };
     if (existing.status !== UserStatus.ACTIVE) changed.status = { from: existing.status, to: UserStatus.ACTIVE };
 
     await Repo.setAdminAssignedPassword(tx, existing.id, {
@@ -338,7 +338,7 @@ export async function bootstrapAdmin(input: {
       previousPasswordHashes: nextHistory(existing, policy),
     });
     await Repo.updateAccount(tx, existing.id, {
-      localRoles: roles,
+      roles,
       status: UserStatus.ACTIVE,
       tokensValidAfter: toSecondPrecision(new Date()),
     });
@@ -370,7 +370,7 @@ export async function bootstrapAdmin(input: {
 
 /// `reset-password` del CLI (D18): para cuando ningún admin puede entrar.
 export async function resetPasswordByEmail(email: string): Promise<{ userId: string; temporaryPassword: string }> {
-  requireLocalConfig(env.auth);
+  requireLocalAuth(env.auth);
   const account = await Repo.runInTransaction((tx) => Repo.findAccountByEmail(tx, email));
   if (!account) {
     throw new NotFoundError("No hay ninguna cuenta con ese correo.");

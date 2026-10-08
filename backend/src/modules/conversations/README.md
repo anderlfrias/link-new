@@ -159,7 +159,7 @@ Ver [Fijar y favoritos](#fijar-y-favoritos). Respuesta: la fila `ConversationMem
 
   Eliminar el grupo además requiere `AppSettings.allowGroupDelete` en `true` — a diferencia de las 5 dimensiones de la tabla (que gobiernan **quién**), este es un interruptor maestro sobre **si** la acción existe en absoluto: en `false`, nadie puede borrar un `GROUP`, sin importar `whoCanDeleteGroup` ni el rol de quien lo intente. Default `true` (reproduce el comportamiento histórico).
 
-  `GROUP_ADMINS_ONLY` y `APP_ADMINS_ONLY` son conceptos **distintos**: el primero depende de `ConversationMember.isAdmin` (admin de ese grupo puntual), el segundo del rol `"admin"` de la app (viene de EXTERNAL_AUTH, o en modo local de `User.localRoles`) — un admin de grupo no obtiene ningún permiso a nivel app, y viceversa.
+  `GROUP_ADMINS_ONLY` y `APP_ADMINS_ONLY` son conceptos **distintos**: el primero depende de `ConversationMember.isAdmin` (admin de ese grupo puntual), el segundo del rol `"admin"` de la app (`User.roles`: en modo local lo asigna un admin; en modo external-auth se guarda en cada login a partir de los roles de EXTERNAL_AUTH) — un admin de grupo no obtiene ningún permiso a nivel app, y viceversa.
 
 Toda operación primero verifica membresía activa (`403` si el usuario no pertenece a la conversación, `404` si la conversación no existe o está borrada).
 

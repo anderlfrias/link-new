@@ -144,8 +144,7 @@ enum CallStatus {
 /// grupo antes de que el grupo exista); el resto de los campos admiten los
 /// cuatro valores. GROUP_ADMINS_ONLY y APP_ADMINS_ONLY son conceptos
 /// distintos: el primero depende de `ConversationMember.isAdmin` (admin de
-/// ESE grupo), el segundo del rol "admin" de la app (viene del JWT de EXTERNAL_AUTH
-/// en modo external-auth, o de `User.localRoles` en modo local).
+/// ESE grupo), el segundo del rol "admin" de la app (`User.roles`).
 enum GroupPermissionLevel {
   ALL_MEMBERS       @map("all_members")
   GROUP_ADMINS_ONLY @map("group_admins_only")
@@ -226,9 +225,11 @@ model User {
   /// Idioma preferido del usuario ("es" | "en") — preferencia 100% local.
   language String @default("es") @map("language")
 
-  /// Roles en modo local (LOCAL_AUTH_PLAN.md, D8). En modo external-auth se ignora:
-  /// los roles vienen del JWT de EXTERNAL_AUTH.
-  localRoles       String[]         @default([]) @map("local_roles")
+  /// Roles de la cuenta (solo los que la app conoce, hoy "admin"). En modo local
+  /// los asigna un admin (LOCAL_AUTH_PLAN.md, D8); con un proveedor externo se
+  /// sobrescriben en cada login con los que entregue el proveedor. La columna
+  /// conserva su nombre original (`local_roles`): no hay migración.
+  roles            String[]         @default([]) @map("local_roles")
   /// Modo local: los tokens con `iat` anterior se rechazan (D9). Se guarda
   /// truncado al segundo, porque `iat` está en segundos.
   tokensValidAfter DateTime?        @map("tokens_valid_after")

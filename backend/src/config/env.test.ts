@@ -3,7 +3,7 @@ import type { AuthEnvVars } from "./auth-config";
 
 // env.ts valida process.env una sola vez al importarse, así que cada caso
 // resetea el registro de módulos y lo reimporta (mismo patrón que
-// cors-origins.test.ts). Las cuatro variables de autenticación se fijan
+// cors-origins.test.ts). Las cinco variables de autenticación se fijan
 // siempre de forma explícita (vacía = "no definida"): así el resultado no
 // depende del .env local de quien corre los tests, porque dotenv no pisa
 // variables que ya existen.
@@ -11,6 +11,7 @@ function stubAuthEnv(vars: AuthEnvVars) {
   vi.stubEnv("EXTERNAL_AUTH_API_URL", vars.EXTERNAL_AUTH_API_URL ?? "");
   vi.stubEnv("APP_CODE_EXTERNAL_AUTH", vars.APP_CODE_EXTERNAL_AUTH ?? "");
   vi.stubEnv("EXTERNAL_AUTH_JWT_SECRET", vars.EXTERNAL_AUTH_JWT_SECRET ?? "");
+  vi.stubEnv("SESSION_JWT_SECRET", vars.SESSION_JWT_SECRET ?? "");
   vi.stubEnv("LOCAL_AUTH_JWT_SECRET", vars.LOCAL_AUTH_JWT_SECRET ?? "");
 }
 
@@ -29,13 +30,16 @@ function spyOnFatalExit() {
   return { exitSpy, consoleErrorSpy };
 }
 
+const SESSION_SECRET = "s".repeat(32);
+
 const EXTERNAL_AUTH_VARS = {
   EXTERNAL_AUTH_API_URL: "https://external-auth.test.local",
   APP_CODE_EXTERNAL_AUTH: "test-app-code",
   EXTERNAL_AUTH_JWT_SECRET: "test-jwt-secret",
+  SESSION_JWT_SECRET: SESSION_SECRET,
 };
 
-const LOCAL_SECRET = "l".repeat(32);
+const OLD_LOCAL_SECRET = "l".repeat(32);
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -51,32 +55,44 @@ describe("config/env — modo de autenticación", () => {
 
     expect(env.auth).toEqual({
       mode: "external-auth",
+      sessionSecret: SESSION_SECRET,
       external-auth: { apiUrl: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_API_URL, appCode: EXTERNAL_AUTH_VARS.APP_CODE_EXTERNAL_AUTH, jwtSecret: EXTERNAL_AUTH_VARS.EXTERNAL_AUTH_JWT_SECRET },
     });
     expect(env).not.toHaveProperty("EXTERNAL_AUTH_API_URL");
     expect(env).not.toHaveProperty("APP_CODE_EXTERNAL_AUTH");
     expect(env).not.toHaveProperty("EXTERNAL_AUTH_JWT_SECRET");
+    expect(env).not.toHaveProperty("SESSION_JWT_SECRET");
     expect(env).not.toHaveProperty("LOCAL_AUTH_JWT_SECRET");
     expect(env.PORT).toBe(4000);
     expect(envWarnings).toEqual([]);
   });
 
-  it("con las EXTERNAL_AUTH_* vacías y LOCAL_AUTH_JWT_SECRET -> modo local (vacía cuenta como no definida)", async () => {
-    stubAuthEnv({ LOCAL_AUTH_JWT_SECRET: LOCAL_SECRET });
-
-    const { default: env } = await importFreshEnv();
-
-    expect(env.auth).toEqual({ mode: "local", local: { jwtSecret: LOCAL_SECRET } });
-  });
-
-  it("LOCAL_AUTH_JWT_SECRET sobrante en modo external-auth -> sigue en external-auth y deja un aviso en envWarnings", async () => {
-    stubAuthEnv({ ...EXTERNAL_AUTH_VARS, LOCAL_AUTH_JWT_SECRET: LOCAL_SECRET });
+  it("con las EXTERNAL_AUTH_* vacías y SESSION_JWT_SECRET -> modo local (vacía cuenta como no definida)", async () => {
+    stubAuthEnv({ SESSION_JWT_SECRET: SESSION_SECRET });
 
     const { default: env, envWarnings } = await importFreshEnv();
 
-    expect(env.auth.mode).toBe("external-auth");
+    expect(env.auth).toEqual({ mode: "local", sessionSecret: SESSION_SECRET });
+    expect(envWarnings).toEqual([]);
+  });
+
+  it("LOCAL_AUTH_JWT_SECRET (nombre anterior) sigue valiendo como secreto de sesión, con un aviso en envWarnings", async () => {
+    stubAuthEnv({ LOCAL_AUTH_JWT_SECRET: OLD_LOCAL_SECRET });
+
+    const { default: env, envWarnings } = await importFreshEnv();
+
+    expect(env.auth).toEqual({ mode: "local", sessionSecret: OLD_LOCAL_SECRET });
     expect(envWarnings).toHaveLength(1);
-    expect(envWarnings[0]).toContain("LOCAL_AUTH_JWT_SECRET");
+    expect(envWarnings[0]).toContain("SESSION_JWT_SECRET");
+  });
+
+  it("modo external-auth sin SESSION_JWT_SECRET -> imprime que falta y corta el arranque", async () => {
+    stubAuthEnv({ ...EXTERNAL_AUTH_VARS, SESSION_JWT_SECRET: undefined });
+    const { consoleErrorSpy } = spyOnFatalExit();
+
+    await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("SESSION_JWT_SECRET is required"));
   });
 
   it("EXTERNAL_AUTH a medias -> imprime el motivo y corta el arranque", async () => {
@@ -91,13 +107,22 @@ describe("config/env — modo de autenticación", () => {
     );
   });
 
-  it("sin EXTERNAL_AUTH_* ni LOCAL_AUTH_JWT_SECRET -> imprime que falta el secreto local y corta el arranque", async () => {
+  it("sin EXTERNAL_AUTH_* ni SESSION_JWT_SECRET -> imprime que falta el secreto de sesión y corta el arranque", async () => {
     stubAuthEnv({});
     const { consoleErrorSpy } = spyOnFatalExit();
 
     await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("LOCAL_AUTH_JWT_SECRET is required"));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("SESSION_JWT_SECRET is required"));
+  });
+
+  it("SESSION_JWT_SECRET de menos de 32 caracteres -> imprime el largo mínimo y corta el arranque", async () => {
+    stubAuthEnv({ SESSION_JWT_SECRET: "corto" });
+    const { consoleErrorSpy } = spyOnFatalExit();
+
+    await expect(importFreshEnv()).rejects.toThrow("process.exit(1)");
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("at least 32 characters"));
   });
 
   it("EXTERNAL_AUTH_API_URL que no es una URL -> lo sigue rechazando el schema", async () => {

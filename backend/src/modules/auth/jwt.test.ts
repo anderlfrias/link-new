@@ -4,13 +4,13 @@ import { requireExternalUserConfig } from "../../config/auth-config";
 import env from "../../config/env";
 import { ServiceUnavailableError } from "../../utils/errors";
 import { ExternalUserTokenPayload } from "./auth.types";
-import { LOCAL_AUTH_CONFIG, TEST_LOCAL_JWT_SECRET, useAuthMode } from "../../test/auth-mode";
+import { LOCAL_AUTH_CONFIG, TEST_SESSION_JWT_SECRET, useAuthMode } from "../../test/auth-mode";
 import {
   buildFullName,
-  LOCAL_TOKEN_AUDIENCE,
-  LOCAL_TOKEN_ISSUER,
+  SESSION_TOKEN_AUDIENCE,
+  SESSION_TOKEN_ISSUER,
   mapTokenToUser,
-  signLocalToken,
+  signSessionToken,
   verifyAccessToken,
   verifyToken,
 } from "./jwt";
@@ -110,7 +110,7 @@ describe("jwt module", () => {
     });
   });
 
-  describe("verifyToken", () => {
+  describe("verifyToken (el JWT que EXTERNAL_AUTH devuelve en el login)", () => {
     it("decodifica y valida un token firmado con el secret correcto", () => {
       const payload = createValidPayload();
       const token = jwt.sign(payload, EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
@@ -146,7 +146,7 @@ describe("jwt module", () => {
     it("en modo local rechaza un token de EXTERNAL_AUTH aunque esté firmado con el secreto que EXTERNAL_AUTH usaba", () => {
       const token = jwt.sign(createValidPayload(), EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
       const originalAuth = env.auth;
-      env.auth = { mode: "local", local: { jwtSecret: "l".repeat(32) } };
+      env.auth = { mode: "local", sessionSecret: "l".repeat(32) };
 
       try {
         expect(() => verifyToken(token)).toThrow(ServiceUnavailableError);
@@ -156,91 +156,94 @@ describe("jwt module", () => {
     });
   });
 
-  describe("signLocalToken", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
-
+  describe("signSessionToken", () => {
     it("firma HS256 con sub, email, iss, aud, iat y exp según la duración", () => {
       const before = Math.floor(Date.now() / 1000);
-      const token = signLocalToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 12, mustChangePassword: false });
+      const token = signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 12, mustChangePassword: false });
 
       const decoded = jwt.decode(token, { complete: true })!;
       const payload = decoded.payload as jwt.JwtPayload;
       expect(decoded.header.alg).toBe("HS256");
-      expect(payload).toMatchObject({ sub: "user-1", email: "ana@example.com", iss: "link-local", aud: "link" });
+      expect(payload).toMatchObject({ sub: "user-1", email: "ana@example.com", iss: "link", aud: "link" });
       expect(payload.iat).toBeGreaterThanOrEqual(before);
       expect(payload.exp! - payload.iat!).toBe(12 * 3600);
       expect(payload).not.toHaveProperty("pcr");
     });
 
     it("solo agrega pcr cuando el cambio de contraseña es obligatorio", () => {
-      const token = signLocalToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: true });
+      const token = signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: true });
 
       expect((jwt.decode(token) as jwt.JwtPayload).pcr).toBe(true);
     });
 
-    it("en modo external-auth tira: ahí el backend no emite tokens propios", () => {
-      const originalAuth = env.auth;
-      env.auth = { mode: "external-auth", external-auth: { apiUrl: "https://external-auth.test", appCode: "app", jwtSecret: "x" } };
-      try {
-        expect(() => signLocalToken({ id: "u", email: "u@example.com" }, { ttlHours: 1, mustChangePassword: false })).toThrow(
-          ServiceUnavailableError,
-        );
-      } finally {
-        env.auth = originalAuth;
-      }
+    it("firma con SESSION_JWT_SECRET en los dos modos, también cuando el login lo valida EXTERNAL_AUTH", () => {
+      const token = signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: false });
+
+      // En modo external-auth (el de vitest.config.ts) el token verifica con el secreto de sesión...
+      expect(() => jwt.verify(token, TEST_SESSION_JWT_SECRET)).not.toThrow();
+      // ...y no con el de EXTERNAL_AUTH.
+      expect(() => jwt.verify(token, EXTERNAL_AUTH_JWT_SECRET)).toThrow(jwt.JsonWebTokenError);
     });
   });
 
-  describe("verifyAccessToken — modo local", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
+  // El verificador es el mismo en los dos modos: solo acepta la sesión de LINK.
+  describe.each([
+    { label: "modo local", config: LOCAL_AUTH_CONFIG, expectedProvider: "local" },
+    // El modo de vitest.config.ts: no hace falta cambiarlo.
+    { label: "modo external-auth", config: undefined, expectedProvider: "external-auth" },
+  ])("verifyAccessToken — $label", ({ config, expectedProvider }) => {
+    if (config) useAuthMode(config);
 
-    function signLocal(claims: Record<string, unknown>, options: jwt.SignOptions = {}, secret = TEST_LOCAL_JWT_SECRET) {
+    function signSession(
+      claims: Record<string, unknown>,
+      options: jwt.SignOptions = {},
+      secret: string = TEST_SESSION_JWT_SECRET,
+    ) {
       return jwt.sign(claims, secret, {
         algorithm: "HS256",
         subject: "user-1",
-        issuer: LOCAL_TOKEN_ISSUER,
-        audience: LOCAL_TOKEN_AUDIENCE,
+        issuer: SESSION_TOKEN_ISSUER,
+        audience: SESSION_TOKEN_AUDIENCE,
         expiresIn: 3600,
         ...options,
       });
     }
 
-    it("un token local válido da la identidad, con roles vacíos hasta resolver el usuario", () => {
-      const token = signLocalToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: false });
+    it("un token de sesión válido da la identidad, con roles vacíos hasta resolver el usuario", () => {
+      const token = signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: false });
 
       const identity = verifyAccessToken(token);
 
       expect(identity).toMatchObject({
-        mode: "local",
         mustChangePassword: false,
-        user: { id: "user-1", email: "ana@example.com", roles: [], permissions: [], authProvider: "local" },
+        user: { id: "user-1", email: "ana@example.com", roles: [], permissions: [], authProvider: expectedProvider },
       });
       expect(identity.iat).toEqual(expect.any(Number));
     });
 
     it("pcr llega como mustChangePassword", () => {
-      const token = signLocalToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: true });
+      const token = signSessionToken({ id: "user-1", email: "ana@example.com" }, { ttlHours: 1, mustChangePassword: true });
 
       expect(verifyAccessToken(token).mustChangePassword).toBe(true);
     });
 
     it("rechaza un token vencido con TokenExpiredError", () => {
-      const token = signLocal({ email: "ana@example.com" }, { expiresIn: -10 });
+      const token = signSession({ email: "ana@example.com" }, { expiresIn: -10 });
 
       expect(() => verifyAccessToken(token)).toThrow(jwt.TokenExpiredError);
     });
 
     it("rechaza un token firmado con otro secreto", () => {
-      const token = signLocal({ email: "ana@example.com" }, {}, "otro-secreto-de-32-caracteres-o-mas!!");
+      const token = signSession({ email: "ana@example.com" }, {}, "otro-secreto-de-32-caracteres-o-mas!!");
 
       expect(() => verifyAccessToken(token)).toThrow(jwt.JsonWebTokenError);
     });
 
     it("rechaza un token con iss o aud incorrectos", () => {
-      expect(() => verifyAccessToken(signLocal({ email: "ana@example.com" }, { issuer: "otra-app" }))).toThrow(
+      expect(() => verifyAccessToken(signSession({ email: "ana@example.com" }, { issuer: "otra-app" }))).toThrow(
         jwt.JsonWebTokenError,
       );
-      expect(() => verifyAccessToken(signLocal({ email: "ana@example.com" }, { audience: "otra-app" }))).toThrow(
+      expect(() => verifyAccessToken(signSession({ email: "ana@example.com" }, { audience: "otra-app" }))).toThrow(
         jwt.JsonWebTokenError,
       );
     });
@@ -250,60 +253,35 @@ describe("jwt module", () => {
       const now = Math.floor(Date.now() / 1000);
       const unsigned = [
         encode({ alg: "none", typ: "JWT" }),
-        encode({ sub: "user-1", email: "ana@example.com", iss: "link-local", aud: "link", iat: now, exp: now + 3600 }),
+        encode({ sub: "user-1", email: "ana@example.com", iss: "link", aud: "link", iat: now, exp: now + 3600 }),
         "",
       ].join(".");
 
       expect(() => verifyAccessToken(unsigned)).toThrow(jwt.JsonWebTokenError);
     });
 
-    it("rechaza un token de EXTERNAL_AUTH aunque esté firmado con el secreto local (invariante 1)", () => {
-      const external-authShaped = jwt.sign(createValidPayload(), TEST_LOCAL_JWT_SECRET, { algorithm: "HS256" });
-
-      expect(() => verifyAccessToken(external-authShaped)).toThrow(jwt.JsonWebTokenError);
-    });
-
-    it("rechaza un token de EXTERNAL_AUTH firmado con el secreto que EXTERNAL_AUTH usaba", () => {
-      const external-authToken = jwt.sign(createValidPayload(), EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
-
-      expect(() => verifyAccessToken(external-authToken)).toThrow(jwt.JsonWebTokenError);
-    });
-  });
-
-  describe("verifyAccessToken — modo external-auth", () => {
-    it("un token de EXTERNAL_AUTH da la identidad de siempre, sin cambio obligatorio", () => {
-      const payload = createValidPayload();
-      const token = jwt.sign(payload, EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
-
-      const identity = verifyAccessToken(token);
-
-      expect(identity.mode).toBe("external-auth");
-      expect(identity.mustChangePassword).toBe(false);
-      expect(identity.user).toEqual(mapTokenToUser({ ...payload, iat: identity.iat }));
-    });
-
-    it("rechaza un token local (invariante 1)", () => {
-      const localToken = jwt.sign({ email: "ana@example.com" }, TEST_LOCAL_JWT_SECRET, {
+    it("rechaza un token sin sub o sin email", () => {
+      expect(() => verifyAccessToken(jwt.sign({ email: "ana@example.com" }, TEST_SESSION_JWT_SECRET, {
         algorithm: "HS256",
-        subject: "user-1",
-        issuer: LOCAL_TOKEN_ISSUER,
-        audience: LOCAL_TOKEN_AUDIENCE,
+        issuer: SESSION_TOKEN_ISSUER,
+        audience: SESSION_TOKEN_AUDIENCE,
         expiresIn: 3600,
-      });
-
-      expect(() => verifyAccessToken(localToken)).toThrow(jwt.JsonWebTokenError);
+      }))).toThrow(jwt.JsonWebTokenError);
+      expect(() => verifyAccessToken(signSession({}))).toThrow(jwt.JsonWebTokenError);
     });
 
-    it("rechaza un token local aunque se haya firmado con el secreto de EXTERNAL_AUTH", () => {
-      const sameSecret = jwt.sign({ email: "ana@example.com" }, EXTERNAL_AUTH_JWT_SECRET, {
-        algorithm: "HS256",
-        subject: "user-1",
-        issuer: LOCAL_TOKEN_ISSUER,
-        audience: LOCAL_TOKEN_AUDIENCE,
-        expiresIn: 3600,
-      });
+    it("el JWT de EXTERNAL_AUTH directo ya no autentica, firmado con el secreto de EXTERNAL_AUTH o con el de sesión", () => {
+      const withProviderSecret = jwt.sign(createValidPayload(), EXTERNAL_AUTH_JWT_SECRET, { algorithm: "HS256" });
+      const withSessionSecret = jwt.sign(createValidPayload(), TEST_SESSION_JWT_SECRET, { algorithm: "HS256" });
 
-      expect(() => verifyAccessToken(sameSecret)).toThrow(jwt.JsonWebTokenError);
+      expect(() => verifyAccessToken(withProviderSecret)).toThrow(jwt.JsonWebTokenError);
+      expect(() => verifyAccessToken(withSessionSecret)).toThrow(jwt.JsonWebTokenError);
+    });
+
+    it("rechaza un token de sesión firmado con el secreto de EXTERNAL_AUTH", () => {
+      const token = signSession({ email: "ana@example.com" }, {}, EXTERNAL_AUTH_JWT_SECRET);
+
+      expect(() => verifyAccessToken(token)).toThrow(jwt.JsonWebTokenError);
     });
   });
 });

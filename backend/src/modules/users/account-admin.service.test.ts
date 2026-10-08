@@ -82,7 +82,7 @@ function account(overrides: Partial<Repo.Account> = {}): Repo.Account {
     status: UserStatus.ACTIVE,
     notificationSoundEnabled: true,
     language: "es",
-    localRoles: [],
+    roles: [],
     tokensValidAfter: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -198,7 +198,7 @@ describe("updateUserAccount — modo local", () => {
       name: "Ana P.",
       email: "ana.p@example.com",
       username: null,
-      localRoles: ["admin"],
+      roles: ["admin"],
     });
     const { data } = auditCalls()[0];
     expect(data.metadata).toEqual({
@@ -224,13 +224,13 @@ describe("updateUserAccount — modo local", () => {
   });
 
   it("nadie puede quitarse el rol de admin a sí mismo (invariante 12)", async () => {
-    vi.mocked(Repo.findAccount).mockResolvedValue(account({ id: "admin-1", localRoles: ["admin"] }));
+    vi.mocked(Repo.findAccount).mockResolvedValue(account({ id: "admin-1", roles: ["admin"] }));
 
     await expect(updateUserAccount(PANEL, "admin-1", { roles: [] })).rejects.toMatchObject({ code: "cannot_modify_self" });
   });
 
   it("no se puede dejar la instalación sin un admin activo (invariante 12)", async () => {
-    vi.mocked(Repo.findAccount).mockResolvedValue(account({ localRoles: ["admin"] }));
+    vi.mocked(Repo.findAccount).mockResolvedValue(account({ roles: ["admin"] }));
     vi.mocked(Repo.countOtherActiveAdmins).mockResolvedValue(0);
 
     await expect(updateUserAccount(PANEL, "target-1", { roles: [] })).rejects.toMatchObject({ code: "last_admin" });
@@ -241,7 +241,7 @@ describe("updateUserAccount — modo local", () => {
   });
 
   it("con otro admin activo, sí se puede quitarle el rol a uno", async () => {
-    vi.mocked(Repo.findAccount).mockResolvedValue(account({ localRoles: ["admin"] }));
+    vi.mocked(Repo.findAccount).mockResolvedValue(account({ roles: ["admin"] }));
     vi.mocked(Repo.countOtherActiveAdmins).mockResolvedValue(1);
 
     await expect(updateUserAccount(PANEL, "target-1", { roles: [] })).resolves.toBeDefined();
@@ -287,7 +287,7 @@ describe("createLocalUser", () => {
     expect(result.temporaryPassword).toEqual(expect.any(String));
     expect(evaluatePasswordPolicy(result.temporaryPassword!, POLICY)).toEqual([]);
     const [, data, cred] = vi.mocked(Repo.createAccount).mock.calls[0];
-    expect(data).toEqual({ name: "Beto", email: "beto@example.com", username: null, localRoles: ["admin"] });
+    expect(data).toEqual({ name: "Beto", email: "beto@example.com", username: null, roles: ["admin"] });
     await expect(verifyPassword(result.temporaryPassword!, cred.passwordHash)).resolves.toMatchObject({ valid: true });
     expect(result.user).toMatchObject({ id: "new-1", hasPassword: true, mustChangePassword: true });
   });
@@ -325,7 +325,7 @@ describe("createLocalUser", () => {
   it("en modo external-auth no existe", async () => {
     const env = (await import("../../config/env")).default;
     const original = env.auth;
-    env.auth = { mode: "external-auth", external-auth: { apiUrl: "https://x.test", appCode: "x", jwtSecret: "x" } };
+    env.auth = { mode: "external-auth", sessionSecret: original.sessionSecret, external-auth: { apiUrl: "https://x.test", appCode: "x", jwtSecret: "x" } };
     try {
       await expect(createLocalUser(PANEL, { name: "Beto", email: "beto@example.com" })).rejects.toMatchObject({
         code: "local_auth_not_enabled",
@@ -412,14 +412,14 @@ describe("bootstrapAdmin (CLI create-admin, D18)", () => {
       name: "jefa",
       email: "jefa@example.com",
       username: null,
-      localRoles: ["admin"],
+      roles: ["admin"],
     });
     expect(auditCalls()[0].data).toMatchObject({ action: "CREATE_USER", metadata: { via: "cli", roles: ["admin"] } });
   });
 
   it("sobre una cuenta existente (por ejemplo de EXTERNAL_AUTH) conserva su User.id y le da credencial y rol admin", async () => {
     vi.mocked(Repo.findAccountByEmail).mockResolvedValue(
-      account({ id: "external-auth-era-1", localRoles: [], localCredential: null, status: UserStatus.INACTIVE }),
+      account({ id: "external-auth-era-1", roles: [], localCredential: null, status: UserStatus.INACTIVE }),
     );
 
     const result = await bootstrapAdmin({ email: "ana@example.com" });
@@ -428,7 +428,7 @@ describe("bootstrapAdmin (CLI create-admin, D18)", () => {
     expect(Repo.createAccount).not.toHaveBeenCalled();
     expect(vi.mocked(Repo.setAdminAssignedPassword).mock.calls[0][1]).toBe("external-auth-era-1");
     expect(Repo.updateAccount).toHaveBeenCalledWith(TX, "external-auth-era-1", {
-      localRoles: ["admin"],
+      roles: ["admin"],
       status: UserStatus.ACTIVE,
       tokensValidAfter: expect.any(Date),
     });

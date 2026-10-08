@@ -14,6 +14,8 @@ export default defineConfig({
       EXTERNAL_AUTH_API_URL: "https://external-auth.test.local",
       APP_CODE_EXTERNAL_AUTH: "test-app-code",
       EXTERNAL_AUTH_JWT_SECRET: "test-jwt-secret",
+      // 32 caracteres o más: firma las sesiones de LINK en todos los modos.
+      SESSION_JWT_SECRET: "test-session-jwt-secret-0123456789abcdef",
       MAX_UPLOAD_SIZE_MB: "25",
       VAPID_PUBLIC_KEY: "test-vapid-public-key",
       VAPID_PRIVATE_KEY: "test-vapid-private-key",

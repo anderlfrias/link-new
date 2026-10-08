@@ -69,7 +69,7 @@ const adminListSelect = {
   status: true,
   syncProfileWithIntegration: true,
   createdAt: true,
-  localRoles: true,
+  roles: true,
   // Nunca el hash: solo lo que el panel necesita mostrar.
   localCredential: { select: { mustChangePassword: true, lockedUntil: true } },
   _count: { select: { conversationMemberships: true, sentMessages: true } },

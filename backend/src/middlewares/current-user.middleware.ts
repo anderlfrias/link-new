@@ -1,28 +1,24 @@
 import { NextFunction, Request, Response } from "express";
-import env from "../config/env";
 import { bindContext } from "../config/request-context";
 import { resolveInternalUser } from "../modules/auth/identity";
 import { UnauthorizedError } from "../utils/errors";
 
 /// `authenticate` solo verifica el token y expone lo que dice. Este middleware
 /// lo resuelve contra la tabla `User` local (`resolveInternalUser`,
-/// LOCAL_AUTH_PLAN.md D7): agrega el `id` interno en `req.user.internalUserId`
-/// y rechaza cuentas desactivadas y, en modo local, tokens revocados o más
-/// viejos que la duración de sesión vigente. En modo local además completa
-/// nombre, username y roles desde la base. Cualquier módulo que necesite
+/// LOCAL_AUTH_PLAN.md D7): agrega el `id` interno en `req.user.internalUserId`,
+/// rechaza cuentas desactivadas, tokens revocados o más viejos que la duración
+/// de sesión vigente, y completa nombre, username y roles desde la base.
+/// Cualquier módulo que necesite
 /// relacionar datos con `User` (conversaciones, mensajes, etc.) debe aplicar
 /// este middleware después de `authenticate`.
 export async function attachInternalUser(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user) {
+  // Sin `authIdentity` la request no pasó por `authenticate`: falla cerrado.
+  if (!req.user || !req.authIdentity) {
     return next(new UnauthorizedError());
   }
 
   try {
-    // Sin `authIdentity` (no pasó por `authenticate`) solo puede tratarse de
-    // un token de EXTERNAL_AUTH: en modo local falta `iat` y `resolveInternalUser`
-    // falla cerrado.
-    const identity = req.authIdentity ?? { mode: env.auth.mode, user: req.user, mustChangePassword: false };
-    const { user, record } = await resolveInternalUser(identity);
+    const { user, record } = await resolveInternalUser(req.authIdentity);
     req.user = user;
     // A partir de acá toda línea de log de esta request lleva el usuario, y el
     // audit trail puede registrar la identidad del actor sin que ningún service

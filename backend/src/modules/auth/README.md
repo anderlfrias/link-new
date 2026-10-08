@@ -2,10 +2,12 @@
 
 Autenticación de la instalación, en uno de dos modos que se deducen del `.env` ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)):
 
-- **`external-auth`**: este módulo no administra usuarios ni contraseñas. Reenvía credenciales al microservicio **EXTERNAL_AUTH**, verifica el JWT que este emite y sincroniza el perfil local (`User`) con lo que EXTERNAL_AUTH devuelve. El backend no emite su propio token: el que usa el cliente en cada request es el de EXTERNAL_AUTH. La mayor parte de este README describe este modo.
-- **`local`**: las cuentas y sus contraseñas viven en esta base (`LocalCredential`, separada de `User`) y el backend firma su propio token. Ver [Modo local](#modo-local).
+- **`external-auth`**: este módulo no administra usuarios ni contraseñas. Reenvía credenciales al microservicio **EXTERNAL_AUTH**, verifica el JWT que este emite **solo en ese momento**, sincroniza el perfil local (`User`) y sus roles con lo que EXTERNAL_AUTH devuelve, y emite la sesión de LINK (ver abajo). La mayor parte de este README describe este modo.
+- **`local`**: las cuentas y sus contraseñas viven en esta base (`LocalCredential`, separada de `User`). Ver [Modo local](#modo-local).
 
-En los dos modos hay un solo verificador de tokens (`verifyAccessToken`, `jwt.ts`) y una sola resolución contra la base (`resolveInternalUser`, `identity.ts`), que usan los middlewares HTTP, el socket y `/files/:id/content`. Una cuenta con `status: INACTIVE` no entra en ningún modo, aunque EXTERNAL_AUTH acepte su contraseña.
+**La sesión es siempre la de LINK:** en los dos modos el token que usa el cliente en cada request lo firma LINK (`signSessionToken`, HS256 con `SESSION_JWT_SECRET`, `iss`/`aud` `link`). El JWT de EXTERNAL_AUTH nunca llega al cliente y no autentica ninguna request, ni el socket, ni las descargas.
+
+En los dos modos hay un solo verificador de tokens (`verifyAccessToken`, `jwt.ts`) y una sola resolución contra la base (`resolveInternalUser`, `identity.ts`), que usan los middlewares HTTP, el socket y `/files/:id/content`: busca la cuenta por id, rechaza las desactivadas, las revocadas (`tokensValidAfter`) y las que superan la duración de sesión vigente, y toma nombre, username y **roles** de la fila (`User.roles`). Una cuenta con `status: INACTIVE` no entra en ningún modo, aunque EXTERNAL_AUTH acepte su contraseña.
 
 ## Variables de entorno
 
@@ -14,24 +16,24 @@ Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el mo
 | Variable | Descripción |
 |---|---|
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (siempre requerida) |
+| `SESSION_JWT_SECRET` | Obligatoria en los dos modos: secreto para firmar las sesiones de LINK (HS256), de 32 caracteres o más. `LOCAL_AUTH_JWT_SECRET`, su nombre anterior, se sigue aceptando con un aviso al arrancar |
 | `EXTERNAL_AUTH_API_URL` | Modo external-auth: URL base de EXTERNAL_AUTH, **sin** el sufijo `/v1/login` (ej. `https://external-auth.midominio.com`) |
 | `APP_CODE_EXTERNAL_AUTH` | Modo external-auth: código de esta aplicación registrado en EXTERNAL_AUTH |
 | `EXTERNAL_AUTH_JWT_SECRET` | Modo external-auth: secreto compartido para verificar (HS256) los JWT que emite EXTERNAL_AUTH |
-| `LOCAL_AUTH_JWT_SECRET` | Modo local: secreto para firmar los tokens de las cuentas locales, de 32 caracteres o más |
 | `PORT` | Opcional, puerto del servidor (default `4000`) |
 
-El código de este módulo no lee esas variables sueltas: pide la config a `requireExternalUserConfig(env.auth)`. En modo local esa función tira `503` (`external-auth_not_configured`), así que ningún camino que pegue contra EXTERNAL_AUTH (login, fotos, contactos) llega a llamar a una URL `undefined`. Lo simétrico para el modo local es `requireLocalConfig(env.auth)` (`503` `local_auth_not_enabled` en modo external-auth).
+El código de este módulo no lee esas variables sueltas: pide la config a `requireExternalUserConfig(env.auth)`. En modo local esa función tira `503` (`external-auth_not_configured`), así que ningún camino que pegue contra EXTERNAL_AUTH (login, fotos, contactos) llega a llamar a una URL `undefined`. Lo simétrico para el modo local es `requireLocalAuth(env.auth)` (`503` `local_auth_not_enabled` en modo external-auth).
 
 ## Modo local
 
-Todo lo de esta sección aplica solo sin `EXTERNAL_AUTH_*` en el `.env`. Código: `local-auth.service.ts`, `password.ts`, `jwt.ts` (`signLocalToken`) e `identity.ts`.
+Todo lo de esta sección aplica solo sin `EXTERNAL_AUTH_*` en el `.env`. Código: `local-auth.service.ts`, `password.ts`, `jwt.ts` (`signSessionToken`) e `identity.ts`.
 
 **Login** (`POST /api/v1/auth/login`, el mismo endpoint y el mismo body `{ user, password }` que en modo external-auth):
 
 - `user` es un correo si tiene "@", o un nombre de usuario si no. Se busca sin distinguir mayúsculas. Si dos cuentas difieren solo en mayúsculas (dato heredado), el login se rechaza y queda un `warn` con sus UUIDs.
 - Las contraseñas se guardan con scrypt (`N=2^14, r=8, p=5`, siempre async), normalizadas a NFKC y con un máximo de 128 caracteres. Si un hash usa parámetros viejos, se rehashea en el próximo login exitoso.
 - **Anti-enumeración:** cuenta inexistente, contraseña incorrecta y cuenta sin contraseña responden lo mismo (`401` "Usuario, correo o contraseña incorrectos.") y cuestan lo mismo: sin cuenta, se verifica igual contra un hash ficticio. Una cuenta desactivada responde `403` `account_disabled` solo si la contraseña era correcta. La auditoría (`LOGIN_FAILED`) sí distingue los motivos: `unknown_account`, `wrong_password`, `no_credential`, `account_disabled`.
-- El token es un JWT HS256 firmado con `LOCAL_AUTH_JWT_SECRET`: `sub` (id interno), `email`, `iss: "link-local"`, `aud: "link"`, `iat` y `exp` según la duración de sesión vigente. En modo local `user.id` y `user.internalUserId` son el mismo UUID, y los roles salen de `User.localRoles`.
+- El token es un JWT HS256 firmado con `SESSION_JWT_SECRET`: `sub` (id interno), `email`, `iss: "link"`, `aud: "link"`, `iat` y `exp` según la duración de sesión vigente. En modo local `user.id` y `user.internalUserId` son el mismo UUID, y los roles salen de `User.roles`.
 - **Cambio obligatorio:** si un admin restableció la contraseña, si venció, o si no cumple la política vigente, el token sale restringido (`pcr: true`) y la respuesta trae `mustChangePassword: true` con el motivo (`reset`, `expired` o `policy`, en ese orden de prioridad). Ese token solo sirve para `PATCH /auth/password`: el resto de la API responde `403` `password_change_required`, y el socket lo rechaza.
 
 - **Bloqueo por intentos fallidos** (apagado por defecto): con `maxFailedLoginAttempts` configurado, esa cantidad de contraseñas incorrectas seguidas bloquea la cuenta durante `lockoutDurationMinutes`, aunque después llegue la correcta. El contador se incrementa de forma atómica en `LocalCredential` y solo corre con el bloqueo activado; un login exitoso lo reinicia. Una cuenta bloqueada responde `429` con el mismo mensaje que el rate limit, y se audita `LOGIN_FAILED` con motivo `account_locked`.
@@ -95,7 +97,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 
 ```json
 {
-  "token": "<jwt emitido por EXTERNAL_AUTH, reenviado tal cual>",
+  "token": "<sesión de LINK: JWT propio firmado con SESSION_JWT_SECRET, no el de EXTERNAL_AUTH>",
   "user": {
     "id": "<id externo en EXTERNAL_AUTH>",
     "email": "jdoe@empresa.com",
@@ -104,13 +106,15 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
     "roles": ["admin"],
     "permissions": ["chat.read", "chat.write"],
     "app": "chat-interno",
-    "exp": 1735000000,
+    "exp": 1735000000,   // vencimiento de la sesión de LINK, no el del JWT de EXTERNAL_AUTH
     "internalUserId": "<uuid local en la tabla User>"
   }
 }
 ```
 
-`internalUserId` es el `id` interno del perfil recién creado/actualizado en la base local (por `upsert` en `email`); es lo que hay que usar para relacionar conversaciones/mensajes, nunca `user.id` (ese es el externo de EXTERNAL_AUTH).
+`internalUserId` es el `id` interno del perfil recién creado/actualizado en la base local (por `upsert` en `email`); es lo que hay que usar para relacionar conversaciones/mensajes, nunca `user.id` (ese es el externo de EXTERNAL_AUTH). Es también el `sub` de la sesión de LINK.
+
+**Roles:** en cada login se guardan en `User.roles` los roles que entrega EXTERNAL_AUTH y que la app conoce (`filterKnownRoles`, hoy solo `admin`); los demás se descartan. De ahí en más se leen de la base en cada request, como en el modo local, así que cambiar los roles en EXTERNAL_AUTH se refleja en el próximo login, no antes. `user.roles` en la respuesta son los guardados.
 
 **`user.fullName` sale de la base local (`internalUser.name`), no del JWT tal cual.** Si este usuario ya cambió su nombre acá (ver "Endpoint: cambiar mi nombre" abajo), `User.syncProfileWithIntegration` es `false` y `upsertUsuario()` no lo pisa con lo que diga EXTERNAL_AUTH — pero el JWT de EXTERNAL_AUTH sigue teniendo el nombre viejo. El controller arma la respuesta con `{ ...mappedUser, fullName: internalUser.name, ... }` para que el propio cliente vea siempre el nombre real (el de esta base), nunca el de EXTERNAL_AUTH cuando difieren.
 
@@ -231,4 +235,4 @@ El cliente manda el mismo token que devolvió `/login`:
 Authorization: Bearer <token>
 ```
 
-`authenticate` lo revalida contra `EXTERNAL_AUTH_JWT_SECRET` (algoritmo fijado a HS256) en cada request — no hay sesión propia — y llena `req.user` con la misma forma que `user` en la respuesta del login (sin `internalUserId`). Si el token expiró devuelve `401` con "Token expired"; si es inválido, "Invalid token".
+`authenticate` lo verifica contra `SESSION_JWT_SECRET` (HS256 fijado, `iss` y `aud` `link`) en cada request, sin consultar a EXTERNAL_AUTH, y llena `req.user` con la identidad del token (`attachInternalUser` la completa desde la base, con `internalUserId`). Si el token expiró devuelve `401` con "Token expired"; si es inválido —incluido un JWT de EXTERNAL_AUTH—, "Invalid token".
