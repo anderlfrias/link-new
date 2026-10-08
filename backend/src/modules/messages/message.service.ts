@@ -1,5 +1,6 @@
-import { AuditAction, ConversationType, MessageFile, MessageType, StoredFile } from "@prisma/client";
+import { AuditAction, ConversationType, MessageFile, MessageType, StoredFile, UserStatus } from "@prisma/client";
 import * as AuditService from "../audit/audit.service";
+import { findUserById } from "../auth/auth.repository";
 import {
   assertMembership,
   buildLastMessagePreview,
@@ -362,9 +363,13 @@ export async function sendMessage(
     }
   }
 
-  const resolvedContent =
+  let resolvedContent =
     input.type === "POLL" && input.poll ? input.poll.question.trim() : (input.content?.trim() ?? "");
+  if (input.type === "CONTACT") {
+    resolvedContent = await buildCanonicalContactContent(resolvedContent);
+  }
 
+  const messageType = toMessageType(input.type);
   return createAndDeliverMessage(currentUserId, conversationId, conversation, {
     content: resolvedContent,
     fileIds,
@@ -372,30 +377,79 @@ export async function sendMessage(
     poll: input.poll,
     auditAction: {
       action: AuditAction.SEND_MESSAGE,
-      metadata: {
-        messageType:
-          input.type === "STICKER"
-            ? MessageType.STICKER
-            : input.type === "CONTACT"
-              ? MessageType.CONTACT
-              : input.type === "POLL"
-                ? MessageType.POLL
-                : input.type === "CALL"
-                  ? MessageType.CALL
-                  : MessageType.TEXT,
-        fileCount: fileIds.length,
-      },
+      metadata: { messageType, fileCount: fileIds.length },
     },
-    type:
-      input.type === "STICKER"
-        ? MessageType.STICKER
-        : input.type === "CONTACT"
-          ? MessageType.CONTACT
-          : input.type === "POLL"
-            ? MessageType.POLL
-            : input.type === "CALL"
-              ? MessageType.CALL
-              : undefined,
+    // `TEXT` es el valor por defecto de la columna: se omite en vez de mandarlo.
+    type: messageType === MessageType.TEXT ? undefined : messageType,
+  });
+}
+
+/// Tipo de mensaje que puede pedir un cliente (`CreateMessageInput.type`). Los
+/// `CALL` y `SYSTEM` no se piden: los arma el servidor.
+function toMessageType(type: CreateMessageInput["type"]): MessageType {
+  switch (type) {
+    case "STICKER":
+      return MessageType.STICKER;
+    case "CONTACT":
+      return MessageType.CONTACT;
+    case "POLL":
+      return MessageType.POLL;
+    default:
+      return MessageType.TEXT;
+  }
+}
+
+/// Contenido de una tarjeta de contacto (`CONTACT`) armado por el servidor. El
+/// cliente solo aporta el `id`: nombre, correo, usuario y foto salen de la
+/// base. Si se guardara el JSON del cliente, una tarjeta podría mostrar el
+/// nombre y el correo de una persona con el `id` de otra (quien la usa abriría
+/// un chat con la equivocada) o apuntar la foto a un sitio externo (un píxel de
+/// rastreo para quien la lea). `BadRequestError` si el JSON es inválido o la
+/// cuenta no existe o está desactivada.
+async function buildCanonicalContactContent(rawContent: string): Promise<string> {
+  let contactId: unknown;
+  try {
+    contactId = (JSON.parse(rawContent) as { id?: unknown } | null)?.id;
+  } catch {
+    throw new BadRequestError("Contacto inválido");
+  }
+  if (typeof contactId !== "string" || contactId === "") {
+    throw new BadRequestError("Contacto inválido");
+  }
+
+  const contact = await findUserById(contactId);
+  if (!contact || contact.status !== UserStatus.ACTIVE) {
+    throw new BadRequestError("Contacto inválido");
+  }
+
+  return JSON.stringify({
+    id: contact.id,
+    name: contact.name,
+    username: contact.username,
+    email: contact.email,
+    avatarFileId: contact.avatarFileId,
+  });
+}
+
+/// Registro de una llamada en el chat ("Llamada de voz finalizada (01:15)", "perdida",
+/// etc.). Único punto que crea mensajes `CALL`: solo lo llama `call.service.ts`, y
+/// el validator no deja que un cliente pida ese tipo. Mismo envío y entrega que un
+/// mensaje común, sin adjuntos.
+export async function sendCallRecordMessage(
+  senderId: string,
+  conversationId: string,
+  content: string,
+): Promise<MessageWithReceipts> {
+  const conversation = await assertMembership(conversationId, senderId);
+
+  return createAndDeliverMessage(senderId, conversationId, conversation, {
+    content,
+    type: MessageType.CALL,
+    fileIds: [],
+    auditAction: {
+      action: AuditAction.SEND_MESSAGE,
+      metadata: { messageType: MessageType.CALL, fileCount: 0 },
+    },
   });
 }
 
@@ -421,8 +475,23 @@ export async function forwardMessage(
   // el destino sea una conversación distinta de la de origen.
   await assertMembership(source.conversationId, currentUserId);
 
+  // Un registro de llamada solo lo crea el servidor, y una encuesta reenviada
+  // quedaría sin sus opciones (no se copian): ninguno de los dos se reenvía.
+  if (
+    source.type === MessageType.SYSTEM ||
+    source.type === MessageType.CALL ||
+    source.type === MessageType.POLL
+  ) {
+    throw new BadRequestError("Este tipo de mensaje no se puede reenviar", "message_not_forwardable");
+  }
+
+  // Una tarjeta de contacto se reconstruye con los datos actuales de la cuenta,
+  // en vez de copiar un JSON viejo sin validar.
+  const content =
+    source.type === MessageType.CONTACT ? await buildCanonicalContactContent(source.content) : source.content;
+
   return createAndDeliverMessage(currentUserId, conversationId, conversation, {
-    content: source.content,
+    content,
     type: source.type,
     fileIds: source.files.map((file) => file.fileId),
     forwardedFromId: source.id,

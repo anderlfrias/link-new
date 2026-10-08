@@ -29,6 +29,7 @@ import { isImageMimeType } from "@/utils/file-format";
 import { FormattedMessageText } from "@/features/messages/components/FormattedMessageText";
 import { ContactMessageCard } from "@/features/messages/components/ContactMessageCard";
 import { PollMessageCard } from "@/features/messages/components/PollMessageCard";
+import { isMessageForwardable } from "@/features/messages/utils/message-forward";
 import { cn } from "@/utils/cn";
 import type { ContactMessagePayload, Message } from "@/features/messages/types/message.types";
 
@@ -138,7 +139,7 @@ export function MessageBubble({
   // (moderación) no tiene disparador en esta UI todavía, aunque el backend
   // ya lo permite.
   const canReply = !isDeleted;
-  const canForward = !isDeleted;
+  const canForward = isMessageForwardable(message);
   const canReact = !isDeleted && Boolean(onToggleReaction);
   const canEdit =
     isOwn &&

@@ -250,6 +250,57 @@ describe("MessageBubble", () => {
     expect(onReply).toHaveBeenCalledWith(baseMessage);
   });
 
+  it("no ofrece reenviar un registro de llamada ni una encuesta, pero sí un texto", async () => {
+    const user = userEvent.setup();
+    const renderWith = (message: Message) =>
+      render(
+        <MessageBubble
+          message={message}
+          isOwn={false}
+          showSender={false}
+          isSelfChat={false}
+          currentUserId="user-2"
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onReply={onReply}
+          onForward={onForward}
+          onJumpToMessage={onJumpToMessage}
+        />,
+      );
+
+    const call: Message = { ...baseMessage, id: "msg-call", type: "CALL", content: "📞 Llamada de voz perdida" };
+    const poll: Message = {
+      ...baseMessage,
+      id: "msg-poll",
+      type: "POLL",
+      content: "¿Dónde almorzamos?",
+      poll: {
+        id: "poll-1",
+        messageId: "msg-poll",
+        question: "¿Dónde almorzamos?",
+        allowMultiple: false,
+        options: [
+          { id: "o-1", pollId: "poll-1", text: "Aquí", order: 0, votes: [], voteCount: 0 },
+          { id: "o-2", pollId: "poll-1", text: "Allá", order: 1, votes: [], voteCount: 0 },
+        ],
+        totalVotes: 0,
+        createdAt: "2026-09-09T10:00:00Z",
+      },
+    };
+
+    for (const message of [call, poll]) {
+      const { unmount } = renderWith(message);
+      await user.click(screen.getByRole("button", { name: "Opciones del mensaje" }));
+      expect(screen.getByRole("menuitem", { name: "Responder" })).toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Reenviar" })).not.toBeInTheDocument();
+      unmount();
+    }
+
+    renderWith(baseMessage);
+    await user.click(screen.getByRole("button", { name: "Opciones del mensaje" }));
+    expect(screen.getByRole("menuitem", { name: "Reenviar" })).toBeInTheDocument();
+  });
+
   it("permite editar el mensaje cuando canEdit es true", async () => {
     const user = userEvent.setup();
     render(

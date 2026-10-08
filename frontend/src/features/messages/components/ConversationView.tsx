@@ -8,6 +8,7 @@ import { useConversation } from "@/features/conversations/hooks/use-conversation
 import { useMessages } from "@/features/messages/hooks/use-messages";
 import { useTyping } from "@/features/messages/hooks/use-typing";
 import { useMessageAttachments } from "@/features/messages/hooks/use-message-attachments";
+import { isMessageForwardable } from "@/features/messages/utils/message-forward";
 import { Drawer } from "@/components/ui/Drawer";
 import { Modal } from "@/components/ui/Modal";
 import { ConversationHeader } from "@/components/layout/ConversationHeader";
@@ -139,7 +140,7 @@ export function ConversationView({ conversationId }: ConversationViewProps) {
 
   const canForwardSelected = useMemo(() => {
     if (selectedMessages.length === 0) return false;
-    return selectedMessages.every((m) => !m.deletedAt);
+    return selectedMessages.every(isMessageForwardable);
   }, [selectedMessages]);
 
   const canDeleteSelected = useMemo(() => {

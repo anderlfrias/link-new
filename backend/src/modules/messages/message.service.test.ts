@@ -39,6 +39,9 @@ vi.mock("web-push", () => ({
 
 vi.mock("./message.repository");
 vi.mock("../files/file.repository");
+vi.mock("../auth/auth.repository", () => ({
+  findUserById: vi.fn(),
+}));
 vi.mock("../push/push.service", () => ({
   notifyUsers: vi.fn(),
 }));
@@ -51,6 +54,7 @@ import * as PushService from "../push/push.service";
 import * as SettingsService from "../settings/settings.service";
 import * as AuditService from "../audit/audit.service";
 import * as FileRepository from "../files/file.repository";
+import { findUserById } from "../auth/auth.repository";
 import * as MessageRepository from "./message.repository";
 import { MESSAGE_EVENTS } from "./message.socket";
 import {
@@ -59,6 +63,7 @@ import {
   forwardMessage,
   listConversationFiles,
   listMessages,
+  sendCallRecordMessage,
   sendMessage,
   toggleReaction,
   votePoll,
@@ -75,6 +80,27 @@ function buildMockConversation(overrides: any = {}) {
       { userId: "u-1", user: { id: "u-1", name: "User 1" } },
       { userId: "u-2", user: { id: "u-2", name: "User 2" } },
     ],
+    ...overrides,
+  };
+}
+
+/// Lo que `buildCanonicalContactContent` guarda para `buildMockContactUser()`.
+const CANONICAL_CONTACT = {
+  id: "u-contact",
+  name: "Contacto Real",
+  username: "contacto",
+  email: "contacto@real.test",
+  avatarFileId: "avatar-1",
+};
+
+function buildMockContactUser(overrides: any = {}) {
+  return {
+    id: "u-contact",
+    name: "Contacto Real",
+    username: "contacto",
+    email: "contacto@real.test",
+    avatarFileId: "avatar-1",
+    status: "ACTIVE",
     ...overrides,
   };
 }
@@ -173,6 +199,7 @@ describe("message.service", () => {
       const mockConv = buildMockConversation();
       vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
       const contactPayload = JSON.stringify({ id: "u-contact", name: "Contacto", email: "contacto@test.com" });
+      vi.mocked(findUserById).mockResolvedValue(buildMockContactUser() as any);
       const createdMsg = buildMockMessage({
         type: MessageType.CONTACT,
         content: contactPayload,
@@ -187,7 +214,7 @@ describe("message.service", () => {
       expect(MessageRepository.createMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.CONTACT,
-          content: contactPayload,
+          content: JSON.stringify(CANONICAL_CONTACT),
         }),
       );
       expect(AuditService.record).toHaveBeenCalledWith(
@@ -233,6 +260,60 @@ describe("message.service", () => {
       ).rejects.toThrow("A message can include at most 2 files");
     });
 
+    describe("tarjetas de contacto", () => {
+      beforeEach(() => {
+        vi.mocked(ConversationService.assertMembership).mockResolvedValue(buildMockConversation() as any);
+        vi.mocked(getConnectedUserIds).mockResolvedValue([]);
+        vi.mocked(MessageRepository.createMessage).mockResolvedValue(
+          buildMockMessage({ type: MessageType.CONTACT }) as any,
+        );
+      });
+
+      it("se guarda con los datos reales de la cuenta, ignorando nombre, correo y foto del cliente", async () => {
+        vi.mocked(findUserById).mockResolvedValue(buildMockContactUser() as any);
+        // Nombre y correo de otra persona, con el id del atacante y una foto externa.
+        const forged = JSON.stringify({
+          id: "u-contact",
+          name: "Directora de RR.HH.",
+          email: "rrhh@example.org",
+          avatarUrl: "https://atacante.example/pixel.png",
+        });
+
+        await sendMessage("u-1", "conv-1", { content: forged, type: "CONTACT" });
+
+        expect(findUserById).toHaveBeenCalledWith("u-contact");
+        expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ content: JSON.stringify(CANONICAL_CONTACT) }),
+        );
+        const saved = vi.mocked(MessageRepository.createMessage).mock.calls[0][0].content;
+        expect(saved).not.toContain("atacante.example");
+        expect(saved).not.toContain("RR.HH.");
+      });
+
+      it("rechaza un CONTACT de una cuenta inexistente o desactivada", async () => {
+        const content = JSON.stringify({ id: "u-contact" });
+
+        vi.mocked(findUserById).mockResolvedValueOnce(null);
+        await expect(sendMessage("u-1", "conv-1", { content, type: "CONTACT" })).rejects.toThrow("Contacto inválido");
+
+        vi.mocked(findUserById).mockResolvedValueOnce(buildMockContactUser({ status: "INACTIVE" }) as any);
+        await expect(sendMessage("u-1", "conv-1", { content, type: "CONTACT" })).rejects.toThrow(BadRequestError);
+
+        expect(MessageRepository.createMessage).not.toHaveBeenCalled();
+      });
+
+      it("rechaza un CONTACT con JSON inválido o sin id", async () => {
+        for (const content of ["no es json", "null", "[]", JSON.stringify({ name: "Sin id" }), JSON.stringify({ id: 5 })]) {
+          await expect(sendMessage("u-1", "conv-1", { content, type: "CONTACT" })).rejects.toThrow(
+            "Contacto inválido",
+          );
+        }
+
+        expect(findUserById).not.toHaveBeenCalled();
+        expect(MessageRepository.createMessage).not.toHaveBeenCalled();
+      });
+    });
+
     it("rechaza con 400 si algún archivo no es adjuntable por el remitente y no crea el mensaje", async () => {
       const mockConv = buildMockConversation();
       vi.mocked(ConversationService.assertMembership).mockResolvedValue(mockConv as any);
@@ -262,6 +343,47 @@ describe("message.service", () => {
       expect(MessageRepository.createMessage).toHaveBeenCalledWith(
         expect.objectContaining({ fileIds: ["f-1", "f-2"] }),
       );
+    });
+  });
+
+  describe("sendCallRecordMessage", () => {
+    it("crea un mensaje CALL y lo audita como SEND_MESSAGE", async () => {
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(buildMockConversation() as any);
+      vi.mocked(getConnectedUserIds).mockResolvedValue([]);
+      vi.mocked(MessageRepository.createMessage).mockResolvedValue(
+        buildMockMessage({ type: MessageType.CALL, content: "📞 Llamada de voz perdida" }) as any,
+      );
+
+      const result = await sendCallRecordMessage("u-1", "conv-1", "📞 Llamada de voz perdida");
+
+      expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: "conv-1",
+          senderId: "u-1",
+          type: MessageType.CALL,
+          content: "📞 Llamada de voz perdida",
+          fileIds: [],
+        }),
+      );
+      expect(AuditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AuditAction.SEND_MESSAGE,
+          metadata: { messageType: MessageType.CALL, fileCount: 0 },
+        }),
+      );
+      expect(mockEmit).toHaveBeenCalledWith(MESSAGE_EVENTS.CREATED, expect.objectContaining({ id: "msg-1" }));
+      expect(result.type).toBe(MessageType.CALL);
+    });
+
+    it("exige membresía en la conversación", async () => {
+      vi.mocked(ConversationService.assertMembership).mockRejectedValue(
+        new ForbiddenError("You are not a member of this conversation"),
+      );
+
+      await expect(sendCallRecordMessage("u-ajeno", "conv-1", "📞 Llamada de voz perdida")).rejects.toThrow(
+        ForbiddenError,
+      );
+      expect(MessageRepository.createMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -331,6 +453,48 @@ describe("message.service", () => {
       expect(FileRepository.countFilesAttachableBy).not.toHaveBeenCalled();
       expect(MessageRepository.createMessage).toHaveBeenCalledWith(
         expect.objectContaining({ fileIds: ["f-de-otro"] }),
+      );
+    });
+
+    it.each([
+      { type: MessageType.CALL, label: "un registro de llamada" },
+      { type: MessageType.POLL, label: "una encuesta" },
+      { type: MessageType.SYSTEM, label: "un mensaje del sistema" },
+    ])("rechaza reenviar $label ($type)", async ({ type }) => {
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(buildMockConversation() as any);
+      vi.mocked(MessageRepository.findById).mockResolvedValue(
+        buildMockMessage({ id: "msg-source", conversationId: "conv-source", type }) as any,
+      );
+
+      const attempt = forwardMessage("u-1", "conv-target", "msg-source");
+
+      await expect(attempt).rejects.toThrow(BadRequestError);
+      await expect(attempt).rejects.toMatchObject({ code: "message_not_forwardable" });
+      expect(MessageRepository.createMessage).not.toHaveBeenCalled();
+    });
+
+    it("reenvía un CONTACT reconstruido con los datos actuales de la cuenta", async () => {
+      vi.mocked(ConversationService.assertMembership).mockResolvedValue(buildMockConversation() as any);
+      vi.mocked(MessageRepository.findById).mockResolvedValue(
+        buildMockMessage({
+          id: "msg-source",
+          conversationId: "conv-source",
+          type: MessageType.CONTACT,
+          // Un payload viejo, guardado antes de que el servidor lo armara.
+          content: JSON.stringify({ id: "u-contact", name: "Nombre viejo", avatarUrl: "https://atacante.example/p.png" }),
+        }) as any,
+      );
+      vi.mocked(findUserById).mockResolvedValue(buildMockContactUser() as any);
+      vi.mocked(getConnectedUserIds).mockResolvedValue([]);
+      vi.mocked(MessageRepository.createMessage).mockResolvedValue(buildMockMessage({ id: "msg-fwd" }) as any);
+
+      await forwardMessage("u-1", "conv-target", "msg-source");
+
+      expect(MessageRepository.createMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.CONTACT,
+          content: JSON.stringify(CANONICAL_CONTACT),
+        }),
       );
     });
 

@@ -8,11 +8,9 @@ import * as CallRepository from "./call.repository";
 import { CallResponse, InitiateCallInput } from "./call.types";
 
 async function sendCallChatMessage(senderId: string, conversationId: string, content: string) {
-  const { sendMessage } = await import("../messages/message.service");
-  await sendMessage(senderId, conversationId, {
-    content,
-    type: "CALL",
-  });
+  // Import dinámico: evita el ciclo de módulos entre llamadas y mensajes.
+  const { sendCallRecordMessage } = await import("../messages/message.service");
+  await sendCallRecordMessage(senderId, conversationId, content);
 }
 
 export function formatDuration(seconds: number): string {

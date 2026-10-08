@@ -10,11 +10,17 @@ import type { StoredFile } from "@/features/files/types/file.types";
  * `POLL` representa una encuesta interactiva dentro de grupos. */
 export type MessageType = "TEXT" | "SYSTEM" | "STICKER" | "CONTACT" | "POLL" | "CALL";
 
+/** Contenido de un mensaje `CONTACT`. Lo arma el servidor con los datos reales de la
+ * cuenta (ver `buildCanonicalContactContent`, backend/src/modules/messages/message.service.ts);
+ * la foto se resuelve con `avatarFileId`. */
 export interface ContactMessagePayload {
   id: string;
   name: string;
   username?: string | null;
   email: string;
+  avatarFileId?: string | null;
+  /** Solo en tarjetas viejas, guardadas antes de que el servidor armara el contenido:
+   * se usa únicamente si apunta al backend (ver `isBackendFileUrl`). */
   avatarUrl?: string | null;
 }
 

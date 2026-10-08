@@ -527,6 +527,42 @@ describe("ConversationView", () => {
     const forwardBtn = screen.getByLabelText("Reenviar mensajes");
     expect(forwardBtn).toBeEnabled();
   });
+
+  it("deshabilita reenviar la selección si incluye un registro de llamada", async () => {
+    const user = userEvent.setup();
+    const callRecord: Message = {
+      ...mockMessage,
+      id: "msg-call",
+      type: "CALL",
+      content: "📞 Llamada de voz perdida",
+    };
+
+    mockUseMessages.mockReturnValue({
+      messages: [mockMessage, callRecord],
+      status: "ready",
+      hasMore: false,
+      loadingMore: false,
+      loadMore: vi.fn(),
+      send: vi.fn(),
+      edit: vi.fn(),
+      remove: vi.fn(),
+      toggleReaction: vi.fn(),
+    });
+
+    render(<ConversationView conversationId="conv-1" />);
+
+    // Seleccionar el texto: el reenvío está habilitado.
+    await user.click(screen.getAllByRole("button", { name: "Opciones del mensaje" })[0]);
+    await user.click(screen.getByRole("menuitem", { name: "Seleccionar" }));
+    expect(screen.getByText("1 seleccionado")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reenviar mensajes")).toBeEnabled();
+
+    // Sumar el registro de llamada a la selección: ya no se puede reenviar.
+    const selectButtons = screen.getAllByRole("button", { name: "Seleccionar mensaje" });
+    await user.click(selectButtons[selectButtons.length - 1]);
+    expect(screen.getByText("2 seleccionados")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reenviar mensajes")).toBeDisabled();
+  });
 });
 
 

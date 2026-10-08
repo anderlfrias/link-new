@@ -217,13 +217,10 @@ describe("call.service", () => {
 
       expect(result.isBusy).toBe(true);
       expect(PushService.notifyUsers).not.toHaveBeenCalled();
-      expect(MessageService.sendMessage).toHaveBeenCalledWith(
+      expect(MessageService.sendCallRecordMessage).toHaveBeenCalledWith(
         callerId,
         conversationId,
-        expect.objectContaining({
-          content: expect.stringContaining("ocupado"),
-          type: "CALL",
-        }),
+        expect.stringContaining("ocupado"),
       );
     });
   });
@@ -301,13 +298,10 @@ describe("call.service", () => {
 
       const result = await rejectCall(callerId, callId);
       expect(result.status).toBe(CallStatus.MISSED);
-      expect(MessageService.sendMessage).toHaveBeenCalledWith(
+      expect(MessageService.sendCallRecordMessage).toHaveBeenCalledWith(
         callerId,
         conversationId,
-        expect.objectContaining({
-          content: "📞 Llamada de voz perdida",
-          type: "CALL",
-        }),
+        "📞 Llamada de voz perdida",
       );
     });
 
@@ -336,13 +330,10 @@ describe("call.service", () => {
 
       const result = await rejectCall(receiverId, callId, "declined");
       expect(result.status).toBe(CallStatus.REJECTED);
-      expect(MessageService.sendMessage).toHaveBeenCalledWith(
+      expect(MessageService.sendCallRecordMessage).toHaveBeenCalledWith(
         callerId,
         conversationId,
-        expect.objectContaining({
-          content: "📹 Videollamada rechazada",
-          type: "CALL",
-        }),
+        "📹 Videollamada rechazada",
       );
     });
   });
@@ -436,13 +427,10 @@ describe("call.service", () => {
 
       const res = await endCall(callerId, callId);
       expect(res.status).toBe(CallStatus.COMPLETED);
-      expect(MessageService.sendMessage).toHaveBeenCalledWith(
+      expect(MessageService.sendCallRecordMessage).toHaveBeenCalledWith(
         callerId,
         conversationId,
-        expect.objectContaining({
-          content: expect.stringMatching(/📞 Llamada de voz finalizada \(01:15\)/),
-          type: "CALL",
-        }),
+        expect.stringMatching(/📞 Llamada de voz finalizada \(01:15\)/),
       );
       expect(AuditService.record).toHaveBeenCalled();
     });

@@ -11,6 +11,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { useStartConversation } from "@/features/conversations/hooks/use-start-conversation";
 import { copyTextToClipboard } from "@/utils/clipboard";
 import { cn } from "@/utils/cn";
+import { getAvatarUrl, isBackendFileUrl } from "@/utils/file-url";
 import type { ContactMessagePayload } from "@/features/messages/types/message.types";
 
 export interface ContactMessageCardProps {
@@ -50,6 +51,11 @@ export function ContactMessageCard({
   }
 
   const isSelfContact = Boolean(currentUserId && contact.id === currentUserId);
+  // Nunca se carga una imagen de fuera del backend: la foto sale de `avatarFileId`, y
+  // el `avatarUrl` de una tarjeta vieja solo se usa si apunta al backend.
+  const avatarUrl =
+    getAvatarUrl({ avatarFileId: contact.avatarFileId }) ??
+    (contact.avatarUrl && isBackendFileUrl(contact.avatarUrl) ? contact.avatarUrl : null);
 
   async function handleStartChat() {
     if (!contact) return;
@@ -71,7 +77,7 @@ export function ContactMessageCard({
       <div className="flex items-center gap-3">
         <Avatar
           name={contact.name}
-          imageUrl={contact.avatarUrl ?? undefined}
+          imageUrl={avatarUrl ?? undefined}
           size="lg"
         />
         <div className="flex min-w-0 flex-1 flex-col">

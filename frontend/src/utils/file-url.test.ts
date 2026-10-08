@@ -3,6 +3,7 @@ import {
   buildStoredFileUrl,
   buildUploadedFileUrl,
   getAvatarUrl,
+  isBackendFileUrl,
   resolveFileUrl,
 } from "./file-url";
 
@@ -37,6 +38,21 @@ describe("file-url", () => {
       "http://localhost:4000/uploads/2026/09/doc.pdf",
     );
     expect(resolveFileUrl({})).toBe("");
+  });
+
+  describe("isBackendFileUrl", () => {
+    it("acepta una URL de archivo del propio backend", () => {
+      expect(isBackendFileUrl("http://localhost:4000/api/v1/files/f-1/content")).toBe(true);
+      expect(isBackendFileUrl("http://localhost:4000/api/v1/files/f-1/content?t=abc")).toBe(true);
+    });
+
+    it("rechaza URLs de otros sitios, aunque imiten la ruta del backend", () => {
+      expect(isBackendFileUrl("https://atacante.example/pixel.png")).toBe(false);
+      expect(isBackendFileUrl("https://atacante.example/api/v1/files/f-1/content")).toBe(false);
+      expect(isBackendFileUrl("http://localhost:4000.atacante.example/api/v1/files/f-1/content")).toBe(false);
+      expect(isBackendFileUrl("http://localhost:4000/uploads/avatar.png")).toBe(false);
+      expect(isBackendFileUrl("")).toBe(false);
+    });
   });
 
   it("getAvatarUrl prioriza avatarFileId/imageFileId usando /api/v1/files/:id/content", () => {

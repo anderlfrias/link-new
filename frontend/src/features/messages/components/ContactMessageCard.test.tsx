@@ -104,6 +104,77 @@ describe("ContactMessageCard", () => {
     });
   });
 
+  describe("foto del contacto", () => {
+    const withoutPhoto: ContactMessagePayload = {
+      id: "user-contact-123",
+      name: "Dra. Sofía Martínez",
+      email: "smartinez@example.com",
+    };
+
+    it("muestra la foto a partir de avatarFileId", () => {
+      render(
+        <ContactMessageCard
+          rawContent={JSON.stringify({ ...withoutPhoto, avatarFileId: "f-avatar" })}
+          isOwn={false}
+          currentUserId="user-viewer"
+        />,
+      );
+
+      expect(screen.getByRole("img", { name: "Dra. Sofía Martínez" })).toHaveAttribute(
+        "src",
+        "http://localhost:4000/api/v1/files/f-avatar/content",
+      );
+    });
+
+    it("ignora un avatarUrl externo de un mensaje viejo", () => {
+      render(
+        <ContactMessageCard
+          rawContent={JSON.stringify({ ...withoutPhoto, avatarUrl: "https://atacante.example/pixel.png" })}
+          isOwn={false}
+          currentUserId="user-viewer"
+        />,
+      );
+
+      // Nunca se pide una imagen a un host externo: queda el avatar con iniciales.
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
+      expect(screen.getByText("D")).toBeInTheDocument();
+    });
+
+    it("usa un avatarUrl viejo que apunta al backend", () => {
+      render(
+        <ContactMessageCard
+          rawContent={JSON.stringify({
+            ...withoutPhoto,
+            avatarUrl: "http://localhost:4000/api/v1/files/f-viejo/content",
+          })}
+          isOwn={false}
+          currentUserId="user-viewer"
+        />,
+      );
+
+      expect(screen.getByRole("img", { name: "Dra. Sofía Martínez" })).toHaveAttribute(
+        "src",
+        "http://localhost:4000/api/v1/files/f-viejo/content",
+      );
+    });
+
+    it("prefiere avatarFileId sobre un avatarUrl viejo", () => {
+      render(
+        <ContactMessageCard
+          rawContent={JSON.stringify({
+            ...withoutPhoto,
+            avatarFileId: "f-nuevo",
+            avatarUrl: "http://localhost:4000/api/v1/files/f-viejo/content",
+          })}
+          isOwn={false}
+          currentUserId="user-viewer"
+        />,
+      );
+
+      expect(screen.getByRole("img")).toHaveAttribute("src", "http://localhost:4000/api/v1/files/f-nuevo/content");
+    });
+  });
+
   it("renderiza fallback si el contenido no es un JSON válido de contacto", () => {
     render(
       <ContactMessageCard

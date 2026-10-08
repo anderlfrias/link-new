@@ -25,6 +25,13 @@ export function getAvatarUrl(userOrGroup: {
   return null;
 }
 
+/** `true` si `url` apunta a un archivo servido por este backend. Una tarjeta de contacto vieja
+ * guardaba la URL de la foto que mandó el cliente: cargar una de otro sitio le avisaba a ese sitio
+ * quién leía el mensaje y cuándo. */
+export function isBackendFileUrl(url: string): boolean {
+  return url.startsWith(`${BACKEND_ORIGIN}/api/v1/files/`);
+}
+
 /**
  * Resuelve la URL absoluta para un archivo, priorizando la URL firmada del backend (`file.url`)
  * o usando `buildStoredFileUrl(file.path)` como fallback transitorio.

@@ -38,7 +38,6 @@ import { formatDuration } from "@/utils/format-duration";
 import { buildMessagePreview } from "@/utils/message-preview";
 import { extractFilesFromClipboard } from "@/utils/clipboard";
 import { getActiveMentionQuery, type ActiveMentionQuery } from "@/utils/mention";
-import { getAvatarUrl } from "@/utils/file-url";
 import { clearDraft, getDraft, setDraft } from "@/features/messages/lib/draft-store";
 import { useTranslation } from "@/i18n";
 import type { DirectoryUser } from "@/features/users/types/user.types";
@@ -196,7 +195,7 @@ export function MessageInput({
         name: user.name,
         username: user.username ?? null,
         email: user.email,
-        avatarUrl: getAvatarUrl(user),
+        avatarFileId: user.avatarFileId,
       };
       void onSend(JSON.stringify(contactPayload), undefined, "CONTACT");
     }

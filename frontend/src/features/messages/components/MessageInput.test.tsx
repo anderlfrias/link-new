@@ -648,7 +648,7 @@ describe("MessageInput", () => {
         name: "Contacto Ejemplo",
         username: "ejemplo",
         email: "ejemplo@test.com",
-        avatarUrl: null,
+        avatarFileId: null,
       }),
       undefined,
       "CONTACT",

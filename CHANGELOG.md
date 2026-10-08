@@ -59,6 +59,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Las suscripciones de notificaciones push aceptaban cualquier URL, y el servidor le enviaba peticiones a esa URL al notificar. Ahora solo se aceptan los servicios push de los navegadores (Google, Mozilla, Microsoft y Apple).
 - Un usuario podía dar de baja la suscripción push de otro si conocía su endpoint.
 - Las notificaciones push, con el texto de los mensajes, seguían llegando a un navegador después de cerrar sesión, y a los dispositivos de una cuenta desactivada o con la contraseña restablecida.
+- Cualquier usuario podía crear registros de llamada falsos en sus conversaciones, por la API o reenviando un registro real. Los registros de llamada y las encuestas ya no se pueden reenviar.
+- Una tarjeta de contacto podía mostrar el nombre y el correo de una persona y abrir el chat con otra, o cargar su foto desde un sitio externo. Ahora el servidor arma la tarjeta con los datos reales de la cuenta.
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
 - Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.

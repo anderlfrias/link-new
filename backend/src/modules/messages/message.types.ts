@@ -17,9 +17,11 @@ export interface CreateMessageInput {
   replyToId?: string;
   /// Omitido (o ausente) = `TEXT`, el caso normal. `"STICKER"` exige
   /// `content` vacío y exactamente un `fileId`. `"CONTACT"` contiene JSON en
-  /// `content`. `"POLL"` representa una encuesta en grupo con opciones interactivas.
-  /// `"CALL"` representa un registro de resultado o duración de llamada.
-  type?: "STICKER" | "CONTACT" | "POLL" | "CALL";
+  /// `content`, pero solo el `id` del contacto se toma del cliente: el resto se
+  /// reconstruye desde la base (`buildCanonicalContactContent`).
+  /// `"POLL"` representa una encuesta en grupo con opciones interactivas.
+  /// Los registros de llamada (`CALL`) los crea solo el servidor.
+  type?: "STICKER" | "CONTACT" | "POLL";
   poll?: CreatePollInput;
 }
 

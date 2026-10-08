@@ -72,6 +72,14 @@ describe("message.validator", () => {
       expect(result.content).toBe(contactPayload);
     });
 
+    it("rechaza type CALL (y SYSTEM) enviado por un cliente", async () => {
+      // Los registros de llamada los arma el servidor (sendCallRecordMessage).
+      await expect(
+        createMessageSchema.validate({ content: "📞 Llamada de voz finalizada (00:10)", type: "CALL" }),
+      ).rejects.toThrow();
+      await expect(createMessageSchema.validate({ content: "algo", type: "SYSTEM" })).rejects.toThrow();
+    });
+
     it("rechaza CONTACT si tiene archivos adjuntos o contenido vacío", async () => {
       await expect(
         createMessageSchema.validate({
