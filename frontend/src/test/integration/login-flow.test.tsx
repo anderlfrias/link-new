@@ -39,14 +39,12 @@ describe("Flujo clave: Login", () => {
     const mockAuthResponse = {
       token: "jwt-token-123",
       user: {
-        id: "xu-1",
+        id: "internal-u-1",
         internalUserId: "internal-u-1",
         email: "doctor@example.com",
         username: "rdoctor",
         fullName: "Dr. Roberto",
         roles: ["USER"],
-        permissions: [],
-        app: "chat-interno",
         exp: Math.floor(Date.now() / 1000) + 3600,
         notificationSoundEnabled: true,
       },

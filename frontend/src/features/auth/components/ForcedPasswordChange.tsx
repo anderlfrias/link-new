@@ -30,7 +30,7 @@ export function ForcedPasswordChange() {
   }, [refresh]);
 
   const reason = session?.user.mustChangePasswordReason;
-  const policy = config?.mode === "local" ? config.passwordPolicy : null;
+  const policy = config?.passwordPolicy ?? null;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-blue-light/10 via-white to-brand-teal-light/10 px-4 dark:from-brand-blue-dark/20 dark:via-neutral-950 dark:to-brand-teal-dark/10">

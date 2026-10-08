@@ -13,6 +13,8 @@ publicSettingsRouter.use(authenticate, attachInternalUser)
 
 `requireRoles("admin")` (`src/middlewares/auth.middleware.ts`) exige que `"admin"` esté presente en `req.user.roles`. Los roles salen siempre de `User.roles`, que completa `attachInternalUser`. Qué los escribe depende del modo: en modo local, un admin desde el panel de usuarios o el CLI; en modo external-auth, cada login, a partir de los roles que entrega EXTERNAL_AUTH (solo los que la app conoce). Ver [`../auth/README.md`](../auth/README.md). Es la primera ruta de la app que usa este guard.
 
+**Ajustes que dependen del proveedor de autenticación.** `localSessionTtlHours` (duración de la sesión de LINK; el nombre es histórico) rige con cualquier proveedor. Los de contraseñas y bloqueo (`passwordMinLength`, `passwordRequire*`, `passwordExpirationDays`, `passwordHistoryCount`, `maxFailedLoginAttempts`, `lockoutDurationMinutes`; `LOCAL_ACCOUNT_POLICY_FIELDS` en `settings.validator.ts`) solo tienen sentido con cuentas locales: con un proveedor externo, `PATCH /admin/settings` los rechaza con `400` y `code: "local_auth_setting_not_applicable"` (`settings.controller.ts`), en lugar de guardarlos sin que rijan nada.
+
 ## Endpoints
 
 | Método | Ruta | Rol | Descripción |

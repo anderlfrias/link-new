@@ -28,8 +28,6 @@ function buildMappedUser(overrides: Partial<MappedUser> = {}): MappedUser {
     username: null,
     fullName: "",
     roles: [],
-    permissions: [],
-    app: "link",
     exp: Math.floor(Date.now() / 1000) + 3600,
     authProvider: "external-test",
     ...overrides,

@@ -4,14 +4,16 @@ import { useState } from "react";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { getAuditActionLabel } from "@/features/admin/constants/audit-action-labels.constant";
 import { useTranslation } from "@/i18n";
+import { useAuthConfig } from "@/providers/auth-config-provider";
 import type { AdminAuditLogListItem } from "@/features/admin/types/admin-audit.types";
 
 interface AdminAuditRowProps {
   item: AdminAuditLogListItem;
 }
 
-/** Acciones cuyo metadata trae `provider`. Las filas anteriores al modo local
- * no lo tienen: "ausente" significa external-auth (backend/src/modules/audit/audit.types.ts). */
+/** Acciones cuyo metadata trae `provider`: "local", o el id del proveedor externo. Las filas
+ * anteriores al modo local no lo tienen: "ausente" significa un proveedor externo
+ * (backend/src/modules/audit/audit.types.ts). */
 const ACTIONS_WITH_PROVIDER = new Set(["LOGIN", "LOGIN_FAILED"]);
 
 function metadataString(metadata: unknown, key: string): string | null {
@@ -22,6 +24,7 @@ function metadataString(metadata: unknown, key: string): string | null {
 
 export function AdminAuditRow({ item }: AdminAuditRowProps) {
   const { t, locale } = useTranslation();
+  const { config } = useAuthConfig();
   const [expanded, setExpanded] = useState(false);
 
   /** Traduce `key` o, si no hay traducción, muestra el valor crudo. */
@@ -34,11 +37,18 @@ export function AdminAuditRow({ item }: AdminAuditRowProps) {
 
   // Proveedor, motivo y origen se muestran sin abrir el detalle: son lo primero
   // que mira un admin en un login fallido o en un cambio de cuenta.
-  const provider = ACTIONS_WITH_PROVIDER.has(item.action) ? (metadataString(item.metadata, "provider") ?? "external-auth") : null;
+  const providerId = ACTIONS_WITH_PROVIDER.has(item.action) ? (metadataString(item.metadata, "provider") ?? "external") : null;
+  // El id de un proveedor externo se muestra con su nombre si es el de esta instalación.
+  const provider =
+    providerId === null
+      ? null
+      : providerId === config?.provider.id
+        ? config.provider.displayName
+        : translateOr(`admin.audit.providers.${providerId}`, providerId);
   const reason = metadataString(item.metadata, "reason");
   const via = metadataString(item.metadata, "via");
   const detailChips = [
-    provider && translateOr(`admin.audit.providers.${provider}`, provider),
+    provider,
     reason && translateOr(`admin.audit.reasons.${reason}`, reason),
     via && translateOr(`admin.audit.via.${via}`, via),
   ].filter((chip): chip is string => Boolean(chip));

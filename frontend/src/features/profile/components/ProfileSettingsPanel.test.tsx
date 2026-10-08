@@ -3,21 +3,24 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProfileSettingsPanel } from "./ProfileSettingsPanel";
 import { APP_VERSION } from "@/constants/app-version.constant";
+import { createMockAuthConfig } from "@/test/test-utils";
+import { deriveAuthCapabilities } from "@/providers/auth-config-provider";
 
 const mockUseAuth = vi.fn();
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-vi.mock("@/providers/auth-config-provider", () => ({
-  useAuthConfig: () => ({
-    config: {
-      mode: "local",
-      passwordPolicy: { minLength: 12, maxLength: 128, requireUppercase: false, requireLowercase: false, requireNumber: false, requireSymbol: false, historyCount: 0 },
-    },
-    refresh: vi.fn(),
-  }),
-}));
+// Si la contraseña se cambia desde LINK lo decide `GET /auth/config`: cada test elige el proveedor.
+const mockAuthConfig = vi.fn();
+vi.mock("@/providers/auth-config-provider", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/providers/auth-config-provider")>();
+  return {
+    ...actual,
+    useAuthConfig: () => ({ config: mockAuthConfig(), refresh: vi.fn() }),
+    useAuthCapabilities: () => actual.deriveAuthCapabilities(mockAuthConfig()),
+  };
+});
 
 vi.mock("@/features/auth/api/auth.api", () => ({
   changePassword: vi.fn(),
@@ -71,6 +74,7 @@ describe("ProfileSettingsPanel", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuthConfig.mockReturnValue(createMockAuthConfig("external"));
     mockUseAuth.mockReturnValue({
       session: {
         token: "tok-1",
@@ -158,7 +162,8 @@ describe("ProfileSettingsPanel", () => {
   });
 
   describe("Seguridad: cambiar contraseña (LOCAL_AUTH_PLAN.md, Fase 9)", () => {
-    function withProvider(authProvider: "external-auth" | "local" | undefined) {
+    function withProvider(kind: "local" | "external" | null) {
+      mockAuthConfig.mockReturnValue(kind ? createMockAuthConfig(kind) : null);
       const completePasswordChange = vi.fn();
       mockUseAuth.mockReturnValue({
         session: {
@@ -169,7 +174,6 @@ describe("ProfileSettingsPanel", () => {
             fullName: "Juan Perez",
             email: "jperez@example.com",
             notificationSoundEnabled: true,
-            authProvider,
           },
         },
         completePasswordChange,
@@ -177,7 +181,7 @@ describe("ProfileSettingsPanel", () => {
       return completePasswordChange;
     }
 
-    it("con una cuenta local aparece la sección, y el cambio reemplaza el token", async () => {
+    it("con cuentas locales aparece la sección, y el cambio reemplaza el token", async () => {
       const { changePassword } = await import("@/features/auth/api/auth.api");
       vi.mocked(changePassword).mockResolvedValue({ token: "nuevo", exp: 999 });
       const completePasswordChange = withProvider("local");
@@ -195,11 +199,33 @@ describe("ProfileSettingsPanel", () => {
       expect(completePasswordChange).toHaveBeenCalledWith("nuevo", 999);
     });
 
-    it.each(["external-auth", undefined] as const)("con una cuenta %s no aparece: la contraseña la administra EXTERNAL_AUTH", (authProvider) => {
-      withProvider(authProvider);
+    it("con un proveedor externo no aparece: la contraseña la administra el proveedor", () => {
+      withProvider("external");
       render(<ProfileSettingsPanel onClose={onClose} />);
 
       expect(screen.queryByRole("heading", { name: "Seguridad" })).not.toBeInTheDocument();
+    });
+
+    it("sin configuración cargada tampoco aparece: se muestra lo mínimo", () => {
+      withProvider(null);
+      render(<ProfileSettingsPanel onClose={onClose} />);
+
+      expect(screen.queryByRole("heading", { name: "Seguridad" })).not.toBeInTheDocument();
+    });
+
+    it("decide por las capacidades, no por el authProvider de la sesión", () => {
+      mockAuthConfig.mockReturnValue(createMockAuthConfig("local"));
+      mockUseAuth.mockReturnValue({
+        session: {
+          token: "tok-1",
+          user: { internalUserId: "u-1", username: "jperez", fullName: "Juan Perez", email: "j@example.com", notificationSoundEnabled: true, authProvider: "otra-cosa" },
+        },
+        completePasswordChange: vi.fn(),
+      });
+      render(<ProfileSettingsPanel onClose={onClose} />);
+
+      expect(screen.getByRole("heading", { name: "Seguridad" })).toBeInTheDocument();
+      expect(deriveAuthCapabilities(mockAuthConfig()).passwordChange).toBe(true);
     });
   });
 });

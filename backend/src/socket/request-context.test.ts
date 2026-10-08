@@ -25,8 +25,6 @@ function buildAuthenticatedUser(overrides: Partial<AuthenticatedSocketUser> = {}
     username: "ana",
     fullName: "Ana Gómez",
     roles: [],
-    permissions: [],
-    app: "chat-interno",
     exp: Math.floor(Date.now() / 1000) + 3600,
     authProvider: "external-test",
     internalUserId: "internal-1",

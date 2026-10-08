@@ -6,6 +6,8 @@ import { useAuth } from "@/providers/auth-provider";
 import { I18nProvider } from "@/i18n";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/types/api.types";
+import { deriveAuthCapabilities } from "@/providers/auth-config-provider";
+import { createMockAuthConfig } from "@/test/test-utils";
 
 const mockPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -16,9 +18,11 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: vi.fn(),
 }));
 
-const mockAuthConfig = vi.fn();
-vi.mock("@/providers/auth-config-provider", () => ({
-  useAuthConfig: () => mockAuthConfig(),
+// Qué muestra el login lo decide `GET /auth/config`: cada test elige el proveedor.
+const mockCapabilities = vi.fn();
+vi.mock("@/providers/auth-config-provider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/providers/auth-config-provider")>()),
+  useAuthCapabilities: () => mockCapabilities(),
 }));
 
 describe("LoginForm", () => {
@@ -26,7 +30,7 @@ describe("LoginForm", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockAuthConfig.mockReturnValue({ config: null, refresh: vi.fn() });
+    mockCapabilities.mockReturnValue(deriveAuthCapabilities(null));
     vi.mocked(useAuth).mockReturnValue({
       session: null,
       status: "unauthenticated",
@@ -125,9 +129,16 @@ describe("LoginForm", () => {
     ).toBeInTheDocument();
   });
 
-  describe("según el modo de autenticación (LOCAL_AUTH_PLAN.md, Fase 9)", () => {
-    it("en modo external-auth pide usuario o correo, sin la ayuda de contraseña olvidada", () => {
-      mockAuthConfig.mockReturnValue({ config: { mode: "external-auth" }, refresh: vi.fn() });
+  describe("según el proveedor de autenticación (LOCAL_AUTH_PLAN.md, Fase 9)", () => {
+    it("sin configuración cargada pide usuario o correo, sin la ayuda de contraseña olvidada", () => {
+      render(<LoginForm />);
+
+      expect(screen.getByLabelText("Usuario o correo electrónico")).toBeInTheDocument();
+      expect(screen.queryByText(/Olvidaste tu contraseña/)).not.toBeInTheDocument();
+    });
+
+    it("con un proveedor externo pide usuario o correo, sin la ayuda de contraseña olvidada", () => {
+      mockCapabilities.mockReturnValue(deriveAuthCapabilities(createMockAuthConfig("external")));
 
       render(<LoginForm />);
 
@@ -135,14 +146,8 @@ describe("LoginForm", () => {
       expect(screen.queryByText(/Olvidaste tu contraseña/)).not.toBeInTheDocument();
     });
 
-    it("en modo local suma la ayuda: la contraseña la restablece un administrador", () => {
-      mockAuthConfig.mockReturnValue({
-        config: {
-          mode: "local",
-          passwordPolicy: { minLength: 12, maxLength: 128, requireUppercase: false, requireLowercase: false, requireNumber: false, requireSymbol: false, historyCount: 0 },
-        },
-        refresh: vi.fn(),
-      });
+    it("con cuentas locales suma la ayuda: la contraseña la restablece un administrador", () => {
+      mockCapabilities.mockReturnValue(deriveAuthCapabilities(createMockAuthConfig("local")));
 
       render(<LoginForm />);
 

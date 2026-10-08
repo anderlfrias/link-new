@@ -39,8 +39,6 @@ function sessionIdentity(overrides: Record<string, unknown> = {}) {
       username: null,
       fullName: "",
       roles: [],
-      permissions: [],
-      app: "link",
       exp: now + 3600,
       authProvider: "external-test" as const,
     },

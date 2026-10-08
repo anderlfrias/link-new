@@ -14,12 +14,12 @@ export function login(credentials: LoginCredentials): Promise<LoginResponse> {
   });
 }
 
-/** Modo de autenticación y, en modo local, la política de contraseñas. Público. */
+/** Proveedor de autenticación, sus capacidades y, con cuentas locales, la política de contraseñas. Público. */
 export function getAuthConfig(): Promise<AuthConfig> {
   return apiRequest<AuthConfig>("/v1/auth/config");
 }
 
-/** Cambia la propia contraseña (solo modo local). Acepta el token restringido
+/** Cambia la propia contraseña (solo con cuentas locales). Acepta el token restringido
  * del cambio obligatorio. Los rechazos son 400 con `code`, nunca 401: una
  * contraseña actual incorrecta no cierra la sesión. */
 export function changePassword(

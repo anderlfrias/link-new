@@ -40,7 +40,7 @@ export interface AdminUserListResponse {
 export interface AdminUserFilters {
   search?: string;
   status?: AdminUserStatus;
-  /** Solo modo local: `false` = cuentas sin contraseña (por ejemplo, después de migrar desde EXTERNAL_AUTH). */
+  /** Solo con cuentas locales: `false` = cuentas sin contraseña (por ejemplo, después de migrar desde un proveedor externo). */
   hasPassword?: boolean;
 }
 
@@ -70,7 +70,7 @@ export interface CreateAdminUserPayload {
   roles?: string[];
 }
 
-/** Edición. En modo external-auth solo cuenta `status`. `username: null` lo quita. */
+/** Edición. Con un proveedor externo solo cuenta `status`. `username: null` lo quita. */
 export interface UpdateAdminUserPayload {
   name?: string;
   email?: string;

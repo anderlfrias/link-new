@@ -78,11 +78,12 @@ Si un usuario reporta un problema o error en la interfaz, citar este valor permi
 
 ### `GET /api/v1/auth/config`
 
-Público, sin token. Dice el modo de autenticación de la instalación y, en modo local, la política de contraseñas, para mostrar las reglas antes de que alguien elija una. En modo external-auth responde solo `{ "mode": "external-auth" }`:
+Público, sin token. Dice qué proveedor autentica en esta instalación y qué se puede hacer (`capabilities`), y con cuentas locales la política de contraseñas, para mostrar las reglas antes de que alguien elija una. El cliente decide qué mostrar por `capabilities`, nunca por el nombre del proveedor: `provider.displayName` solo sirve para los textos.
 
 ```json
 {
-  "mode": "local",
+  "provider": { "id": "local", "displayName": "LINK", "external": false },
+  "capabilities": { "passwordChange": true, "accountManagement": "full" },
   "passwordPolicy": {
     "minLength": 12,
     "maxLength": 128,
@@ -96,6 +97,15 @@ Público, sin token. Dice el modo de autenticación de la instalación y, en mod
 ```
 
 `historyCount` es cuántas contraseñas recientes no se pueden repetir, contando la actual (la actual nunca se puede repetir).
+
+Con un proveedor de autenticación externo responde sin `passwordPolicy`, con `external: true`, `passwordChange: false` y `accountManagement: "status-only"` (un admin solo activa o desactiva el acceso de cada cuenta; sus datos los administra el proveedor):
+
+```json
+{
+  "provider": { "id": "mi-proveedor", "displayName": "Mi Proveedor", "external": true },
+  "capabilities": { "passwordChange": false, "accountManagement": "status-only" }
+}
+```
 
 ### `POST /api/v1/auth/login`
 
@@ -111,21 +121,19 @@ Request (JSON o `application/x-www-form-urlencoded`):
 { "user": "jdoe", "password": "secreto" }
 ```
 
-Response `200` (modo external-auth):
+Response `200`:
 ```json
 {
   "token": "<sesión de LINK (JWT propio)>",
   "user": {
-    "id": "<id externo en EXTERNAL_AUTH — NO USAR para relacionar nada>",
+    "id": "<uuid interno, igual a internalUserId>",
     "email": "jdoe@empresa.com",
     "username": "jdoe",
     "fullName": "Juan Doe Pérez",
     "roles": ["admin"],
-    "permissions": ["chat.read", "chat.write"],
-    "app": "chat-interno",
     "exp": 1735000000, // vencimiento de la sesión de LINK
     "internalUserId": "<uuid interno — este es "mi id" para todo lo demás>",
-    "authProvider": "external-auth",
+    "authProvider": "local",
     "mustChangePassword": false,
     "mustChangePasswordReason": null,
     "notificationSoundEnabled": true,
@@ -134,7 +142,7 @@ Response `200` (modo external-auth):
 }
 ```
 
-En modo local la respuesta tiene la misma forma, con `authProvider: "local"`, `app: "link"`, `permissions: []`, `id` igual a `internalUserId`, `username` que puede ser `null` y `roles` leídos de la base. Si `mustChangePassword` es `true`, el token es restringido: solo sirve para `PATCH /auth/password`, y `mustChangePasswordReason` dice por qué (`reset`: un admin la restableció; `expired`: venció; `policy`: no cumple la política vigente).
+La respuesta tiene la misma forma con cualquier proveedor. `authProvider` es `"local"` o el id del proveedor externo, `username` puede ser `null` y `roles` salen de la base. Si `mustChangePassword` es `true`, el token es restringido: solo sirve para `PATCH /auth/password`, y `mustChangePasswordReason` dice por qué (`reset`: un admin la restableció; `expired`: venció; `policy`: no cumple la política vigente).
 
 Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores; en modo local, el mismo mensaje para cuenta inexistente, contraseña incorrecta y cuenta sin contraseña), `403` (en modo external-auth, EXTERNAL_AUTH devolvió `403` — puede ser credenciales incorrectas o falta de acceso a esta app; EXTERNAL_AUTH no distingue el motivo, así que el mensaje que ve el usuario es genérico a propósito, nunca "no tenés acceso"; en los dos modos, `code: "account_disabled"` si un admin desactivó la cuenta en este chat), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 5 intentos en 15 minutos para el mismo usuario, o 20 en 15 minutos desde la misma IP (en modo local, también si la cuenta quedó bloqueada por intentos fallidos, con el mismo mensaje) (ver `backend/src/modules/auth/README.md`, "Errores posibles").
 
@@ -1010,7 +1018,7 @@ Requieren rol `"admin"` en `roles` (ver sección 2) — `403` si no lo tenés. `
 }
 ```
 
-`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. Los campos de sesión y contraseñas solo aplican en modo local: `localSessionTtlHours` (1 a 720) es la duración de la sesión, y bajarla corta también las sesiones abiertas que la superan; `passwordMinLength` (8 a 128; el piso de 8 no se puede bajar) y los cuatro `passwordRequire*` son la política de contraseñas, que se aplica en el próximo login de cada cuenta. `passwordExpirationDays` (1 a 365, `null` = no vencen), `passwordHistoryCount` (0 a 12, contando la actual), `maxFailedLoginAttempts` (3 a 50, `null` = sin bloqueo) y `lockoutDurationMinutes` (1 a 1440) completan la política, todos apagados por defecto. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`. `allowStickersAndGifs` (default `true`) es el interruptor maestro del buscador de GIFs/stickers (sección 6.1.2) — `403` en `/v1/giphy/*` si está en `false`, sin importar si `GIPHY_API_KEY` está configurada.
+`PATCH` acepta cualquier subconjunto de esos campos (al menos uno) y devuelve el objeto completo actualizado. `localSessionTtlHours` (1 a 720) es la duración de la sesión de LINK, con cualquier proveedor de autenticación (el nombre es histórico), y bajarla corta también las sesiones abiertas que la superan. Las contraseñas solo aplican con cuentas locales: con un proveedor externo, los campos de la política (`passwordMinLength`, `passwordRequire*`, `passwordExpirationDays`, `passwordHistoryCount`, `maxFailedLoginAttempts` y `lockoutDurationMinutes`) se rechazan con `400` y `code: "local_auth_setting_not_applicable"`, con la lista en `fields`. `passwordMinLength` (8 a 128; el piso de 8 no se puede bajar) y los cuatro `passwordRequire*` son la política de contraseñas, que se aplica en el próximo login de cada cuenta. `passwordExpirationDays` (1 a 365, `null` = no vencen), `passwordHistoryCount` (0 a 12, contando la actual), `maxFailedLoginAttempts` (3 a 50, `null` = sin bloqueo) y `lockoutDurationMinutes` (1 a 1440) completan la política, todos apagados por defecto. `maxFilesPerMessage` (default `10`, a diferencia del resto de los límites de esta sección) acota cuántos `fileIds` puede traer un `POST /conversations/:id/messages` (ver 6.1) — `null` lo deshabilita (sin límite). `messageRetentionDays: null` (default) deshabilita el borrado automático de mensajes — un número de días lo activa. Los `allowGroupOverride*` (default `false` los 5) habilitan que cada `GROUP` fije su propio valor para la dimensión correspondiente, vía `PATCH /conversations/:id/settings` (ver 4.9) — ver [`settings/README.md`](./src/modules/settings/README.md). `allowMessageEdit`/`allowMessageDeleteForEveryone` (default `true`) habilitan que el propio autor edite/borre-para-todos sus mensajes; `messageEditTimeLimitMinutes`/`messageDeleteForEveryoneTimeLimitMinutes` (default `null` = sin límite) acotan esa ventana a N minutos desde el envío — hechas cumplir por `PATCH`/`DELETE /conversations/:id/messages/:id` (ver 6.3/6.5), nunca por el creador de la conversación borrando un mensaje ajeno (eso es moderación, ver [`messages/README.md`](./src/modules/messages/README.md)). `allowConversationDelete`/`allowGroupDelete` (default `true`) habilitan "Eliminar chat" (`PRIVATE`, "para mí") y "Eliminar grupo" (`GROUP`, para todos) respectivamente — ver 4.7; `allowGroupDelete` es el interruptor maestro que se chequea antes de `whoCanDeleteGroup`. `allowStickersAndGifs` (default `true`) es el interruptor maestro del buscador de GIFs/stickers (sección 6.1.2) — `403` en `/v1/giphy/*` si está en `false`, sin importar si `GIPHY_API_KEY` está configurada.
 
 ### 12.2 `GET /settings/public` — cualquier autenticado
 

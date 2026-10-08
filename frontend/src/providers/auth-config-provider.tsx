@@ -5,8 +5,8 @@ import { getAuthConfig } from "@/features/auth/api/auth.api";
 import type { AuthConfig } from "@/features/auth/types/auth.types";
 
 interface AuthConfigContextValue {
-  /** `null` mientras carga o si el backend no respondió: los componentes se
-   * comportan como en modo external-auth, que es lo que hacían antes de que existiera. */
+  /** `null` mientras carga o si el backend no respondió: los componentes muestran lo
+   * mínimo (ver `useAuthCapabilities`). */
   config: AuthConfig | null;
   /** Vuelve a pedirla (ej. la pantalla de cambio obligatorio, por si un admin
    * cambió la política mientras tanto). */
@@ -29,8 +29,8 @@ export function AuthConfigProvider({ children }: { children: React.ReactNode }) 
     try {
       setConfig(await getAuthConfig());
     } catch {
-      // Sin respuesta, la app sigue igual: el login funciona en los dos modos
-      // y las secciones del modo local se muestran según la sesión.
+      // Sin respuesta, la app sigue igual: el login funciona y las secciones que
+      // dependen del proveedor quedan ocultas hasta que haya configuración.
     }
   }, []);
 
@@ -44,4 +44,35 @@ export function AuthConfigProvider({ children }: { children: React.ReactNode }) 
 
 export function useAuthConfig(): AuthConfigContextValue {
   return useContext(AuthConfigContext);
+}
+
+/** Lo que la interfaz necesita saber del proveedor de autenticación. Es la única forma
+ * de decidir qué se muestra según el proveedor: nunca por su nombre o por el
+ * `authProvider` de la sesión. Mientras no hay configuración, lo mínimo: sin cambio de
+ * contraseña y con las cuentas de solo estado. */
+export interface AuthCapabilities {
+  /** `true` cuando llegó `GET /auth/config`. */
+  loaded: boolean;
+  /** Se puede cambiar la contraseña desde LINK (cuentas locales). */
+  passwordChange: boolean;
+  /** `full`: un admin crea y edita cuentas. `status-only`: solo activa o desactiva su acceso. */
+  accountManagement: "full" | "status-only";
+  /** Nombre visible del proveedor externo, o `null` con cuentas propias o sin configuración. */
+  providerName: string | null;
+}
+
+export function deriveAuthCapabilities(config: AuthConfig | null): AuthCapabilities {
+  return config
+    ? {
+        loaded: true,
+        passwordChange: config.capabilities.passwordChange,
+        accountManagement: config.capabilities.accountManagement,
+        providerName: config.provider.external ? config.provider.displayName : null,
+      }
+    : { loaded: false, passwordChange: false, accountManagement: "status-only", providerName: null };
+}
+
+export function useAuthCapabilities(): AuthCapabilities {
+  const { config } = useAuthConfig();
+  return useMemo(() => deriveAuthCapabilities(config), [config]);
 }

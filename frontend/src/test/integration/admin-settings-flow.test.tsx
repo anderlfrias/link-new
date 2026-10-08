@@ -11,11 +11,6 @@ vi.mock("@/features/admin/hooks/use-admin-settings", () => ({
   useAdminSettings: () => mockUseAdminSettings(),
 }));
 
-// Sin sesión (o sin authProvider) el panel se comporta como en modo external-auth.
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ session: null }),
-}));
-
 const mockSave = vi.fn();
 vi.mock("@/features/admin/hooks/use-update-admin-settings", () => ({
   useUpdateAdminSettings: () => ({

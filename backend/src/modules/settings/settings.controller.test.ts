@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
+import { useLocalAuth } from "../../test/auth-mode";
 import { createMockNext, createMockRequest, createMockResponse } from "../../test/http-mocks";
 import * as SettingsController from "./settings.controller";
 import { adminSettingsRouter, publicSettingsRouter } from "./settings.route";
@@ -28,8 +29,6 @@ vi.mock("../auth/jwt", () => ({
         username: null,
         fullName: "",
         roles: [],
-        permissions: [],
-        app: "link",
         exp: 0,
         authProvider: "external-test",
       },
@@ -253,6 +252,76 @@ describe("settings.controller", () => {
       expect(res.status).toBe(200);
       expect(res.body.maxUploadSizeMb).toBe(75);
       expect(SettingsService.updateSettings).toHaveBeenCalledWith({ maxUploadSizeMb: 75 });
+    });
+  });
+});
+
+describe("PATCH /admin/settings — ajustes de contraseñas y cuentas locales", () => {
+  const app = express();
+  app.use(express.json());
+  app.use("/admin/settings", adminSettingsRouter);
+  app.use(errorHandler);
+
+  const patch = (body: object) =>
+    request(app).patch("/admin/settings").set("Authorization", "Bearer admin-token").send(body);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // `attachInternalUser` lee la duración de sesión de los ajustes en cada request.
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({ localSessionTtlHours: 12 } as any);
+    vi.mocked(SettingsService.updateSettings).mockResolvedValue({ id: "singleton" } as any);
+  });
+
+  describe("con un proveedor de autenticación externo", () => {
+    it.each([
+      { passwordMinLength: 16 },
+      { passwordRequireUppercase: true },
+      { passwordRequireLowercase: true },
+      { passwordRequireNumber: true },
+      { passwordRequireSymbol: true },
+      { passwordExpirationDays: 90 },
+      { passwordHistoryCount: 3 },
+      { maxFailedLoginAttempts: 5 },
+      { lockoutDurationMinutes: 30 },
+    ])("rechaza %j con 400 y no guarda nada", async (body) => {
+      const res = await patch(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("local_auth_setting_not_applicable");
+      expect(res.body.fields).toEqual(Object.keys(body));
+      expect(SettingsService.updateSettings).not.toHaveBeenCalled();
+    });
+
+    it("en un PATCH mezclado, rechaza todo y nombra solo los ajustes que no aplican", async () => {
+      const res = await patch({ maxUploadSizeMb: 50, passwordMinLength: 16, maxFailedLoginAttempts: null });
+
+      expect(res.status).toBe(400);
+      expect(res.body.fields).toEqual(["passwordMinLength", "maxFailedLoginAttempts"]);
+      expect(SettingsService.updateSettings).not.toHaveBeenCalled();
+    });
+
+    it("la duración de la sesión sí se puede cambiar: es de LINK con cualquier proveedor", async () => {
+      const res = await patch({ localSessionTtlHours: 8 });
+
+      expect(res.status).toBe(200);
+      expect(SettingsService.updateSettings).toHaveBeenCalledWith({ localSessionTtlHours: 8 });
+    });
+
+    it("el resto de los ajustes no cambia", async () => {
+      const res = await patch({ maxUploadSizeMb: 50 });
+
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe("con cuentas locales", () => {
+    useLocalAuth();
+
+    it("acepta los ajustes de contraseñas y de bloqueo", async () => {
+      const res = await patch({ passwordMinLength: 16, maxFailedLoginAttempts: 5 });
+
+      expect(res.status).toBe(200);
+      expect(SettingsService.updateSettings).toHaveBeenCalledWith({ passwordMinLength: 16, maxFailedLoginAttempts: 5 });
     });
   });
 });

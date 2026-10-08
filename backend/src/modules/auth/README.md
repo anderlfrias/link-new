@@ -58,7 +58,7 @@ Todo lo de esta sección aplica solo sin `EXTERNAL_AUTH_*` en el `.env`. Código
 
 **Sesión:** no hay refresh. `resolveInternalUser` rechaza un token si la cuenta está desactivada, si es anterior a `User.tokensValidAfter` (se mueve al cambiar o restablecer la contraseña, truncado al segundo) o si es más viejo que la duración de sesión vigente: bajar la duración en la configuración corta las sesiones ya abiertas.
 
-**`GET /api/v1/auth/config`** (público): `{ mode }`, y en modo local además `passwordPolicy` (largo mínimo y máximo, y reglas de composición), lo que el frontend necesita para mostrar las reglas antes de que alguien elija una contraseña. Nunca la duración de sesión.
+**`GET /api/v1/auth/config`** (público): `provider` (`id`, `displayName`, `external`) y `capabilities` (`passwordChange`, `accountManagement`: `full` o `status-only`), y con cuentas locales además `passwordPolicy` (largo mínimo y máximo, y reglas de composición), lo que el frontend necesita para mostrar las reglas antes de que alguien elija una contraseña. El frontend decide qué mostrar por `capabilities`, nunca por el nombre del proveedor. Nunca la duración de sesión.
 
 **`PATCH /api/v1/auth/password`** (solo modo local; `404` en external-auth): `{ currentPassword, newPassword }` → `{ token, exp }`. Acepta el token restringido. Rechaza con `400` y `code` (nunca `401`, que el frontend interpreta como sesión vencida): `invalid_current_password`, `password_policy` (con `rules`, la lista de reglas que no cumple) o `password_reused` (la nueva es igual a la actual o, con historial, a una de las últimas N). La contraseña saliente pasa a `previousPasswordHashes`, podado a N-1. Revoca todos los tokens anteriores, corta los sockets abiertos y audita `CHANGE_PASSWORD` con el motivo (`voluntary`, `reset` o `policy`). Rate limit propio: 5 intentos fallidos cada 15 minutos por cuenta.
 
@@ -117,20 +117,19 @@ Invoke-RestMethod -Method Post -Uri http://localhost:4000/api/v1/auth/login `
 {
   "token": "<sesión de LINK: JWT propio firmado con SESSION_JWT_SECRET, no el de EXTERNAL_AUTH>",
   "user": {
-    "id": "<id externo en EXTERNAL_AUTH>",
+    "id": "<uuid local en la tabla User, igual a internalUserId>",
     "email": "jdoe@empresa.com",
     "username": "jdoe",
     "fullName": "Juan Doe Pérez",
     "roles": ["admin"],
-    "permissions": ["chat.read", "chat.write"],
-    "app": "chat-interno",
     "exp": 1735000000,   // vencimiento de la sesión de LINK, no el del JWT de EXTERNAL_AUTH
-    "internalUserId": "<uuid local en la tabla User>"
+    "internalUserId": "<uuid local en la tabla User>",
+    "authProvider": "external-auth"
   }
 }
 ```
 
-`internalUserId` es el `id` interno del perfil recién creado/actualizado en la base local (por `upsert` en `email`); es lo que hay que usar para relacionar conversaciones/mensajes, nunca `user.id` (ese es el externo de EXTERNAL_AUTH). Es también el `sub` de la sesión de LINK.
+`internalUserId` es el `id` interno del perfil recién creado/actualizado en la base local (ver "Reconocer a la persona"); es lo que hay que usar para relacionar conversaciones/mensajes. `user.id` es el mismo valor: el id de la persona en EXTERNAL_AUTH no sale del backend. Es también el `sub` de la sesión de LINK.
 
 **Roles:** en cada login se guardan en `User.roles` los roles que entrega EXTERNAL_AUTH y que la app conoce (`filterKnownRoles`, hoy solo `admin`); los demás se descartan. De ahí en más se leen de la base en cada request, como en el modo local, así que cambiar los roles en EXTERNAL_AUTH se refleja en el próximo login, no antes. `user.roles` en la respuesta son los guardados.
 

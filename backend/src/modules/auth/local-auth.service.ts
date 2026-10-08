@@ -31,6 +31,9 @@ import {
   verifyPassword,
 } from "./password";
 
+/// Cómo se llama LINK a sí mismo como proveedor de cuentas, en `GET /auth/config`.
+export const LOCAL_PROVIDER_DISPLAY_NAME = "LINK";
+
 /// Mismo mensaje para cuenta inexistente, contraseña incorrecta y cuenta sin
 /// contraseña (LOCAL_AUTH_PLAN.md, D12): la respuesta no confirma qué cuentas
 /// existen. La auditoría sí distingue el motivo.
@@ -231,16 +234,20 @@ export async function changeOwnPassword(
   return { token, exp: tokenExp(token) };
 }
 
-/// `GET /auth/config` (D14). Con cuentas locales suma lo necesario para elegir una
-/// contraseña; nunca la duración de sesión. Con un proveedor externo, `mode` es su id.
+/// `GET /auth/config` (D14): el proveedor y sus capacidades. Con cuentas locales suma lo
+/// necesario para elegir una contraseña; nunca la duración de sesión.
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
   const provider = getAuthProvider();
   if (provider) {
-    return { mode: provider.id };
+    return {
+      provider: { id: provider.id, displayName: provider.displayName, external: true },
+      capabilities: { passwordChange: false, accountManagement: "status-only" },
+    };
   }
   const policy = await SettingsService.getLocalAuthPolicy();
   return {
-    mode: "local",
+    provider: { id: "local", displayName: LOCAL_PROVIDER_DISPLAY_NAME, external: false },
+    capabilities: { passwordChange: true, accountManagement: "full" },
     passwordPolicy: {
       minLength: policy.minLength,
       maxLength: PASSWORD_MAX_LENGTH,

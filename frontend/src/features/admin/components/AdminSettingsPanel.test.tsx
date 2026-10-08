@@ -5,34 +5,26 @@ import { AdminSettingsPanel } from "./AdminSettingsPanel";
 import { useAdminSettings } from "@/features/admin/hooks/use-admin-settings";
 import { useUpdateAdminSettings } from "@/features/admin/hooks/use-update-admin-settings";
 import type { AdminSettings } from "@/features/admin/types/admin-settings.types";
-import type { AuthMode } from "@/features/auth/types/auth.types";
-import { useAuth } from "@/providers/auth-provider";
+import { deriveAuthCapabilities, useAuthCapabilities } from "@/providers/auth-config-provider";
 import { usePublicSettings } from "@/providers/public-settings-provider";
-import { createMockPublicSettings, createMockSession } from "@/test/test-utils";
+import { createMockAuthConfig, createMockPublicSettings } from "@/test/test-utils";
 
 vi.mock("@/features/admin/hooks/use-admin-settings", () => ({
   useAdminSettings: vi.fn(),
 }));
 
-vi.mock("@/providers/auth-provider", () => ({
-  useAuth: vi.fn(),
+// Si las contraseñas se administran acá lo decide `GET /auth/config`: cada test elige el proveedor.
+vi.mock("@/providers/auth-config-provider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/providers/auth-config-provider")>()),
+  useAuthCapabilities: vi.fn(),
 }));
 
 vi.mock("@/providers/public-settings-provider", () => ({
   usePublicSettings: vi.fn(),
 }));
 
-/** Sin `authProvider` la sesión es de modo external-auth, como las guardadas antes del modo local. */
-function mockSessionMode(mode?: AuthMode) {
-  vi.mocked(useAuth).mockReturnValue({
-    session: createMockSession({ user: { ...createMockSession().user, authProvider: mode } }),
-    status: "authenticated",
-    login: vi.fn(),
-    logout: vi.fn(),
-    updateSessionUser: vi.fn(),
-    expireSession: vi.fn(),
-    completePasswordChange: vi.fn(),
-  });
+function mockProvider(kind: "local" | "external") {
+  vi.mocked(useAuthCapabilities).mockReturnValue(deriveAuthCapabilities(createMockAuthConfig(kind)));
 }
 
 vi.mock("@/features/admin/hooks/use-update-admin-settings", () => ({
@@ -99,7 +91,7 @@ describe("AdminSettingsPanel", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSessionMode();
+    mockProvider("external");
     vi.mocked(usePublicSettings).mockReturnValue(null);
     vi.mocked(useUpdateAdminSettings).mockReturnValue({
       save: mockSave,
@@ -420,24 +412,50 @@ describe("AdminSettingsPanel", () => {
       if (value) await user.type(input, value);
     }
 
-    it("no aparece en modo external-auth ni envía sus campos", async () => {
+    it("con un proveedor externo muestra la duración de la sesión (es de LINK) pero no las contraseñas, y no las envía", async () => {
       const { user } = renderWith();
-      expect(screen.queryByTestId("security-settings")).not.toBeInTheDocument();
+      expect(screen.getByTestId("session-settings")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Sesión" })).toBeInTheDocument();
+      expect(screen.getByLabelText(/Duración de la sesión/)).toHaveValue(12);
+      expect(screen.queryByTestId("password-settings")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Largo mínimo de la contraseña/)).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("checkbox", { name: "Los grupos se pueden eliminar" }));
+      await replace(user, /Duración de la sesión/, "8");
       await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
       const payload = mockSave.mock.calls[0][0];
-      expect(payload).not.toHaveProperty("localSessionTtlHours");
+      expect(payload.localSessionTtlHours).toBe(8);
       expect(payload).not.toHaveProperty("passwordMinLength");
+      expect(payload).not.toHaveProperty("passwordRequireUppercase");
+      expect(payload).not.toHaveProperty("passwordExpirationDays");
+      expect(payload).not.toHaveProperty("passwordHistoryCount");
       expect(payload).not.toHaveProperty("maxFailedLoginAttempts");
+      expect(payload).not.toHaveProperty("lockoutDurationMinutes");
     });
 
-    it("aparece en modo local con los valores guardados", () => {
-      mockSessionMode("local");
+    it("con un proveedor externo valida el rango de la duración de la sesión", async () => {
+      const { user } = renderWith();
+
+      await replace(user, /Duración de la sesión/, "721");
+
+      expect(screen.getByText("Debe ser un número entero entre 1 y 720.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
+    });
+
+    it("con un proveedor externo también advierte que bajar la duración corta las sesiones abiertas", async () => {
+      const { user } = renderWith();
+
+      await replace(user, /Duración de la sesión/, "4");
+
+      expect(screen.getByTestId("session-warnings")).toHaveTextContent("también cierra las sesiones abiertas");
+    });
+
+    it("con cuentas locales aparecen la sesión y las contraseñas, con los valores guardados", () => {
+      mockProvider("local");
       renderWith({ ...defaultSettings, passwordMinLength: 14, passwordRequireSymbol: true, maxFailedLoginAttempts: 5 });
 
-      expect(screen.getByRole("heading", { name: "Sesión y contraseñas" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Sesión" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Contraseñas" })).toBeInTheDocument();
       expect(screen.getByLabelText(/Duración de la sesión/)).toHaveValue(12);
       expect(screen.getByLabelText(/Largo mínimo de la contraseña/)).toHaveValue(14);
       expect(screen.getByRole("checkbox", { name: "Un símbolo" })).toBeChecked();
@@ -445,7 +463,8 @@ describe("AdminSettingsPanel", () => {
       expect(screen.getByLabelText(/Vencimiento de la contraseña/)).toHaveValue(null);
       expect(screen.getByLabelText(/Intentos fallidos seguidos/)).toHaveValue(5);
       expect(screen.getByText(/puede deducir que una cuenta existe/)).toBeInTheDocument();
-      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("session-warnings")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("password-warnings")).not.toBeInTheDocument();
     });
 
     it.each([
@@ -457,7 +476,7 @@ describe("AdminSettingsPanel", () => {
       [/Vencimiento de la contraseña/, "366", "Debe ser un número entero entre 1 y 365, o vacío."],
       [/Intentos fallidos seguidos/, "2", "Debe ser un número entero entre 3 y 50, o vacío."],
     ])("valida el rango de %s con %s", async (label, value, message) => {
-      mockSessionMode("local");
+      mockProvider("local");
       const { user } = renderWith();
 
       await replace(user, label, value);
@@ -467,7 +486,7 @@ describe("AdminSettingsPanel", () => {
     });
 
     it("valida la duración del bloqueo solo si el bloqueo está activo", async () => {
-      mockSessionMode("local");
+      mockProvider("local");
       const { user } = renderWith({ ...defaultSettings, maxFailedLoginAttempts: 5 });
 
       await replace(user, /Duración del bloqueo/, "1441");
@@ -484,7 +503,7 @@ describe("AdminSettingsPanel", () => {
     });
 
     it("guarda los campos convertidos, con vacío como null", async () => {
-      mockSessionMode("local");
+      mockProvider("local");
       const { user } = renderWith({ ...defaultSettings, passwordExpirationDays: 90 });
 
       await replace(user, /Duración de la sesión/, "24");
@@ -509,36 +528,36 @@ describe("AdminSettingsPanel", () => {
     });
 
     it("advierte que bajar la duración corta las sesiones abiertas", async () => {
-      mockSessionMode("local");
+      mockProvider("local");
       const { user } = renderWith();
 
       await replace(user, /Duración de la sesión/, "24");
-      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("session-warnings")).not.toBeInTheDocument();
 
       await replace(user, /Duración de la sesión/, "4");
       expect(screen.getByText(/también cierra las sesiones abiertas/)).toBeInTheDocument();
     });
 
     it("advierte que endurecer la política se aplica en el próximo inicio de sesión", async () => {
-      mockSessionMode("local");
+      mockProvider("local");
       const { user } = renderWith();
 
       await user.click(screen.getByRole("checkbox", { name: "Una mayúscula" }));
       expect(screen.getByText(/en su próximo inicio de sesión/)).toBeInTheDocument();
 
       await user.click(screen.getByRole("checkbox", { name: "Una mayúscula" }));
-      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("password-warnings")).not.toBeInTheDocument();
 
       await replace(user, /Largo mínimo de la contraseña/, "16");
       expect(screen.getByText(/en su próximo inicio de sesión/)).toBeInTheDocument();
     });
 
     it("advierte al activar o acortar el vencimiento, no al alargarlo", async () => {
-      mockSessionMode("local");
+      mockProvider("local");
       const { user } = renderWith({ ...defaultSettings, passwordExpirationDays: 90 });
 
       await replace(user, /Vencimiento de la contraseña/, "180");
-      expect(screen.queryByTestId("security-warnings")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("password-warnings")).not.toBeInTheDocument();
 
       await replace(user, /Vencimiento de la contraseña/, "30");
       expect(screen.getByText(/más antiguas que el vencimiento/)).toBeInTheDocument();

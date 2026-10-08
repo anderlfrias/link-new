@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/providers/auth-provider";
+import { useAuthCapabilities } from "@/providers/auth-config-provider";
 import { useTranslation } from "@/i18n";
 
 type FormState = { mode: "create" } | { mode: "edit"; user: AdminUserListItem } | null;
@@ -24,9 +25,9 @@ type TemporaryPassword = { account: string; password: string } | null;
 export function AdminUsersPanel() {
   const { t } = useTranslation();
   const { session } = useAuth();
-  // Modo de la instalación según la sesión del propio admin (ausente = external-auth).
-  const mode = session?.user.authProvider === "local" ? "local" : "external-auth";
-  const local = mode === "local";
+  // Qué se puede hacer con las cuentas lo dice `GET /auth/config`, no el nombre del proveedor.
+  const { accountManagement, passwordChange, providerName } = useAuthCapabilities();
+  const manageAccounts = accountManagement === "full";
 
   const [searchDraft, setSearchDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState<AdminUserStatus | "">("");
@@ -42,7 +43,7 @@ export function AdminUsersPanel() {
     setFilters({
       search: searchDraft.trim() || undefined,
       status: statusDraft || undefined,
-      hasPassword: local && withoutPasswordDraft ? false : undefined,
+      hasPassword: passwordChange && withoutPasswordDraft ? false : undefined,
     });
   }
 
@@ -101,7 +102,7 @@ export function AdminUsersPanel() {
         <div className="mx-auto flex max-w-4xl flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-display text-lg font-semibold text-brand-ink dark:text-white">{t("admin.users.title")}</h2>
-            {local && (
+            {manageAccounts && (
               <Button
                 type="button"
                 onClick={() => {
@@ -117,7 +118,11 @@ export function AdminUsersPanel() {
 
           <div className="flex items-start gap-2 rounded-lg bg-brand-blue/10 px-3 py-2 text-sm text-brand-blue dark:bg-brand-blue/20">
             <IconInfoCircle size={16} className="mt-0.5 shrink-0" />
-            <span>{local ? t("admin.users.localNotice") : t("admin.users.external-authNotice")}</span>
+            <span>
+              {manageAccounts
+                ? t("admin.users.localNotice")
+                : t("admin.users.externalNotice", { provider: providerName ?? t("admin.users.identityProviderFallback") })}
+            </span>
           </div>
 
           <form onSubmit={handleApplyFilters} className="flex flex-wrap items-center gap-2">
@@ -137,7 +142,7 @@ export function AdminUsersPanel() {
               <option value="ACTIVE">{t("admin.users.statusActive")}</option>
               <option value="INACTIVE">{t("admin.users.statusInactive")}</option>
             </select>
-            {local && (
+            {passwordChange && (
               <Checkbox
                 checked={withoutPasswordDraft}
                 onChange={(event) => setWithoutPasswordDraft(event.target.checked)}
@@ -191,20 +196,21 @@ export function AdminUsersPanel() {
                 <AdminUserRow
                   key={user.id}
                   user={user}
-                  mode={mode}
+                  accountManagement={accountManagement}
+                  providerName={providerName}
                   isSelf={user.id === session?.user.internalUserId}
                   pending={actions.pending}
                   onSetStatus={handleSetStatus}
                   onEdit={
-                    local
+                    manageAccounts
                       ? (target) => {
                           actions.clearError();
                           setForm({ mode: "edit", user: target });
                         }
                       : undefined
                   }
-                  onResetPassword={local ? handleResetPassword : undefined}
-                  onUnlock={local ? handleUnlock : undefined}
+                  onResetPassword={passwordChange ? handleResetPassword : undefined}
+                  onUnlock={passwordChange ? handleUnlock : undefined}
                 />
               ))}
             </div>

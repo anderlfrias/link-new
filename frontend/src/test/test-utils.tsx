@@ -1,21 +1,19 @@
 import React, { ReactElement } from "react";
 import { render, RenderOptions } from "@testing-library/react";
 import { AppProviders } from "@/providers/app-providers";
-import type { AuthUser, Session } from "@/features/auth/types/auth.types";
+import type { AuthConfig, AuthUser, Session } from "@/features/auth/types/auth.types";
 import type { PublicAppSettings } from "@/features/settings/types/public-settings.types";
 import { THEME_STORAGE_KEY } from "@/constants/theme";
 import { LOCALE_STORAGE_KEY, type Locale } from "@/i18n/types";
 
 export function createMockAuthUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
-    id: "external-auth-1",
+    id: "user-uuid-1",
     internalUserId: "user-uuid-1",
     email: "test@example.com",
     username: "testuser",
     fullName: "Test User",
     roles: ["USER"],
-    permissions: [],
-    app: "chat-interno",
     exp: Math.floor(Date.now() / 1000) + 3600,
     notificationSoundEnabled: true,
     ...overrides,
@@ -89,3 +87,28 @@ export function renderWithProviders(
 }
 
 export * from "@testing-library/react";
+
+/** `GET /auth/config` de una instalación con cuentas locales o con un proveedor externo. */
+export function createMockAuthConfig(kind: "local" | "external", overrides: Partial<AuthConfig> = {}): AuthConfig {
+  if (kind === "local") {
+    return {
+      provider: { id: "local", displayName: "LINK", external: false },
+      capabilities: { passwordChange: true, accountManagement: "full" },
+      passwordPolicy: {
+        minLength: 12,
+        maxLength: 128,
+        requireUppercase: false,
+        requireLowercase: false,
+        requireNumber: false,
+        requireSymbol: false,
+        historyCount: 0,
+      },
+      ...overrides,
+    };
+  }
+  return {
+    provider: { id: "test-provider", displayName: "Test Provider", external: true },
+    capabilities: { passwordChange: false, accountManagement: "status-only" },
+    ...overrides,
+  };
+}

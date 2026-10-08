@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { useAuth } from "@/providers/auth-provider";
+import { useAuthCapabilities } from "@/providers/auth-config-provider";
 import { useTranslation } from "@/i18n";
 import { usePublicSettings } from "@/providers/public-settings-provider";
 
@@ -190,11 +190,18 @@ function isIntegerInRange(value: string, range: { min: number; max: number }): b
   return value.trim() !== "" && Number.isInteger(number) && number >= range.min && number <= range.max;
 }
 
-/** Campos de "Sesión y contraseñas": solo se validan (y se envían) en modo local. */
-function validateLocalAuth(draft: DraftState, tr: Translate, errors: FieldErrors) {
+/** La duración de la sesión es de LINK: rige con cualquier proveedor de autenticación. */
+function validateSession(draft: DraftState, tr: Translate, errors: FieldErrors) {
+  if (!isIntegerInRange(draft.localSessionTtlHours, LOCAL_AUTH_RANGES.localSessionTtlHours)) {
+    errors.localSessionTtlHours = tr("admin.settings.rangeError", LOCAL_AUTH_RANGES.localSessionTtlHours);
+  }
+}
+
+/** Campos de "Contraseñas": solo se validan (y se envían) cuando las contraseñas se
+ * administran en LINK (cuentas locales). */
+function validatePasswordPolicy(draft: DraftState, tr: Translate, errors: FieldErrors) {
   const lockoutEnabled = draft.maxFailedLoginAttempts.trim() !== "";
   const required = [
-    "localSessionTtlHours",
     "passwordMinLength",
     "passwordHistoryCount",
     // Sin bloqueo, la duración no aplica: el campo queda deshabilitado y no se envía.
@@ -213,11 +220,14 @@ function validateLocalAuth(draft: DraftState, tr: Translate, errors: FieldErrors
   }
 }
 
-function validate(draft: DraftState, t?: Translate, local = false): FieldErrors {
+function validate(draft: DraftState, t?: Translate, passwordPolicy = false): FieldErrors {
   const errors: FieldErrors = {};
   const tr = (k: string, defaultVal: string) => (t ? t(k) : defaultVal);
 
-  if (local && t) validateLocalAuth(draft, t, errors);
+  if (t) {
+    validateSession(draft, t, errors);
+    if (passwordPolicy) validatePasswordPolicy(draft, t, errors);
+  }
 
   const uploadSize = Number(draft.maxUploadSizeMb);
   if (!Number.isInteger(uploadSize) || uploadSize < 1) {
@@ -296,11 +306,10 @@ function validate(draft: DraftState, t?: Translate, local = false): FieldErrors 
   return errors;
 }
 
-/** En modo external-auth la sección no se muestra y sus campos no se envían: la
- * sesión y las contraseñas las define EXTERNAL_AUTH. */
-function toLocalAuthPayload(draft: DraftState): UpdateAdminSettingsPayload {
+/** Con un proveedor externo la sección no se muestra y sus campos no se envían (el backend
+ * los rechazaría): las contraseñas las administra el proveedor. */
+function toPasswordPolicyPayload(draft: DraftState): UpdateAdminSettingsPayload {
   return {
-    localSessionTtlHours: Number(draft.localSessionTtlHours),
     passwordMinLength: Number(draft.passwordMinLength),
     passwordRequireUppercase: draft.passwordRequireUppercase,
     passwordRequireLowercase: draft.passwordRequireLowercase,
@@ -317,17 +326,21 @@ function toLocalAuthPayload(draft: DraftState): UpdateAdminSettingsPayload {
   };
 }
 
-type LocalAuthWarning = "ttlLoweredWarning" | "policyHardenedWarning" | "expirationWarning";
+type SessionWarning = "ttlLoweredWarning";
+type PasswordWarning = "policyHardenedWarning" | "expirationWarning";
 
 /** Efectos de D16 que el admin tiene que ver antes de guardar: bajar la
  * duración corta sesiones abiertas; endurecer la política o el vencimiento no
  * corta nada, pero pide cambiar la contraseña en el próximo login. */
-function localAuthWarnings(draft: DraftState, saved: DraftState): LocalAuthWarning[] {
-  const warnings: LocalAuthWarning[] = [];
+function sessionWarnings(draft: DraftState, saved: DraftState): SessionWarning[] {
   const ttl = Number(draft.localSessionTtlHours);
-  if (draft.localSessionTtlHours.trim() !== "" && ttl < Number(saved.localSessionTtlHours)) {
-    warnings.push("ttlLoweredWarning");
-  }
+  return draft.localSessionTtlHours.trim() !== "" && ttl < Number(saved.localSessionTtlHours)
+    ? ["ttlLoweredWarning"]
+    : [];
+}
+
+function passwordWarnings(draft: DraftState, saved: DraftState): PasswordWarning[] {
+  const warnings: PasswordWarning[] = [];
   const rules = ["passwordRequireUppercase", "passwordRequireLowercase", "passwordRequireNumber", "passwordRequireSymbol"] as const;
   if (
     Number(draft.passwordMinLength) > Number(saved.passwordMinLength) ||
@@ -344,9 +357,10 @@ function localAuthWarnings(draft: DraftState, saved: DraftState): LocalAuthWarni
   return warnings;
 }
 
-function toPayload(draft: DraftState, local: boolean): UpdateAdminSettingsPayload {
+function toPayload(draft: DraftState, passwordPolicy: boolean): UpdateAdminSettingsPayload {
   return {
-    ...(local ? toLocalAuthPayload(draft) : {}),
+    localSessionTtlHours: Number(draft.localSessionTtlHours),
+    ...(passwordPolicy ? toPasswordPolicyPayload(draft) : {}),
     maxUploadSizeMb: Number(draft.maxUploadSizeMb),
     fileTypeRestrictionMode: draft.fileTypeRestrictionMode,
     fileTypeList: patternsFromSelection(draft.fileTypeSelection),
@@ -443,12 +457,11 @@ function GroupPermissionField({
 
 export function AdminSettingsPanel() {
   const { t } = useTranslation();
-  const { session } = useAuth();
   // Ajustes que ve cualquier usuario: `chunkedUploads` dice si hay subida por partes (S3).
   // Mientras no cargaron (`null`) no se muestra la nota.
   const publicSettings = usePublicSettings();
-  // Modo de la instalación según la sesión del propio admin (ausente = external-auth).
-  const local = session?.user.authProvider === "local";
+  // Las contraseñas se administran acá solo con cuentas locales: lo dice `GET /auth/config`.
+  const { passwordChange: passwordPolicy } = useAuthCapabilities();
   const { settings, status, error: loadError, refetch } = useAdminSettings();
   const { save, pending, error: saveError } = useUpdateAdminSettings();
 
@@ -480,11 +493,12 @@ export function AdminSettingsPanel() {
     );
   }
 
-  const errors = validate(draft, (key, params) => t(key as any, params), local);
+  const errors = validate(draft, (key, params) => t(key as any, params), passwordPolicy);
   const hasErrors = Object.keys(errors).length > 0;
   const savedDraft = toDraft(settings);
   const isDirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
-  const securityWarnings = local ? localAuthWarnings(draft, savedDraft) : [];
+  const sessionNotes = sessionWarnings(draft, savedDraft);
+  const passwordNotes = passwordPolicy ? passwordWarnings(draft, savedDraft) : [];
 
   function updateField<K extends keyof DraftState>(field: K, value: DraftState[K]) {
     setDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
@@ -492,7 +506,7 @@ export function AdminSettingsPanel() {
 
   async function handleSave() {
     if (hasErrors || !draft) return;
-    const updated = await save(toPayload(draft, local));
+    const updated = await save(toPayload(draft, passwordPolicy));
     if (updated) setDraft(toDraft(updated));
   }
 
@@ -894,25 +908,46 @@ export function AdminSettingsPanel() {
             </div>
           </section>
 
-          {local && (
-            <section data-testid="security-settings">
-              <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">
-                {t("admin.settings.securityTitle")}
-              </h3>
-              <p className="mb-3 text-xs text-neutral-400 dark:text-neutral-500">{t("admin.settings.securityDesc")}</p>
-              <div className="flex flex-col gap-4">
-                <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
-                  {t("admin.settings.localSessionTtlHours")}
-                  <Input
-                    type="number"
-                    min={LOCAL_AUTH_RANGES.localSessionTtlHours.min}
-                    max={LOCAL_AUTH_RANGES.localSessionTtlHours.max}
-                    value={draft.localSessionTtlHours}
-                    onChange={(event) => updateField("localSessionTtlHours", event.target.value)}
-                    error={errors.localSessionTtlHours}
-                  />
-                </label>
+          <section data-testid="session-settings">
+            <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">
+              {t("admin.settings.sessionTitle")}
+            </h3>
+            <p className="mb-3 text-xs text-neutral-400 dark:text-neutral-500">{t("admin.settings.sessionDesc")}</p>
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
+                {t("admin.settings.localSessionTtlHours")}
+                <Input
+                  type="number"
+                  min={LOCAL_AUTH_RANGES.localSessionTtlHours.min}
+                  max={LOCAL_AUTH_RANGES.localSessionTtlHours.max}
+                  value={draft.localSessionTtlHours}
+                  onChange={(event) => updateField("localSessionTtlHours", event.target.value)}
+                  error={errors.localSessionTtlHours}
+                />
+              </label>
+              {sessionNotes.length > 0 && (
+                <div className="flex flex-col gap-1" data-testid="session-warnings">
+                  {sessionNotes.map((warning) => (
+                    <p
+                      key={warning}
+                      className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+                    >
+                      <IconAlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <span>{t(`admin.settings.${warning}`)}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
 
+          {passwordPolicy && (
+            <section data-testid="password-settings">
+              <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">
+                {t("admin.settings.passwordsTitle")}
+              </h3>
+              <p className="mb-3 text-xs text-neutral-400 dark:text-neutral-500">{t("admin.settings.passwordsDesc")}</p>
+              <div className="flex flex-col gap-4">
                 <label className="flex flex-col gap-1 text-sm text-neutral-600 dark:text-neutral-300">
                   {t("admin.settings.passwordMinLength")}
                   <Input
@@ -1003,9 +1038,9 @@ export function AdminSettingsPanel() {
                   <p className="text-xs text-neutral-400 dark:text-neutral-500">{t("admin.settings.lockoutDesc")}</p>
                 </div>
 
-                {securityWarnings.length > 0 && (
-                  <div className="flex flex-col gap-1" data-testid="security-warnings">
-                    {securityWarnings.map((warning) => (
+              {passwordNotes.length > 0 && (
+                  <div className="flex flex-col gap-1" data-testid="password-warnings">
+                    {passwordNotes.map((warning) => (
                       <p
                         key={warning}
                         className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"

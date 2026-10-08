@@ -9,6 +9,21 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH_FLOOR } from "../auth/password
 // ALLOWLIST así bloquea todo, un BLOCKLIST así no bloquea nada.
 const MIME_TYPE_PATTERN = /^[a-z0-9][a-z0-9.+-]*\/(\*|[a-z0-9][a-z0-9.+-]*)$/i;
 
+/// Ajustes de las contraseñas y las cuentas locales: no significan nada con un proveedor de
+/// autenticación externo, que administra las suyas. `localSessionTtlHours` no está acá a
+/// propósito: la duración de la sesión de LINK rige con cualquier proveedor.
+export const LOCAL_ACCOUNT_POLICY_FIELDS = [
+  "passwordMinLength",
+  "passwordRequireUppercase",
+  "passwordRequireLowercase",
+  "passwordRequireNumber",
+  "passwordRequireSymbol",
+  "passwordExpirationDays",
+  "passwordHistoryCount",
+  "maxFailedLoginAttempts",
+  "lockoutDurationMinutes",
+] as const;
+
 // Todos los campos son opcionales (PATCH parcial) — las reglas de negocio que
 // dependen de otros valores (ej. bajar maxGroupMembers por debajo del tamaño
 // de un grupo existente) no se validan acá, viven donde se consulta el valor.
@@ -55,7 +70,8 @@ export const updateSettingsSchema = yup
     fileMigrationBatchSize: yup.number().integer().min(1).max(500),
     fileMigrationIntervalMinutes: yup.number().integer().min(1),
     fileMigrationDeleteLocalAfterCommit: yup.boolean(),
-    // Sesión y contraseñas del modo local (LOCAL_AUTH_PLAN.md, D15). El piso
+    // Duración de la sesión de LINK (rige con cualquier proveedor; el nombre es
+    // histórico) y contraseñas del modo local (LOCAL_AUTH_PLAN.md, D15). El piso
     // de 8 caracteres no se puede bajar ni por API.
     localSessionTtlHours: yup.number().integer().min(1).max(720),
     passwordMinLength: yup.number().integer().min(PASSWORD_MIN_LENGTH_FLOOR).max(PASSWORD_MAX_LENGTH),

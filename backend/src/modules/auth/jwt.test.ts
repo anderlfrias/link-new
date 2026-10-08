@@ -75,7 +75,7 @@ describe.each([
 
     expect(identity).toMatchObject({
       mustChangePassword: false,
-      user: { id: "user-1", email: "ana@example.com", roles: [], permissions: [], authProvider: expectedProvider },
+      user: { id: "user-1", email: "ana@example.com", roles: [], authProvider: expectedProvider },
     });
     expect(identity.iat).toEqual(expect.any(Number));
   });

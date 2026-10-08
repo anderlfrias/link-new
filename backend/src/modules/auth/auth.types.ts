@@ -3,7 +3,7 @@ import { JwtPayload } from "jsonwebtoken";
 /// Usuario autenticado, a partir del token de sesión de LINK en cada request.
 ///
 /// En la sesión de LINK, `id === internalUserId` (el token lleva el id interno
-/// en `sub`) y `permissions` siempre es `[]`.
+/// en `sub`).
 export interface MappedUser {
   id: string;
   email: string;
@@ -11,8 +11,6 @@ export interface MappedUser {
   username: string | null;
   fullName: string;
   roles: string[];
-  permissions: string[];
-  app: string;
   exp: number;
   /// Quién autenticó esta sesión: el id del proveedor ("local" con cuentas propias).
   authProvider: string;
@@ -47,22 +45,35 @@ export type LoginUserResponse = MappedUser & {
 
 /// `GET /auth/config` (D14): lo que el frontend necesita antes de tener sesión,
 /// o con un token restringido. Nunca la duración de sesión ni el bloqueo.
-export type PublicAuthConfig =
-  /// Con un proveedor externo, `mode` es su id.
-  | { mode: string }
-  | {
-      mode: "local";
-      passwordPolicy: {
-        minLength: number;
-        maxLength: number;
-        requireUppercase: boolean;
-        requireLowercase: boolean;
-        requireNumber: boolean;
-        requireSymbol: boolean;
-        /// Cuántas contraseñas recientes no se pueden repetir, contando la actual.
-        historyCount: number;
-      };
-    };
+///
+/// El frontend decide qué mostrar por `capabilities`, no por el nombre del
+/// proveedor: `provider` solo sirve para los textos ("Sincronizado con {displayName}").
+export interface PublicAuthConfig {
+  provider: {
+    /// "local" con cuentas propias, o el `id` del proveedor externo.
+    id: string;
+    displayName: string;
+    external: boolean;
+  };
+  capabilities: {
+    /// Se puede cambiar la contraseña desde LINK (cuentas locales).
+    passwordChange: boolean;
+    /// `full`: un admin crea y edita cuentas. `status-only`: solo activa o desactiva
+    /// su acceso; los datos de la cuenta los administra el proveedor.
+    accountManagement: "full" | "status-only";
+  };
+  /// Solo con cuentas locales: lo necesario para elegir una contraseña.
+  passwordPolicy?: {
+    minLength: number;
+    maxLength: number;
+    requireUppercase: boolean;
+    requireLowercase: boolean;
+    requireNumber: boolean;
+    requireSymbol: boolean;
+    /// Cuántas contraseñas recientes no se pueden repetir, contando la actual.
+    historyCount: number;
+  };
+}
 
 /// Resultado de verificar el token de sesión de LINK (D6).
 export interface AuthenticatedIdentity {

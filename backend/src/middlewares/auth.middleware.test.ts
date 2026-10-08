@@ -151,8 +151,6 @@ describe("requireRoles", () => {
       username: "user1",
       fullName: "Ana Gómez",
       roles: [],
-      permissions: [],
-      app: "chat-interno",
       exp: Math.floor(Date.now() / 1000) + 3600,
       authProvider: "external-test",
       ...overrides,

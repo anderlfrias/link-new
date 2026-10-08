@@ -133,8 +133,6 @@ describe("loginWithLocalAccount", () => {
       username: "ana.perez",
       fullName: "Ana Pérez",
       roles: ["admin"],
-      permissions: [],
-      app: "link",
       exp: expect.any(Number),
       authProvider: "local",
       internalUserId: "user-1",
@@ -330,12 +328,19 @@ describe("changeOwnPassword", () => {
 });
 
 describe("getPublicAuthConfig", () => {
-  it("con un proveedor externo solo dice su id", async () => {
+  it("con un proveedor externo dice quién es y sus capacidades: sin cambio de contraseña y con cuentas de solo estado", async () => {
     // El proveedor activo en los tests es el de src/test/setup.ts.
-    await expect(getPublicAuthConfig()).resolves.toEqual({ mode: "external-test" });
+    const config = await getPublicAuthConfig();
+
+    expect(config).toEqual({
+      provider: { id: "external-test", displayName: "External Test", external: true },
+      capabilities: { passwordChange: false, accountManagement: "status-only" },
+    });
+    expect(config).not.toHaveProperty("passwordPolicy");
+    expect(SettingsService.getLocalAuthPolicy).not.toHaveBeenCalled();
   });
 
-  describe("en modo local", () => {
+  describe("con cuentas locales", () => {
     useLocalAuth();
 
     it("suma la política de contraseñas, pero nunca la duración de sesión", async () => {
@@ -344,7 +349,8 @@ describe("getPublicAuthConfig", () => {
       const config = await getPublicAuthConfig();
 
       expect(config).toEqual({
-        mode: "local",
+        provider: { id: "local", displayName: "LINK", external: false },
+        capabilities: { passwordChange: true, accountManagement: "full" },
         passwordPolicy: {
           minLength: 12,
           maxLength: 128,

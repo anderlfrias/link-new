@@ -12,14 +12,12 @@ import type { Message } from "@/features/messages/types/message.types";
 const mockSession = createMockSession({
   token: "tok-test",
   user: {
-    id: "xu-1",
+    id: "u-1",
     internalUserId: "u-1",
     username: "doctor",
     fullName: "Dr. Gomez",
     email: "gomez@example.com",
     roles: ["USER"],
-    permissions: [],
-    app: "chat-interno",
     exp: 9999999999,
     notificationSoundEnabled: true,
   },

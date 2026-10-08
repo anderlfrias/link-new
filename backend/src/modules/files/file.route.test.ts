@@ -81,8 +81,6 @@ vi.mock("../auth/jwt", () => ({
         username: null,
         fullName: "",
         roles: [],
-        permissions: [],
-        app: "link",
         exp: 0,
         authProvider: "external-test",
       },

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { IconKey, IconLockOpen, IconPencil, IconUserCheck, IconUserOff } from "@tabler/icons-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ADMIN_ROLE } from "@/features/admin/constants/admin-role.constant";
-import type { AuthMode } from "@/features/auth/types/auth.types";
 import { getAvatarUrl } from "@/utils/file-url";
 import { formatFileSize } from "@/utils/file-format";
 import { useTranslation } from "@/i18n";
@@ -13,8 +12,11 @@ import type { AdminUserListItem } from "@/features/admin/types/admin-users.types
 
 interface AdminUserRowProps {
   user: AdminUserListItem;
-  /** Modo de la instalación: en external-auth los datos de la cuenta los administra EXTERNAL_AUTH. */
-  mode?: AuthMode;
+  /** `full`: las cuentas se administran acá. `status-only` (por omisión): las administra
+   * el proveedor de autenticación y desde acá solo se activa o desactiva su acceso. */
+  accountManagement?: "full" | "status-only";
+  /** Nombre visible del proveedor externo, para los textos. */
+  providerName?: string | null;
   /** La propia cuenta: nadie puede desactivarse a sí mismo. */
   isSelf?: boolean;
   pending?: boolean;
@@ -32,7 +34,8 @@ const NEUTRAL = "bg-black/5 text-neutral-500 dark:bg-white/10 dark:text-neutral-
 
 export function AdminUserRow({
   user,
-  mode = "external-auth",
+  accountManagement = "status-only",
+  providerName = null,
   isSelf = false,
   pending = false,
   onSetStatus,
@@ -47,7 +50,7 @@ export function AdminUserRow({
     locale === "en" ? "en-US" : "es-AR",
   );
   const active = user.status === "ACTIVE";
-  const local = mode === "local";
+  const full = accountManagement === "full";
 
   function confirm() {
     if (confirming === "deactivate") onSetStatus?.(user, "INACTIVE");
@@ -82,20 +85,20 @@ export function AdminUserRow({
           >
             {active ? t("admin.users.statusActive") : t("admin.users.statusInactive")}
           </span>
-          {local && user.localRoles?.includes(ADMIN_ROLE) && (
+          {full && user.localRoles?.includes(ADMIN_ROLE) && (
             <span className={cn(BADGE, "bg-brand-blue/10 text-brand-blue dark:bg-brand-blue/20")}>
               {t("admin.users.badgeAdmin")}
             </span>
           )}
-          {local && user.locked && (
+          {full && user.locked && (
             <span className={cn(BADGE, "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300")}>
               {t("admin.users.badgeLocked")}
             </span>
           )}
-          {local && user.hasPassword === false && (
+          {full && user.hasPassword === false && (
             <span className={cn(BADGE, NEUTRAL)}>{t("admin.users.badgeNoPassword")}</span>
           )}
-          {local && user.hasPassword && user.mustChangePassword && (
+          {full && user.hasPassword && user.mustChangePassword && (
             <span className={cn(BADGE, NEUTRAL)}>{t("admin.users.badgeMustChange")}</span>
           )}
           <span className={cn(BADGE, NEUTRAL)}>
@@ -117,9 +120,11 @@ export function AdminUserRow({
               })}
             </span>
           )}
-          {!local && (
+          {!full && (
             <span className={cn(BADGE, NEUTRAL)}>
-              {user.syncProfileWithIntegration ? t("admin.users.syncedWithProvider") : t("admin.users.editedLocally")}
+              {user.syncProfileWithIntegration
+                ? t("admin.users.syncedWithProvider", { provider: providerName ?? t("admin.users.identityProviderFallback") })
+                : t("admin.users.editedLocally")}
             </span>
           )}
         </div>
@@ -146,19 +151,19 @@ export function AdminUserRow({
             </div>
           ) : (
             <>
-              {local && onEdit && (
+              {full && onEdit && (
                 <button type="button" className={actionButton} disabled={pending} onClick={() => onEdit(user)}>
                   <IconPencil size={14} stroke={1.75} />
                   {t("common.edit")}
                 </button>
               )}
-              {local && onResetPassword && (
+              {full && onResetPassword && (
                 <button type="button" className={actionButton} disabled={pending} onClick={() => setConfirming("reset")}>
                   <IconKey size={14} stroke={1.75} />
                   {user.hasPassword ? t("admin.users.actionResetPassword") : t("admin.users.actionAssignPassword")}
                 </button>
               )}
-              {local && onUnlock && user.locked && (
+              {full && onUnlock && user.locked && (
                 <button type="button" className={actionButton} disabled={pending} onClick={() => onUnlock(user)}>
                   <IconLockOpen size={14} stroke={1.75} />
                   {t("admin.users.actionUnlock")}

@@ -22,7 +22,8 @@ const mockRefresh = vi.fn();
 vi.mock("@/providers/auth-config-provider", () => ({
   useAuthConfig: () => ({
     config: {
-      mode: "local",
+      provider: { id: "local", displayName: "LINK", external: false },
+      capabilities: { passwordChange: true, accountManagement: "full" },
       passwordPolicy: {
         minLength: 12,
         maxLength: 128,

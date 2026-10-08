@@ -59,8 +59,6 @@ function sessionIdentity(
       username: null,
       fullName: "",
       roles: [],
-      permissions: [],
-      app: "link",
       exp: nowSeconds() + 3600,
       authProvider,
     },

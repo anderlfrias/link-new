@@ -1,6 +1,5 @@
 import { User } from "@prisma/client";
 import jwt, { JwtPayload } from "jsonwebtoken";
-import { SESSION_TOKEN_AUDIENCE } from "./jwt";
 import { LoginUserResponse, MustChangePasswordReason } from "./auth.types";
 
 export function tokenExp(token: string): number {
@@ -23,8 +22,6 @@ export function buildLoginResponse(
       username: account.username,
       fullName: account.name,
       roles: account.roles,
-      permissions: [],
-      app: SESSION_TOKEN_AUDIENCE,
       exp: tokenExp(token),
       authProvider: options.authProvider,
       internalUserId: account.id,

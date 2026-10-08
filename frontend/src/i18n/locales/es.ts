@@ -518,8 +518,10 @@ export const es = {
       allowStickersAndGifs: "Los usuarios pueden buscar y enviar GIFs y stickers (Giphy)",
       stickersDesc: "Requiere además una API key de Giphy configurada en el servidor (GIPHY_API_KEY) — sin eso, el buscador responde error aunque esta opción esté activada.",
 
-      securityTitle: "Sesión y contraseñas",
-      securityDesc: "Rige para el inicio de sesión local de esta instalación. Los cambios quedan en el registro de auditoría.",
+      sessionTitle: "Sesión",
+      sessionDesc: "Cuánto dura una sesión abierta, para todos los usuarios de esta instalación. Los cambios quedan en el registro de auditoría.",
+      passwordsTitle: "Contraseñas",
+      passwordsDesc: "Política de las cuentas locales de esta instalación. Los cambios quedan en el registro de auditoría.",
       localSessionTtlHours: "Duración de la sesión, en horas (1 a 720)",
       passwordMinLength: "Largo mínimo de la contraseña (8 a 128)",
       passwordCompositionTitle: "La contraseña tiene que incluir:",
@@ -542,7 +544,8 @@ export const es = {
 
     users: {
       title: "Usuarios",
-      external-authNotice: "Los datos de cada cuenta se administran en EXTERNAL_AUTH. Desde acá solo se desactiva o reactiva su acceso al chat.",
+      externalNotice: "Los datos de cada cuenta se administran en {provider}. Desde acá solo se desactiva o reactiva su acceso al chat.",
+      identityProviderFallback: "el proveedor de identidad",
       localNotice: "Las cuentas y sus contraseñas se administran desde este panel. Las contraseñas temporales se muestran una sola vez.",
       createButton: "Crear cuenta",
       createTitle: "Crear cuenta",
@@ -591,7 +594,7 @@ export const es = {
       filesCount: "{size} · {count} archivo(s)",
       activityStats: "{conversations} conversaciones · {messages} mensajes",
       groupsAdminCount: "Admin de {count} grupo(s)",
-      syncedWithProvider: "Sincronizado con EXTERNAL_AUTH",
+      syncedWithProvider: "Sincronizado con {provider}",
       editedLocally: "Editado localmente",
     },
 
@@ -651,14 +654,14 @@ export const es = {
       hideDetails: "Ocultar detalle",
       metadata: "Metadatos:",
       providers: {
-        external-auth: "EXTERNAL_AUTH",
+        external: "Externo",
         local: "Local",
       },
       reasons: {
-        forbidden_by_provider: "Rechazado por EXTERNAL_AUTH",
+        forbidden_by_provider: "Rechazado por el proveedor de identidad",
         invalid_credentials: "Credenciales inválidas",
-        provider_error: "Error de EXTERNAL_AUTH",
-        provider_unreachable: "EXTERNAL_AUTH no responde",
+        provider_error: "Error del proveedor de identidad",
+        provider_unreachable: "El proveedor de identidad no responde",
         unknown_account: "Cuenta inexistente",
         wrong_password: "Contraseña incorrecta",
         no_credential: "Sin contraseña asignada",

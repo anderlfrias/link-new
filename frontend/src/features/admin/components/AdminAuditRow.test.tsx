@@ -1,8 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminAuditRow } from "./AdminAuditRow";
 import type { AdminAuditLogListItem } from "@/features/admin/types/admin-audit.types";
+import type { AuthConfig } from "@/features/auth/types/auth.types";
+import { createMockAuthConfig } from "@/test/test-utils";
+
+// El proveedor de esta instalación lo dice `GET /auth/config`: cada test elige el suyo.
+let mockConfig: AuthConfig | null = null;
+vi.mock("@/providers/auth-config-provider", () => ({
+  useAuthConfig: () => ({ config: mockConfig, refresh: vi.fn() }),
+}));
 
 describe("AdminAuditRow", () => {
   const sampleLog: AdminAuditLogListItem = {
@@ -76,6 +84,10 @@ describe("AdminAuditRow", () => {
   });
 
   describe("proveedor, motivo y origen", () => {
+    beforeEach(() => {
+      mockConfig = null;
+    });
+
     const row = (action: string, metadata: unknown): AdminAuditLogListItem => ({
       ...sampleLog,
       action,
@@ -91,9 +103,32 @@ describe("AdminAuditRow", () => {
       expect(screen.getByText("Cuenta bloqueada")).toBeInTheDocument();
     });
 
-    it("interpreta un login sin provider (filas anteriores al modo local) como EXTERNAL_AUTH", () => {
+    it("interpreta un login sin provider (filas anteriores al modo local) como externo, sin nombrar ningún sistema", () => {
       render(<AdminAuditRow item={row("LOGIN", null)} />);
-      expect(screen.getByText("EXTERNAL_AUTH")).toBeInTheDocument();
+      expect(screen.getByText("Externo")).toBeInTheDocument();
+    });
+
+    it("muestra el id de un proveedor externo con su nombre si es el de esta instalación", () => {
+      mockConfig = createMockAuthConfig("external");
+      render(<AdminAuditRow item={row("LOGIN", { provider: "test-provider" })} />);
+      expect(screen.getByText("Test Provider")).toBeInTheDocument();
+      expect(screen.queryByText("test-provider")).not.toBeInTheDocument();
+    });
+
+    it("muestra crudo el id de otro proveedor, por ejemplo el de una instalación anterior", () => {
+      mockConfig = createMockAuthConfig("external");
+      render(<AdminAuditRow item={row("LOGIN", { provider: "proveedor-viejo" })} />);
+      expect(screen.getByText("proveedor-viejo")).toBeInTheDocument();
+    });
+
+    it("sin configuración cargada muestra crudo el id de un proveedor externo", () => {
+      render(<AdminAuditRow item={row("LOGIN", { provider: "test-provider" })} />);
+      expect(screen.getByText("test-provider")).toBeInTheDocument();
+    });
+
+    it("traduce los motivos de un proveedor externo sin nombrar ningún sistema", () => {
+      render(<AdminAuditRow item={row("LOGIN_FAILED", { provider: "test-provider", reason: "forbidden_by_provider" })} />);
+      expect(screen.getByText("Rechazado por el proveedor de identidad")).toBeInTheDocument();
     });
 
     it("muestra el origen de las acciones de administración de cuentas", () => {
@@ -106,11 +141,11 @@ describe("AdminAuditRow", () => {
       render(<AdminAuditRow item={row("CHANGE_PASSWORD", { reason: "expired" })} />);
       expect(screen.getByText("Cambio de contraseña")).toBeInTheDocument();
       expect(screen.getByText("Por vencimiento")).toBeInTheDocument();
-      expect(screen.queryByText("EXTERNAL_AUTH")).not.toBeInTheDocument();
+      expect(screen.queryByText("Externo")).not.toBeInTheDocument();
     });
 
     it("muestra crudo un motivo que todavía no tiene traducción", () => {
-      render(<AdminAuditRow item={row("LOGIN_FAILED", { provider: "external-auth", reason: "something_new" })} />);
+      render(<AdminAuditRow item={row("LOGIN_FAILED", { provider: "test-provider", reason: "something_new" })} />);
       expect(screen.getByText("something_new")).toBeInTheDocument();
     });
 

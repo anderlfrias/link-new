@@ -61,17 +61,21 @@ beforeEach(() => {
 
 describe("GET /auth/config", () => {
   it("es público: responde sin token", async () => {
-    vi.mocked(LocalAuthService.getPublicAuthConfig).mockResolvedValue({ mode: "external-auth" });
+    const config = {
+      provider: { id: "external-test", displayName: "External Test", external: true },
+      capabilities: { passwordChange: false, accountManagement: "status-only" as const },
+    };
+    vi.mocked(LocalAuthService.getPublicAuthConfig).mockResolvedValue(config);
 
     const res = await request(app).get("/auth/config");
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ mode: "external-auth" });
+    expect(res.body).toEqual(config);
   });
 });
 
 describe("PATCH /auth/password", () => {
-  it("en modo external-auth no existe: 404 aunque la sesión sea válida", async () => {
+  it("con un proveedor externo no existe: 404 aunque la sesión sea válida", async () => {
     const res = await request(app)
       .patch("/auth/password")
       .set("Authorization", `Bearer ${localToken(false)}`)

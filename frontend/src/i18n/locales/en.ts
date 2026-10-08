@@ -522,8 +522,10 @@ export const en: TranslationSchema = {
       allowStickersAndGifs: "Users can search and send GIFs and stickers (Giphy)",
       stickersDesc: "Also requires a Giphy API key configured on the server (GIPHY_API_KEY) — without it, searches will fail even if enabled.",
 
-      securityTitle: "Session and passwords",
-      securityDesc: "Applies to this installation's local sign-in. Changes are recorded in the audit log.",
+      sessionTitle: "Session",
+      sessionDesc: "How long a signed-in session lasts, for every user of this installation. Changes are recorded in the audit log.",
+      passwordsTitle: "Passwords",
+      passwordsDesc: "Policy for this installation's local accounts. Changes are recorded in the audit log.",
       localSessionTtlHours: "Session duration, in hours (1 to 720)",
       passwordMinLength: "Minimum password length (8 to 128)",
       passwordCompositionTitle: "The password must include:",
@@ -546,7 +548,8 @@ export const en: TranslationSchema = {
 
     users: {
       title: "Users",
-      external-authNotice: "Each account's details are managed in EXTERNAL_AUTH. From here you can only deactivate or reactivate its access to the chat.",
+      externalNotice: "Each account's details are managed in {provider}. From here you can only deactivate or reactivate its access to the chat.",
+      identityProviderFallback: "the identity provider",
       localNotice: "Accounts and their passwords are managed from this panel. Temporary passwords are shown only once.",
       createButton: "Create account",
       createTitle: "Create account",
@@ -595,7 +598,7 @@ export const en: TranslationSchema = {
       filesCount: "{size} · {count} file(s)",
       activityStats: "{conversations} conversations · {messages} messages",
       groupsAdminCount: "Admin of {count} group(s)",
-      syncedWithProvider: "Synced with EXTERNAL_AUTH",
+      syncedWithProvider: "Synced with {provider}",
       editedLocally: "Edited locally",
     },
 
@@ -655,14 +658,14 @@ export const en: TranslationSchema = {
       hideDetails: "Hide details",
       metadata: "Metadata:",
       providers: {
-        external-auth: "EXTERNAL_AUTH",
+        external: "External",
         local: "Local",
       },
       reasons: {
-        forbidden_by_provider: "Rejected by EXTERNAL_AUTH",
+        forbidden_by_provider: "Rejected by the identity provider",
         invalid_credentials: "Invalid credentials",
-        provider_error: "EXTERNAL_AUTH error",
-        provider_unreachable: "EXTERNAL_AUTH unreachable",
+        provider_error: "Identity provider error",
+        provider_unreachable: "The identity provider is unreachable",
         unknown_account: "Unknown account",
         wrong_password: "Wrong password",
         no_credential: "No password assigned",

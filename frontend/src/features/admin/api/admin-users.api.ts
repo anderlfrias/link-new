@@ -24,7 +24,8 @@ export function listAdminUsers(token: string, query: AdminUserListQuery = {}): P
   });
 }
 
-/** Los dos modos: en external-auth solo `status` (activar o desactivar el acceso al chat). */
+/** Con cualquier proveedor. Si las cuentas las administra un proveedor externo, solo `status`
+ * (activar o desactivar el acceso al chat). */
 export function updateAdminUser(token: string, id: string, payload: UpdateAdminUserPayload): Promise<AdminAccountView> {
   return apiRequest<AdminAccountView>(`${BASE_PATH}/${id}`, { method: "PATCH", token, body: payload });
 }

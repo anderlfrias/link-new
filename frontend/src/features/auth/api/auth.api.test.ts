@@ -119,9 +119,13 @@ describe("auth.api", () => {
   });
 
   it("getAuthConfig pide GET /v1/auth/config sin token", async () => {
-    vi.mocked(apiRequest).mockResolvedValue({ mode: "external-auth" });
+    const config = {
+      provider: { id: "test-provider", displayName: "Test Provider", external: true },
+      capabilities: { passwordChange: false, accountManagement: "status-only" },
+    };
+    vi.mocked(apiRequest).mockResolvedValue(config);
 
-    await expect(getAuthConfig()).resolves.toEqual({ mode: "external-auth" });
+    await expect(getAuthConfig()).resolves.toEqual(config);
     expect(apiRequest).toHaveBeenCalledWith("/v1/auth/config");
   });
 

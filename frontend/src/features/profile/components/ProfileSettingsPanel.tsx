@@ -29,7 +29,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { LanguageSelector } from "@/components/ui/LanguageSelector";
 import { APP_VERSION } from "@/constants/app-version.constant";
 import { ChangePasswordForm } from "@/features/auth/components/ChangePasswordForm";
-import { useAuthConfig } from "@/providers/auth-config-provider";
+import { useAuthCapabilities, useAuthConfig } from "@/providers/auth-config-provider";
 
 interface ProfileSettingsPanelProps {
   onClose: () => void;
@@ -39,6 +39,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
   const { t } = useTranslation();
   const { session, completePasswordChange } = useAuth();
   const { config } = useAuthConfig();
+  const { passwordChange } = useAuthCapabilities();
   const { url: profilePictureUrl } = useProfilePicture();
   const { upload, remove, pending, error } = useUpdateProfilePicture();
   const { updateName, pending: updatingName, error: nameError } = useUpdateProfileName();
@@ -290,9 +291,9 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
           />
         </div>
 
-        {/* Seguridad: solo con cuentas locales. En modo external-auth la contraseña
-            se administra en EXTERNAL_AUTH. */}
-        {session.user.authProvider === "local" && (
+        {/* Seguridad: solo si la contraseña se cambia desde LINK (cuentas locales). Con un
+            proveedor externo, la administra el proveedor. */}
+        {passwordChange && (
           <div className="mt-6">
             <h3 className="mb-1 text-sm font-medium text-brand-ink dark:text-white">{t("password.securityTitle")}</h3>
             <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">{t("password.changePasswordDescription")}</p>
@@ -304,7 +305,7 @@ export function ProfileSettingsPanel({ onClose }: ProfileSettingsPanelProps) {
             )}
             {changingPassword ? (
               <ChangePasswordForm
-                policy={config?.mode === "local" ? config.passwordPolicy : null}
+                policy={config?.passwordPolicy ?? null}
                 currentPasswordLabel={t("password.currentPassword")}
                 onChanged={({ token, exp }) => {
                   completePasswordChange(token, exp);

@@ -11,7 +11,8 @@ import {
 } from "@/features/admin/api/admin-users.api";
 import { useAuth } from "@/providers/auth-provider";
 import type { AdminUserListItem } from "@/features/admin/types/admin-users.types";
-import type { AuthMode } from "@/features/auth/types/auth.types";
+import { createMockAuthConfig } from "@/test/test-utils";
+import { deriveAuthCapabilities, useAuthCapabilities } from "@/providers/auth-config-provider";
 import { ApiError } from "@/types/api.types";
 
 vi.mock("@/features/admin/hooks/use-admin-users", () => ({
@@ -29,9 +30,19 @@ vi.mock("@/providers/auth-provider", () => ({
   useAuth: vi.fn(),
 }));
 
+// Qué se puede hacer con las cuentas lo decide `GET /auth/config`: cada test elige el proveedor.
+vi.mock("@/providers/auth-config-provider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/providers/auth-config-provider")>()),
+  useAuthCapabilities: vi.fn(),
+}));
+
+function mockProvider(kind: "local" | "external") {
+  vi.mocked(useAuthCapabilities).mockReturnValue(deriveAuthCapabilities(createMockAuthConfig(kind)));
+}
+
 const ADMIN_ID = "admin-1";
 
-function mockSession(mode?: AuthMode) {
+function mockSession() {
   vi.mocked(useAuth).mockReturnValue({
     session: {
       token: "token-admin",
@@ -41,11 +52,8 @@ function mockSession(mode?: AuthMode) {
         username: "admin",
         fullName: "Admin",
         roles: ["admin"],
-        permissions: [],
-        app: "link",
         exp: 0,
         internalUserId: ADMIN_ID,
-        authProvider: mode,
         notificationSoundEnabled: true,
       },
     },
@@ -95,6 +103,7 @@ describe("AdminUsersPanel", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockSession();
+    mockProvider("external");
   });
 
   it("renders users and handles search submit and clear", async () => {
@@ -137,7 +146,7 @@ describe("AdminUsersPanel", () => {
     expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 
-  it("applies the status filter in both modes", async () => {
+  it("applies the status filter with any provider", async () => {
     mockUsers([makeUser()]);
     const user = userEvent.setup();
     render(<AdminUsersPanel />);
@@ -148,12 +157,13 @@ describe("AdminUsersPanel", () => {
     expect(useAdminUsers).toHaveBeenLastCalledWith({ search: undefined, status: "INACTIVE", hasPassword: undefined });
   });
 
-  describe("modo external-auth", () => {
-    it("shows the EXTERNAL_AUTH notice and only lets the admin deactivate or reactivate access", () => {
+  describe("con las cuentas administradas por un proveedor externo", () => {
+    it("shows the provider notice and only lets the admin deactivate or reactivate access", () => {
       mockUsers([makeUser(), makeUser({ id: "u-2", name: "Ana Diaz", status: "INACTIVE" })]);
       render(<AdminUsersPanel />);
 
-      expect(screen.getByText(/se administran en EXTERNAL_AUTH/)).toBeInTheDocument();
+      expect(screen.getByText(/se administran en Test Provider/)).toBeInTheDocument();
+      expect(screen.getAllByText("Sincronizado con Test Provider")).toHaveLength(2);
       expect(screen.queryByRole("button", { name: /Crear cuenta/ })).not.toBeInTheDocument();
       expect(screen.queryByRole("checkbox", { name: "Sin contraseña" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Editar/ })).not.toBeInTheDocument();
@@ -198,9 +208,9 @@ describe("AdminUsersPanel", () => {
     });
   });
 
-  describe("modo local", () => {
+  describe("con cuentas locales", () => {
     beforeEach(() => {
-      mockSession("local");
+      mockProvider("local");
     });
 
     it("shows the local notice, the create button and the without-password filter", async () => {
@@ -210,7 +220,7 @@ describe("AdminUsersPanel", () => {
 
       expect(screen.getByText(/se administran desde este panel/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Crear cuenta/ })).toBeInTheDocument();
-      expect(screen.queryByText("Sincronizado con EXTERNAL_AUTH")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Sincronizado con/)).not.toBeInTheDocument();
 
       await user.click(screen.getByRole("checkbox", { name: "Sin contraseña" }));
       await user.click(screen.getByRole("button", { name: "Buscar" }));

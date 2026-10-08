@@ -33,8 +33,8 @@ vi.mock("@/features/admin/hooks/use-admin-users", () => ({
   useAdminUsers: vi.fn(),
 }));
 
-// El panel de usuarios lee el modo de la instalación de la sesión: sin sesión
-// (o sin authProvider) se comporta como en modo external-auth.
+// El panel de usuarios lee de la sesión quién es el propio admin. Sin configuración de
+// autenticación cargada muestra lo mínimo: cuentas de solo estado, sin nombre de proveedor.
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => ({ session: null }),
 }));
@@ -244,12 +244,12 @@ describe("Admin i18n support (English locale)", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Users" })).toBeInTheDocument();
-    expect(screen.getByText("Each account's details are managed in EXTERNAL_AUTH. From here you can only deactivate or reactivate its access to the chat.")).toBeInTheDocument();
+    expect(screen.getByText("Each account's details are managed in the identity provider. From here you can only deactivate or reactivate its access to the chat.")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search by name, email, or username")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear" })).toBeInTheDocument();
     expect(screen.getByText("1 user(s)")).toBeInTheDocument();
-    expect(screen.getByText("Synced with EXTERNAL_AUTH")).toBeInTheDocument();
+    expect(screen.getByText("Synced with the identity provider")).toBeInTheDocument();
     expect(screen.getByText("Admin of 1 group(s)")).toBeInTheDocument();
   });
 

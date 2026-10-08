@@ -50,8 +50,6 @@ export function verifyAccessToken(token: string): AuthenticatedIdentity {
       username: null,
       fullName: "",
       roles: [],
-      permissions: [],
-      app: SESSION_TOKEN_AUDIENCE,
       exp: payload.exp ?? 0,
       authProvider: currentProviderId(),
     },
