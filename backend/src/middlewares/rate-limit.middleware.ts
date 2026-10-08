@@ -15,21 +15,34 @@ export const TOO_MANY_ATTEMPTS_MESSAGE = {
 // (la sobreescribe en su borde), pero sin Cloudflare delante cualquier
 // cliente la manda con la IP que quiera y se saltaba este límite.
 //
-// Dos limiters en paralelo, no uno solo: si el único límite fuera por IP,
-// todo el tráfico detrás del mismo proxy/NAT (oficina, CGNAT) comparte una
-// sola IP a ojos de Express, y el límite terminaba siendo compartido entre
-// TODOS los usuarios en vez de ser por persona — así se explicaba el "too
-// many requests" en el primer intento de alguien que nunca lo había hecho
-// antes: OTRA persona en la misma red ya había gastado el cupo compartido.
+// Tres limiters en paralelo, no uno solo:
 //
-// `loginUserRateLimiter` (por usuario) es la defensa real para ese caso: cada
-// cuenta tiene su propio cupo, así que los intentos fallidos de un usuario
-// nunca afectan a otro que comparte la misma IP. `loginIpRateLimiter` (por IP)
-// se mantiene como respaldo más amplio, para frenar a quien prueba muchos
-// usuarios distintos desde una sola IP (fuerza bruta clásica) — con más cupo
-// porque ya no es la única línea de defensa.
+// - `loginIpRateLimiter` (por IP, 20): frena a quien prueba muchos usuarios
+//   distintos desde una sola IP (fuerza bruta clásica). Si fuera el único
+//   límite, todo el tráfico detrás del mismo proxy/NAT (oficina, CGNAT)
+//   compartiría una sola IP a ojos de Express y el cupo sería de TODOS en vez de
+//   por persona — así se explicó un "too many requests" en el primer intento de
+//   alguien que nunca lo había hecho: OTRA persona en la misma red ya había
+//   gastado el cupo compartido.
+// - `loginUserIpRateLimiter` (por usuario + IP, 5): es el cupo que importa para
+//   una persona. Cada combinación de cuenta e IP tiene el suyo, así que los
+//   fallos de alguien que escribe el usuario ajeno desde su IP gastan SU cupo
+//   y no el de la víctima, que entra sin problema desde otra IP.
+// - `loginUserRateLimiter` (por usuario, 20, desde cualquier IP): tope global
+//   por cuenta contra la fuerza bruta distribuida. Con el mismo límite de 5 que
+//   el de arriba, cualquiera sin cuenta —mandando 5 intentos con el usuario de
+//   otra persona cada 15 minutos— le impedía entrar todo el día: este cupo se
+//   agotaba aunque la contraseña correcta estuviera en camino. Con 20, para
+//   bloquear una cuenta en todas las IPs hacen falta al menos 4 IPs distintas
+//   (20 / 5), y la capacidad de adivinar una contraseña sube de 5 a 20
+//   intentos cada 15 minutos, que sigue siendo poco. El bloqueo persistente por
+//   cuenta del modo local (LOCAL_AUTH_PLAN.md, D17) es aparte y está apagado
+//   por defecto.
 //
-// `skipSuccessfulRequests: true` en ambos: un login que sale bien no debería
+// Detrás de un NAT, o con TRUST_PROXY mal configurado, todos comparten IP y el
+// límite por usuario + IP se degrada al comportamiento de antes.
+//
+// `skipSuccessfulRequests: true` en los tres: un login que sale bien no debería
 // sumar contra el límite, incluso si antes hubo algún typo — así el cupo solo
 // se gasta con fallos reales, no con el uso normal de alguien reintentando.
 
@@ -49,6 +62,13 @@ export const loginIpRateLimiter = rateLimit({
 // faltante de por sí corta enseguida en el controller con `BadRequestError`.
 const UNKNOWN_USER_KEY = "unknown-user";
 
+/// El usuario que se intenta loguear (usuario o correo), normalizado como lo
+/// hace el login: sin espacios en los bordes y sin distinguir mayúsculas.
+function loginUserKey(req: { body?: { user?: unknown } }): string {
+  const user = req.body?.user;
+  return typeof user === "string" && user.trim() ? user.trim().toLowerCase() : UNKNOWN_USER_KEY;
+}
+
 /// `PATCH /auth/password` (LOCAL_AUTH_PLAN.md §7): por cuenta, para que un
 /// token robado no sirva para probar contraseñas actuales por fuerza bruta.
 /// Mismo cupo que el login por usuario; solo cuentan los intentos fallidos.
@@ -62,16 +82,23 @@ export const passwordChangeRateLimiter = rateLimit({
   message: { error: "Hiciste demasiados intentos de cambio de contraseña. Esperá unos minutos y volvé a intentar." },
 });
 
-export const loginUserRateLimiter = rateLimit({
+export const loginUserIpRateLimiter = rateLimit({
   windowMs: WINDOW_MS,
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => {
-    const user = req.body?.user;
-    return typeof user === "string" && user.trim() ? user.trim().toLowerCase() : UNKNOWN_USER_KEY;
-  },
+  keyGenerator: (req) => `${loginUserKey(req)}|${getClientIp(req) ?? "unknown"}`,
+  message: TOO_MANY_ATTEMPTS_MESSAGE,
+});
+
+export const loginUserRateLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: loginUserKey,
   message: TOO_MANY_ATTEMPTS_MESSAGE,
 });
 

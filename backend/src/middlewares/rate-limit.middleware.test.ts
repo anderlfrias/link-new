@@ -5,6 +5,7 @@ import env from "../config/env";
 import {
   downloadRateLimiter,
   loginIpRateLimiter,
+  loginUserIpRateLimiter,
   loginUserRateLimiter,
   partUrlsRateLimiter,
   uploadRateLimiter,
@@ -35,19 +36,131 @@ function uniqueKey(prefix: string): string {
   return `${prefix}-${uniqueSuffix}`;
 }
 
-describe("loginUserRateLimiter", () => {
-  it("permite 5 intentos fallidos por usuario y bloquea el 6to con el mensaje esperado", async () => {
-    const app = buildApp(loginUserRateLimiter);
+// Las pruebas que cambian de IP lo hacen con cf-connecting-ip, que solo se
+// respeta con TRUST_CF_CONNECTING_IP=true (ver config/client-ip.ts).
+function withCloudflareIp() {
+  const originalTrustCf = env.TRUST_CF_CONNECTING_IP;
+  beforeEach(() => {
+    env.TRUST_CF_CONNECTING_IP = true;
+  });
+  afterEach(() => {
+    env.TRUST_CF_CONNECTING_IP = originalTrustCf;
+  });
+}
+
+describe("loginUserIpRateLimiter", () => {
+  withCloudflareIp();
+
+  it("bloquea el 6to fallo del mismo usuario desde la misma IP", async () => {
+    const app = buildApp(loginUserIpRateLimiter);
     const user = uniqueKey("user");
+    const ip = uniqueKey("203.0.113");
 
     for (let i = 0; i < 5; i++) {
-      const res = await request(app).post("/login").send({ user });
+      const res = await request(app).post("/login").set("cf-connecting-ip", ip).send({ user });
       expect(res.status).toBe(401);
     }
 
-    const blocked = await request(app).post("/login").send({ user });
+    const blocked = await request(app).post("/login").set("cf-connecting-ip", ip).send({ user });
     expect(blocked.status).toBe(429);
     expect(blocked.body).toEqual(TOO_MANY_ATTEMPTS_BODY);
+  });
+
+  it("el mismo usuario desde otra IP conserva su cupo", async () => {
+    const app = buildApp(loginUserIpRateLimiter);
+    const user = uniqueKey("user");
+    const attackerIp = uniqueKey("203.0.113");
+    const ownerIp = uniqueKey("198.51.100");
+
+    for (let i = 0; i < 6; i++) {
+      await request(app).post("/login").set("cf-connecting-ip", attackerIp).send({ user });
+    }
+    const attacker = await request(app).post("/login").set("cf-connecting-ip", attackerIp).send({ user });
+    expect(attacker.status).toBe(429);
+
+    // El titular de la cuenta entra desde su propia IP: el atacante solo agotó su cupo.
+    const owner = await request(app).post("/login").set("cf-connecting-ip", ownerIp).send({ user });
+    expect(owner.status).toBe(401);
+  });
+
+  it("otro usuario desde la misma IP tiene su propio cupo", async () => {
+    const app = buildApp(loginUserIpRateLimiter);
+    const ip = uniqueKey("203.0.113");
+    const userA = uniqueKey("userA");
+    const userB = uniqueKey("userB");
+
+    for (let i = 0; i < 6; i++) {
+      await request(app).post("/login").set("cf-connecting-ip", ip).send({ user: userA });
+    }
+
+    const res = await request(app).post("/login").set("cf-connecting-ip", ip).send({ user: userB });
+    expect(res.status).toBe(401);
+  });
+
+  it("normaliza mayúsculas y espacios del usuario", async () => {
+    const app = buildApp(loginUserIpRateLimiter);
+    const base = uniqueKey("normuser");
+    const ip = uniqueKey("203.0.113");
+
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post("/login")
+        .set("cf-connecting-ip", ip)
+        .send({ user: `  ${base.toUpperCase()}  ` });
+    }
+
+    const blocked = await request(app).post("/login").set("cf-connecting-ip", ip).send({ user: base.toLowerCase() });
+    expect(blocked.status).toBe(429);
+  });
+
+  it("sin `user` en el body se limita por IP en un bucket genérico", async () => {
+    const app = buildApp(loginUserIpRateLimiter);
+    const ip = uniqueKey("203.0.113");
+
+    for (let i = 0; i < 5; i++) {
+      const res = await request(app).post("/login").set("cf-connecting-ip", ip).send({});
+      expect(res.status).toBe(401);
+    }
+
+    const blocked = await request(app).post("/login").set("cf-connecting-ip", ip).send({ user: 12345 });
+    expect(blocked.status).toBe(429);
+  });
+});
+
+describe("loginUserRateLimiter", () => {
+  withCloudflareIp();
+
+  it("permite 20 fallos por usuario desde IPs distintas y bloquea el 21ro", async () => {
+    const app = buildApp(loginUserRateLimiter);
+    const user = uniqueKey("user");
+
+    for (let i = 0; i < 20; i++) {
+      const res = await request(app).post("/login").set("cf-connecting-ip", uniqueKey("192.0.2")).send({ user });
+      expect(res.status).toBe(401);
+    }
+
+    const blocked = await request(app).post("/login").set("cf-connecting-ip", uniqueKey("192.0.2")).send({ user });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual(TOO_MANY_ATTEMPTS_BODY);
+  });
+
+  it("cinco fallos de una sola IP no agotan el cupo del usuario", async () => {
+    const app = express();
+    app.use(express.json());
+    // La cadena completa de /auth/login: por usuario + IP y, después, el tope global por usuario.
+    app.use(loginUserIpRateLimiter, loginUserRateLimiter);
+    app.post("/login", (_req, res) => res.status(401).json({ error: "bad credentials" }));
+    const user = uniqueKey("user");
+    const attackerIp = uniqueKey("203.0.113");
+    const ownerIp = uniqueKey("198.51.100");
+
+    for (let i = 0; i < 7; i++) {
+      await request(app).post("/login").set("cf-connecting-ip", attackerIp).send({ user });
+    }
+
+    // El titular no recibe 429 aunque el atacante ya agotó su cupo usuario+IP.
+    const owner = await request(app).post("/login").set("cf-connecting-ip", ownerIp).send({ user });
+    expect(owner.status).toBe(401);
   });
 
   it("dos usuarios distintos tienen cupos independientes", async () => {
@@ -55,7 +168,7 @@ describe("loginUserRateLimiter", () => {
     const userA = uniqueKey("userA");
     const userB = uniqueKey("userB");
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       await request(app).post("/login").send({ user: userA });
     }
 
@@ -67,7 +180,7 @@ describe("loginUserRateLimiter", () => {
     const app = buildApp(loginUserRateLimiter);
     const base = uniqueKey("normuser");
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       await request(app)
         .post("/login")
         .send({ user: `  ${base.toUpperCase()}  ` });
@@ -81,7 +194,7 @@ describe("loginUserRateLimiter", () => {
   it("sin `user` en el body (o no-string) cae en el bucket genérico compartido", async () => {
     const app = buildApp(loginUserRateLimiter);
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 20; i++) {
       const res = await request(app).post("/login").send({});
       expect(res.status).toBe(401);
     }

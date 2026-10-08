@@ -62,6 +62,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Cualquier usuario podía crear registros de llamada falsos en sus conversaciones, por la API o reenviando un registro real. Los registros de llamada y las encuestas ya no se pueden reenviar.
 - Una tarjeta de contacto podía mostrar el nombre y el correo de una persona y abrir el chat con otra, o cargar su foto desde un sitio externo. Ahora el servidor arma la tarjeta con los datos reales de la cuenta.
 - La conexión en tiempo real seguía abierta, recibiendo mensajes, después de que vencía la sesión.
+- Cualquiera podía impedirle a otra persona iniciar sesión durante 15 minutos con cinco intentos fallidos usando su usuario. Ahora el límite de cinco intentos es por usuario y por IP, con un tope más alto por usuario desde cualquier IP.
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
 - Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.

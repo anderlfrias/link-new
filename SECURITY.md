@@ -45,7 +45,10 @@ Solo se corrigen vulnerabilidades sobre la última versión publicada (rama `mai
 ### Reverse proxy e IP del cliente
 
 El backend usa la IP del cliente para el rate limiting (por ejemplo, el de intentos de inicio de
-sesión) y la guarda en los logs y en el registro de auditoría. Cómo la obtiene depende de dos
+sesión) y la guarda en los logs y en el registro de auditoría. El límite de inicio de sesión es de
+5 fallos cada 15 minutos por usuario **y por IP**, con un tope de 20 por usuario desde cualquier IP:
+así, quien escribe el usuario de otra persona desde su IP solo agota su propio cupo. Eso depende de
+ver la IP real: si todos los clientes aparecen con la del proxy, el cupo se comparte. Cómo la obtiene depende de dos
 variables:
 
 | Instalación | `TRUST_PROXY` | `TRUST_CF_CONNECTING_IP` |

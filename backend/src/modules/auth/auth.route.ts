@@ -5,6 +5,7 @@ import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import { validateBody } from "../../middlewares/validate.middleware";
 import {
   loginIpRateLimiter,
+  loginUserIpRateLimiter,
   loginUserRateLimiter,
   passwordChangeRateLimiter,
 } from "../../middlewares/rate-limit.middleware";
@@ -24,7 +25,9 @@ import { changePasswordSchema, updatePreferencesSchema, updateProfileSchema } fr
 
 const router = Router();
 
-router.post("/login", loginIpRateLimiter, loginUserRateLimiter, login);
+// Orden: por IP, por usuario + IP (el cupo de cada persona) y por usuario desde
+// cualquier IP (tope global). Ver el comentario de rate-limit.middleware.ts.
+router.post("/login", loginIpRateLimiter, loginUserIpRateLimiter, loginUserRateLimiter, login);
 // Público: el frontend lo necesita antes de tener sesión, o con un token
 // restringido que no puede leer /settings/public (LOCAL_AUTH_PLAN.md, D14).
 router.get("/config", getAuthConfig);
