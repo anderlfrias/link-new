@@ -1,10 +1,10 @@
-import env from "../../config/env";
+import { isExternalProvider } from "../../auth-providers/registry";
 import * as UserRepository from "./user.repository";
 import { AdminUserFilters, AdminUserListOptions, AdminUserListResult } from "./user.types";
 
 /// Directorio de contactos: lectura pura de la base de LINK. Con un proveedor
-/// externo, la base se mantiene al día al iniciar sesión (`syncDirectoryThrottled`
-/// en auth.service.ts), no acá: así listar usuarios no depende de que el
+/// externo, la base se mantiene al día al iniciar sesión (`onLogin` del proveedor,
+/// ver auth-providers/api.ts), no acá: así listar usuarios no depende de que el
 /// proveedor esté disponible.
 export async function listUsers(currentUserId: string, search?: string) {
   return UserRepository.search(currentUserId, search);
@@ -44,7 +44,7 @@ export async function listUsersForAdmin(
   );
   const groupAdminByUser = new Map(groupAdminRows.map((row) => [row.userId, row._count]));
 
-  const local = env.auth.mode === "local";
+  const local = !isExternalProvider();
   const users = rows.map(({ _count, roles, localCredential, ...user }) => ({
     ...user,
     storage: storageByUser.get(user.id) ?? { fileCount: 0, totalSize: 0 },

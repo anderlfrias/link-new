@@ -1,15 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
-import * as AuthService from "../auth/auth.service";
+import { createFakeProvider, useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import * as UserRepository from "./user.repository";
 import { listUsers, listUsersForAdmin } from "./user.service";
 
-// Las lecturas de usuarios no tienen que llamar nunca al proveedor externo: se espían estas dos
-// funciones para comprobarlo (el servicio ni siquiera importa auth.service).
-vi.mock("../auth/auth.service", () => ({
-  syncAppUsers: vi.fn(),
-  syncDirectoryThrottled: vi.fn(),
-}));
+// Las lecturas de usuarios no tienen que llamar nunca al proveedor externo: se espía el proveedor
+// activo para comprobarlo (el servicio ni siquiera lo importa).
+const provider = createFakeProvider({ authenticate: vi.fn(), onLogin: vi.fn() });
+useExternalProvider(provider);
 
 vi.mock("./user.repository", () => ({
   search: vi.fn(),
@@ -33,8 +30,8 @@ describe("user.service", () => {
 
       expect(UserRepository.search).toHaveBeenCalledWith("u-1", "maria");
       expect(result).toBe(mockUsers);
-      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
-      expect(AuthService.syncDirectoryThrottled).not.toHaveBeenCalled();
+      expect(provider.authenticate).not.toHaveBeenCalled();
+      expect(provider.onLogin).not.toHaveBeenCalled();
     });
 
     it("sin término de búsqueda pasa undefined al repositorio", async () => {
@@ -109,7 +106,8 @@ describe("user.service", () => {
 
       const result = await listUsersForAdmin({ search: "test" }, { limit: 10 });
 
-      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
+      expect(provider.authenticate).not.toHaveBeenCalled();
+      expect(provider.onLogin).not.toHaveBeenCalled();
       expect(UserRepository.findAllForAdmin).toHaveBeenCalledWith({ search: "test" }, { beforeId: undefined, limit: 10 });
       expect(UserRepository.countAllForAdmin).toHaveBeenCalledWith({ search: "test" });
       expect(UserRepository.sumStorageForUsers).toHaveBeenCalledWith(["u-1", "u-2"]);
@@ -153,19 +151,55 @@ describe("user.service", () => {
     });
   });
 
-  describe("modo local (LOCAL_AUTH_PLAN.md, punto 8 del mapa)", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
+  describe("con cuentas locales (LOCAL_AUTH_PLAN.md §7)", () => {
+    useLocalAuth();
 
-    it("el panel de usuarios no llama a ningún proveedor externo", async () => {
-      vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue([]);
-      vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(0);
+    function stubOneRow(row: Record<string, unknown>) {
+      vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue([
+        { id: "u-1", name: "Ana", email: "ana@example.com", username: "ana", status: "ACTIVE", _count: { conversationMemberships: 0, sentMessages: 0 }, ...row },
+      ] as any);
+      vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(1);
+      vi.mocked(UserRepository.sumStorageForUsers).mockResolvedValue([]);
+      vi.mocked(UserRepository.countGroupAdminForUsers).mockResolvedValue([]);
+    }
+
+    it("cada fila suma los roles, si tiene contraseña, el cambio obligatorio y el bloqueo; nunca la credencial", async () => {
+      stubOneRow({
+        roles: ["admin"],
+        localCredential: { mustChangePassword: true, lockedUntil: new Date(Date.now() + 60_000), passwordHash: "hash-secreto" },
+      });
+
+      const { users } = await listUsersForAdmin({}, {});
+
+      expect(users[0]).toMatchObject({ localRoles: ["admin"], hasPassword: true, mustChangePassword: true, locked: true });
+      expect(JSON.stringify(users)).not.toContain("hash-secreto");
+      expect(users[0]).not.toHaveProperty("roles");
+      expect(users[0]).not.toHaveProperty("localCredential");
+    });
+
+    it("una cuenta sin credencial figura sin contraseña, y un bloqueo vencido ya no cuenta", async () => {
+      stubOneRow({ roles: [], localCredential: null });
+      expect((await listUsersForAdmin({}, {})).users[0]).toMatchObject({ hasPassword: false, mustChangePassword: false, locked: false });
+
+      stubOneRow({ roles: [], localCredential: { mustChangePassword: false, lockedUntil: new Date(Date.now() - 60_000) } });
+      expect((await listUsersForAdmin({}, {})).users[0]).toMatchObject({ hasPassword: true, locked: false });
+    });
+  });
+
+  describe("con un proveedor externo", () => {
+    it("no expone los roles ni nada de contraseñas: los administra el proveedor", async () => {
+      vi.mocked(UserRepository.findAllForAdmin).mockResolvedValue([
+        { id: "u-1", name: "Ana", email: "ana@example.com", username: "ana", status: "ACTIVE", roles: ["admin"], localCredential: null, _count: { conversationMemberships: 0, sentMessages: 0 } },
+      ] as any);
+      vi.mocked(UserRepository.countAllForAdmin).mockResolvedValue(1);
       vi.mocked(UserRepository.sumStorageForUsers).mockResolvedValue([]);
       vi.mocked(UserRepository.countGroupAdminForUsers).mockResolvedValue([]);
 
-      await listUsersForAdmin({}, {});
+      const { users } = await listUsersForAdmin({}, {});
 
-      expect(AuthService.syncAppUsers).not.toHaveBeenCalled();
-      expect(AuthService.syncDirectoryThrottled).not.toHaveBeenCalled();
+      for (const field of ["localRoles", "roles", "hasPassword", "mustChangePassword", "locked", "localCredential"]) {
+        expect(users[0]).not.toHaveProperty(field);
+      }
     });
   });
 });

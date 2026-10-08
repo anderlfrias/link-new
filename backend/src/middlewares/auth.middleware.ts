@@ -1,7 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { TokenExpiredError } from "jsonwebtoken";
-import type { AuthMode } from "../config/auth-config";
-import env from "../config/env";
+import { isExternalProvider } from "../auth-providers/registry";
 import { assertNotPasswordChangeOnly } from "../modules/auth/identity";
 import { verifyAccessToken } from "../modules/auth/jwt";
 import { AppError, ForbiddenError, NotFoundError, UnauthorizedError } from "../utils/errors";
@@ -48,12 +47,13 @@ export function authenticateForPasswordChange(req: Request, _res: Response, next
   authenticateRequest(req, next, true);
 }
 
-/// Rutas que solo existen en un modo (LOCAL_AUTH_PLAN.md §7): en el otro
-/// responden 404, como si no estuvieran montadas. Se decide en cada request y
-/// no al montar el router, así los tests pueden cambiar de modo sin reimportar.
-export function requireAuthMode(mode: AuthMode) {
+/// Rutas que solo existen con cuentas locales (LOCAL_AUTH_PLAN.md §7): con un
+/// proveedor externo responden 404, como si no estuvieran montadas. Se decide en
+/// cada request y no al montar el router, así los tests pueden cambiar de modo sin
+/// reimportar.
+export function localAuthOnly() {
   return (_req: Request, _res: Response, next: NextFunction) => {
-    if (env.auth.mode !== mode) {
+    if (isExternalProvider()) {
       return next(new NotFoundError());
     }
     next();

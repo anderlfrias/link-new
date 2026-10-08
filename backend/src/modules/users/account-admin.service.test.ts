@@ -1,6 +1,7 @@
 import { LocalCredential, Prisma, UserStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
+import { setAuthProvider } from "../../auth-providers/registry";
+import { createFakeProvider, useLocalAuth } from "../../test/auth-mode";
 import { ConflictError, NotFoundError } from "../../utils/errors";
 
 vi.mock("./account-admin.repository", () => ({
@@ -182,7 +183,7 @@ describe("updateUserAccount — modo external-auth", () => {
 });
 
 describe("updateUserAccount — modo local", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("edita nombre, email, username y roles, con un diff sin secretos", async () => {
     vi.mocked(Repo.findAccount).mockResolvedValue(account());
@@ -275,7 +276,7 @@ describe("updateUserAccount — modo local", () => {
 });
 
 describe("createLocalUser", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("sin contraseña genera una temporal que cumple la política, y la devuelve una sola vez", async () => {
     vi.mocked(Repo.createAccount).mockImplementation(async (_tx, data, cred) =>
@@ -322,22 +323,18 @@ describe("createLocalUser", () => {
     expect(Repo.createAccount).not.toHaveBeenCalled();
   });
 
-  it("en modo external-auth no existe", async () => {
-    const env = (await import("../../config/env")).default;
-    const original = env.auth;
-    env.auth = { mode: "external-auth", sessionSecret: original.sessionSecret, external-auth: { apiUrl: "https://x.test", appCode: "x", jwtSecret: "x" } };
-    try {
-      await expect(createLocalUser(PANEL, { name: "Beto", email: "beto@example.com" })).rejects.toMatchObject({
-        code: "local_auth_not_enabled",
-      });
-    } finally {
-      env.auth = original;
-    }
+  it("con un proveedor de autenticación externo no existe", async () => {
+    // `useLocalAuth` restaura el proveedor original al terminar el test.
+    setAuthProvider(createFakeProvider());
+
+    await expect(createLocalUser(PANEL, { name: "Beto", email: "beto@example.com" })).rejects.toMatchObject({
+      code: "local_auth_not_enabled",
+    });
   });
 });
 
 describe("resetLocalPassword", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("deja una temporal con cambio obligatorio, pasa la actual al historial, revoca tokens y corta sockets", async () => {
     vi.mocked(Repo.findAccount).mockResolvedValue(account());
@@ -372,7 +369,7 @@ describe("resetLocalPassword", () => {
 });
 
 describe("unlockLocalUser", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("desbloquea una cuenta bloqueada y lo audita como UPDATE_USER locked", async () => {
     vi.mocked(Repo.findAccount).mockResolvedValue(
@@ -399,7 +396,7 @@ describe("unlockLocalUser", () => {
 });
 
 describe("bootstrapAdmin (CLI create-admin, D18)", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("sin cuenta con ese correo, crea una admin con contraseña temporal", async () => {
     vi.mocked(Repo.findAccountByEmail).mockResolvedValue(null);

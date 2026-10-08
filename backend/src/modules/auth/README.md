@@ -1,17 +1,35 @@
 # Auth
 
-Autenticación de la instalación, en uno de dos modos que se deducen del `.env` ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)):
+Autenticación de la instalación, con cuentas locales o con un proveedor externo ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md) y `docs/auth-providers.md`):
 
 - **`external-auth`**: este módulo no administra usuarios ni contraseñas. Reenvía credenciales al microservicio **EXTERNAL_AUTH**, verifica el JWT que este emite **solo en ese momento**, sincroniza el perfil local (`User`) y sus roles con lo que EXTERNAL_AUTH devuelve, y emite la sesión de LINK (ver abajo). La mayor parte de este README describe este modo.
 - **`local`**: las cuentas y sus contraseñas viven en esta base (`LocalCredential`, separada de `User`). Ver [Modo local](#modo-local).
 
 **La sesión es siempre la de LINK:** en los dos modos el token que usa el cliente en cada request lo firma LINK (`signSessionToken`, HS256 con `SESSION_JWT_SECRET`, `iss`/`aud` `link`). El JWT de EXTERNAL_AUTH nunca llega al cliente y no autentica ninguna request, ni el socket, ni las descargas.
 
+## Proveedores de autenticación
+
+El login contra un sistema externo es un **proveedor**: un objeto que implementa `AuthProvider` (`src/auth-providers/api.ts`, un archivo autocontenido y versionado con `AUTH_PROVIDER_API_VERSION`). Interviene solo al iniciar sesión: valida las credenciales (`authenticate`) y, en segundo plano, puede sincronizar avatar y directorio (`onLogin`). Todo lo demás es del core y es igual para cualquier proveedor:
+
+| Qué hace el proveedor | Qué hace LINK (`external-login.service.ts`) |
+|---|---|
+| Valida usuario y contraseña, y devuelve la identidad: `externalId`, correo, username, nombre y roles. Falla con `AuthProviderError` (`invalid_credentials`, `access_denied`, `provider_unavailable`, `provider_error`) | Corta a los 10 s (`provider_unavailable`), trata cualquier otro error como `provider_error`, valida que la identidad esté completa y traduce el motivo a un status HTTP y a un texto propio (nunca el del proveedor) |
+| | Guarda la cuenta (`upsertExternalUser`, ver abajo), con solo los roles que conoce (`filterKnownRoles`, hoy `admin`) |
+| | Rechaza una cuenta desactivada (`403 account_disabled`) aunque el proveedor acepte la contraseña |
+| | Emite la sesión de LINK y audita (`LOGIN` / `LOGIN_FAILED` con `provider` = el `id` del proveedor) |
+| `onLogin`: foto propia y directorio, con credenciales que solo existen en ese momento | Lo llama sin esperarlo; un error se loguea y no afecta al login |
+
+Lo único del core que ve un proveedor es `ProviderContext` (`src/auth-providers/context.ts`): un logger, `users.upsertExternalUser`, `users.setAvatarFromProvider` y `users.listWithoutAvatar`.
+
+**Qué proveedor hay** lo guarda `src/auth-providers/registry.ts` (`getAuthProvider()`, `isExternalProvider()`, `currentProviderId()`, `requireLocalAuth()`) y lo fija `initAuthProvider()` (`init.ts`) en `server.ts`, antes de escuchar: si la configuración del proveedor es inválida, el backend no arranca. Sin proveedor configurado, cuentas locales. Hoy el único proveedor es el de EXTERNAL_AUTH (`src/auth-providers/external-auth/`), interno y elegido por las variables `EXTERNAL_AUTH_*`.
+
+**Reconocer a la persona** (`upsertExternalUser`, `auth.repository.ts`): primero por `externalId`, si no por correo exacto y si no por correo sin distinguir mayúsculas. Al reconocerla por correo se completan `identityProvider` y `externalId` si estaban vacíos: así una cuenta creada en modo local conserva su `User.id` al pasar a un proveedor externo.
+
 En los dos modos hay un solo verificador de tokens (`verifyAccessToken`, `jwt.ts`) y una sola resolución contra la base (`resolveInternalUser`, `identity.ts`), que usan los middlewares HTTP, el socket y `/files/:id/content`: busca la cuenta por id, rechaza las desactivadas, las revocadas (`tokensValidAfter`) y las que superan la duración de sesión vigente, y toma nombre, username y **roles** de la fila (`User.roles`). Una cuenta con `status: INACTIVE` no entra en ningún modo, aunque EXTERNAL_AUTH acepte su contraseña.
 
 ## Variables de entorno
 
-Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el modo de autenticación de la instalación (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)): con las tres definidas, modo `external-auth` (todo lo que describe este README); sin ninguna, modo `local`; con una o dos, el servidor no arranca.
+`src/config/env.ts` valida `DATABASE_URL`, `SESSION_JWT_SECRET` y el resto de la configuración de LINK. Las variables de un proveedor externo (hoy las `EXTERNAL_AUTH_*`) no las conoce `env.ts`: las lee y valida el propio proveedor en `init()`. Con las tres `EXTERNAL_AUTH_*` definidas el login lo valida EXTERNAL_AUTH (todo lo que describe este README); sin ninguna, cuentas locales; con una o dos, el servidor no arranca.
 
 | Variable | Descripción |
 |---|---|
@@ -22,7 +40,7 @@ Definidas y validadas en `src/config/env.ts`. Las de EXTERNAL_AUTH deciden el mo
 | `EXTERNAL_AUTH_JWT_SECRET` | Modo external-auth: secreto compartido para verificar (HS256) los JWT que emite EXTERNAL_AUTH |
 | `PORT` | Opcional, puerto del servidor (default `4000`) |
 
-El código de este módulo no lee esas variables sueltas: pide la config a `requireExternalUserConfig(env.auth)`. En modo local esa función tira `503` (`external-auth_not_configured`), así que ningún camino que pegue contra EXTERNAL_AUTH (login, fotos, contactos) llega a llamar a una URL `undefined`. Lo simétrico para el modo local es `requireLocalAuth(env.auth)` (`503` `local_auth_not_enabled` en modo external-auth).
+El código del core no lee las `EXTERNAL_AUTH_*`: solo `src/auth-providers/external-auth/` las lee, una vez, en `init()`, y las guarda en su propia configuración. Lo que sí pregunta el core es si hay un proveedor externo (`isExternalProvider()`); las rutas y los servicios que solo tienen sentido con cuentas locales usan `requireLocalAuth()` (`503` `local_auth_not_enabled` con un proveedor externo) o el middleware `localAuthOnly()` (`404`).
 
 ## Modo local
 
@@ -142,9 +160,9 @@ Para evitar que EXTERNAL_AUTH aplique rate limiting o bloquee la IP del servidor
 
 ## Desacoplar el perfil del proveedor externo (`syncProfileWithIntegration`)
 
-`User.syncProfileWithIntegration` (`schema.prisma`, default `true`) decide si el login (y la sincronización de contactos vía `syncAppUsers`, ver más abajo) sigue actualizando `name`/avatar desde el proveedor de identidad externo configurado — hoy EXTERNAL_AUTH, pero el mecanismo no asume cuál; podría ser cualquier otro mañana sin tocar este flag. Pasa a `false` automáticamente la primera vez que el usuario cambia su nombre o su foto **acá** (`auth.service.ts`: `updateOwnName`/`setProfilePicture`/`removeProfilePicture`, todas vía `setLocalName`/`setLocalAvatar` en `auth.repository.ts`) — desde ese momento esos dos campos viven únicamente en esta base: ni el login ni `syncAppUsers` vuelven a pisarlos con lo que diga el proveedor externo, sin importar cuántas veces ese usuario inicie sesión.
+`User.syncProfileWithIntegration` (`schema.prisma`, default `true`) decide si el login (y la sincronización de contactos que hace el proveedor en `onLogin`, ver más abajo) sigue actualizando `name`/avatar desde el proveedor de identidad externo configurado — hoy EXTERNAL_AUTH, pero el mecanismo no asume cuál; podría ser cualquier otro mañana sin tocar este flag. Pasa a `false` automáticamente la primera vez que el usuario cambia su nombre o su foto **acá** (`auth.service.ts`: `updateOwnName`/`setProfilePicture`/`removeProfilePicture`, todas vía `setLocalName`/`setLocalAvatar` en `auth.repository.ts`) — desde ese momento esos dos campos viven únicamente en esta base: ni el login ni la sincronización de contactos vuelven a pisarlos con lo que diga el proveedor externo, sin importar cuántas veces ese usuario inicie sesión.
 
-`upsertUserFromExternalUser()` (`auth.repository.ts`) es quien aplica esto: no es un `upsert` directo porque la condición ("¿sigo sincronizando?") depende de la fila ya existente — primero busca por `email`, y solo incluye `name` en el `update` si `syncProfileWithIntegration` seguía en `true`. `username`/`externalId` no son campos de "perfil" (no los edita el usuario) y siempre se actualizan, sync esté prendido o no.
+`upsertExternalUser()` (`auth.repository.ts`) es quien aplica esto: no es un `upsert` directo porque la condición ("¿sigo sincronizando?") depende de la fila ya existente — primero busca a la persona (ver "Reconocer a la persona"), y solo incluye `name` en el `update` si `syncProfileWithIntegration` seguía en `true`. `username` no es un campo de "perfil" (no lo edita el usuario) y siempre se actualiza, sync esté prendido o no. El avatar lo guarda `setAvatarFromProvider()` (`auth.service.ts`), que respeta el mismo flag y no reescribe el archivo si el checksum no cambió.
 
 ## Endpoint: foto de perfil
 
@@ -170,7 +188,7 @@ Esta foto llega a la base de dos formas, y ambas conviven: (1) sincronizada desd
 GET /v1/profile/picture/:username
 ```
 
-A diferencia del anterior, EXTERNAL_AUTH identifica al usuario por `username` en la URL, no por el token — puede traer la foto de **cualquier** usuario de la app, no solo la de quien está autenticado. No hay una ruta HTTP propia que lo exponga (no hace falta: nada en el frontend necesita pedir la foto de un tercero en tiempo real) — solo lo usa `getProfilePictureByUsername()`/`syncContactAvatar()` en `auth.service.ts`, server-to-server, para cachear localmente el avatar de contactos que `syncAppUsers()` trae de `GET /v1/apps/users/by-codes` (ver "Endpoint: contactos de la app" abajo) y que todavía no iniciaron sesión acá. Mismo formato de respuesta y mismo mapeo de errores que el `GET` de arriba (data URI, `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND` → 404 local).
+A diferencia del anterior, EXTERNAL_AUTH identifica al usuario por `username` en la URL, no por el token — puede traer la foto de **cualquier** usuario de la app, no solo la de quien está autenticado. No hay una ruta HTTP propia que lo exponga (no hace falta: nada en el frontend necesita pedir la foto de un tercero en tiempo real) — solo lo usa `getProfilePictureByUsername()` en `auth-providers/external-auth/client.ts`, server-to-server, desde `onLogin`, para cachear localmente el avatar de contactos que la sincronización del directorio trae de `GET /v1/apps/users/by-codes` (ver "Endpoint: contactos de la app" abajo) y que todavía no iniciaron sesión acá. Mismo formato de respuesta y mismo mapeo de errores que el `GET` de arriba (data URI, `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND` → 404 local).
 
 ## Endpoint: contactos de la app
 
@@ -178,7 +196,7 @@ A diferencia del anterior, EXTERNAL_AUTH identifica al usuario por `username` en
 GET /v1/apps/users/by-codes?codes=<APP_CODE_EXTERNAL_AUTH>
 ```
 
-Devuelve todos los usuarios de EXTERNAL_AUTH con acceso a esta app (identificada por `APP_CODE_EXTERNAL_AUTH`), hayan iniciado sesión acá alguna vez o no — a diferencia del directorio local (`GET /api/v1/users`), que hasta ahora solo listaba a quien ya se había logueado. `AuthService.getAppUsers()` lo llama y `AuthService.syncAppUsers()` (invocado desde el login, con throttle: `AuthService.syncDirectoryThrottled()`, a lo sumo una vez cada 10 minutos en todo el proceso; `GET /api/v1/users` ya no llama a EXTERNAL_AUTH) upsertea cada uno como `User` local — necesario porque `createConversation` exige que el otro miembro ya exista localmente — y cachea su foto si todavía no tiene una **y** su `syncProfileWithIntegration` sigue en `true` (si esa persona ya editó su nombre/foto acá, aunque sea desde otra sesión, `upsertUserFromExternalUser` no le pisa el nombre y este paso ni intenta traerle una foto nueva). Si EXTERNAL_AUTH no responde, `syncAppUsers()` no lanza: el directorio simplemente se sirve con lo que ya había en la base local.
+Devuelve todos los usuarios de EXTERNAL_AUTH con acceso a esta app (identificada por `APP_CODE_EXTERNAL_AUTH`), hayan iniciado sesión acá alguna vez o no — a diferencia del directorio local (`GET /api/v1/users`), que hasta ahora solo listaba a quien ya se había logueado. `getAppUsers()` (`auth-providers/external-auth/client.ts`) lo llama, y el `onLogin` del proveedor lo sincroniza al iniciar sesión, con el token de esa persona y con throttle (a lo sumo una vez cada 10 minutos en todo el proceso, `DIRECTORY_SYNC_INTERVAL_MS`; `GET /api/v1/users` no llama a EXTERNAL_AUTH): guarda cada uno como `User` local con `ctx.users.upsertExternalUser` — necesario porque `createConversation` exige que el otro miembro ya exista localmente — y baja la foto de los que todavía no tienen una **y** cuyo `syncProfileWithIntegration` sigue en `true` (`ctx.users.listWithoutAvatar`; si esa persona ya editó su nombre/foto acá, aunque sea desde otra sesión, no se le pisa el nombre y ni se intenta traerle una foto nueva). Si EXTERNAL_AUTH no responde, la sincronización no lanza ni consume la ventana: el directorio se sirve con lo que ya había en la base local y el próximo login lo reintenta.
 
 No se cachea del lado del backend (cada request vuelve a pedirle a EXTERNAL_AUTH), pero sí manda `Cache-Control: private, max-age=300` para que el navegador no repita el request en cada render de `<Avatar>`.
 

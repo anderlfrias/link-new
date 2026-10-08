@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { IDENTITY_PROVIDER } from "../../constants/identity-provider.constant";
 
 const warn = vi.fn();
 vi.mock("../../config/request-context", () => ({
@@ -26,6 +25,7 @@ import { prisma } from "../../config/prisma";
 import {
   findAvatarFileId,
   findLoginCandidates,
+  findProviderUsersWithoutAvatar,
   registerFailedLogin,
   resetFailedLogins,
   savePasswordChange,
@@ -34,7 +34,7 @@ import {
   setNotificationSoundEnabled,
   updateAvatarFileId,
   updateUserPreferences,
-  upsertUserFromExternalUser,
+  upsertExternalUser,
 } from "./auth.repository";
 
 describe("auth.repository", () => {
@@ -43,190 +43,252 @@ describe("auth.repository", () => {
     vi.resetAllMocks();
   });
 
-  describe("upsertUserFromExternalUser — migración entre modos (LOCAL_AUTH_PLAN.md, D20 y §10)", () => {
-    const fromExternalUser = { id: "ext-1", email: "Ana@Example.com", username: "ana", fullName: "Ana de EXTERNAL_AUTH" };
+  describe("upsertExternalUser — cómo se reconoce a la persona (AUTH_PROVIDERS_PLAN §4.7)", () => {
+    const P = "mi-proveedor";
+    const person = { externalId: "ext-1", email: "Ana@Example.com", username: "ana", fullName: "Ana del Proveedor" };
 
-    it("local -> external-auth: adopta la cuenta local con el mismo correo aunque difiera en mayúsculas, conservando su User.id", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.user.findFirst)
-        .mockResolvedValueOnce({ id: "local-1", email: "ana@example.com", syncProfileWithIntegration: false } as any)
-        .mockResolvedValueOnce(null);
-      vi.mocked(prisma.user.update).mockResolvedValue({ id: "local-1" } as any);
-
-      const user = await upsertUserFromExternalUser(fromExternalUser);
-
-      expect(prisma.user.findFirst).toHaveBeenNthCalledWith(1, {
-        where: { email: { equals: "Ana@Example.com", mode: "insensitive" } },
-      });
-      expect(prisma.user.create).not.toHaveBeenCalled();
-      // El correo pasa a ser el de EXTERNAL_AUTH: con ese se la busca en cada request.
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: "local-1" },
-        data: { username: "ana", email: "Ana@Example.com" },
-      });
-      expect(user.id).toBe("local-1");
-    });
-
-    it("en modo external-auth manda el username de EXTERNAL_AUTH: se le quita a la otra cuenta, sin 500 (invariante 13)", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "external-auth-1", email: "Ana@Example.com", syncProfileWithIntegration: true } as any);
-      vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: "otra-1" } as any);
+    /// Cada consulta que hace `upsertExternalUser` se distingue por su `where`: así los
+    /// tests no dependen del orden en que se hacen.
+    function stubLookups(found: {
+      byExternalId?: unknown;
+      byEmail?: unknown;
+      byEmailInsensitive?: unknown;
+      emailHolder?: unknown;
+      usernameHolder?: unknown;
+    }) {
+      vi.mocked(prisma.user.findUnique).mockImplementation(((args: any) =>
+        Promise.resolve("externalId" in args.where ? (found.byExternalId ?? null) : (found.byEmail ?? null))) as any);
+      vi.mocked(prisma.user.findFirst).mockImplementation(((args: any) => {
+        if (args.where.username) return Promise.resolve(found.usernameHolder ?? null);
+        if (args.where.id) return Promise.resolve(found.emailHolder ?? null);
+        return Promise.resolve(found.byEmailInsensitive ?? null);
+      }) as any);
       vi.mocked(prisma.user.update).mockImplementation(((args: any) => Promise.resolve({ id: args.where.id })) as any);
-      vi.mocked(prisma.$transaction).mockImplementation(((ops: Promise<unknown>[]) => Promise.all(ops)) as any);
-
-      const user = await upsertUserFromExternalUser(fromExternalUser);
-
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { username: { equals: "ana", mode: "insensitive" }, id: { not: "external-auth-1" } },
-        select: { id: true },
-      });
-      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "otra-1" }, data: { username: null } });
-      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(user.id).toBe("external-auth-1");
-      // El aviso lleva UUIDs, nunca el correo ni el username.
-      expect(warn).toHaveBeenCalledWith({ userId: "otra-1", adoptedByUserId: "external-auth-1" }, expect.any(String));
-      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/Ana@|"ana"/);
-    });
-
-    it("una cuenta nueva de EXTERNAL_AUTH también le quita el username a quien lo tenía", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "otra-1" } as any);
       vi.mocked(prisma.user.create).mockResolvedValue({ id: "nueva-1" } as any);
-      vi.mocked(prisma.user.update).mockResolvedValue({ id: "otra-1" } as any);
       vi.mocked(prisma.$transaction).mockImplementation(((ops: Promise<unknown>[]) => Promise.all(ops)) as any);
+    }
 
-      const user = await upsertUserFromExternalUser(fromExternalUser);
-
-      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "otra-1" }, data: { username: null } });
-      expect(user.id).toBe("nueva-1");
+    const stored = (overrides: Record<string, unknown> = {}) => ({
+      id: "u-1",
+      email: "ana@example.com",
+      externalId: "ext-1",
+      identityProvider: P,
+      syncProfileWithIntegration: true,
+      ...overrides,
     });
-  });
 
-  describe("upsertUserFromExternalUser", () => {
-    const mappedUser = {
-      id: "ext-1",
-      email: "test@example.com",
-      username: "testuser",
-      fullName: "Test User",
-    };
+    it("sin ninguna coincidencia crea la cuenta, marcada con el proveedor", async () => {
+      stubLookups({});
 
-    it("crea un nuevo usuario si no existe previamente", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
-      const mockCreatedUser = { ...mappedUser, id: "internal-1" } as any;
-      vi.mocked(prisma.user.create).mockResolvedValue(mockCreatedUser);
+      const user = await upsertExternalUser(P, person);
 
-      const result = await upsertUserFromExternalUser(mappedUser);
-
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { email: mappedUser.email },
-      });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { externalId: "ext-1" } });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: "Ana@Example.com" } });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({ where: { email: { equals: "Ana@Example.com", mode: "insensitive" } } });
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
-          email: mappedUser.email,
-          name: mappedUser.fullName,
-          username: mappedUser.username,
-          externalId: mappedUser.id,
-          identityProvider: IDENTITY_PROVIDER.EXTERNAL_AUTH,
+          email: "Ana@Example.com",
+          name: "Ana del Proveedor",
+          username: "ana",
+          externalId: "ext-1",
+          identityProvider: P,
         },
       });
-      expect(result).toBe(mockCreatedUser);
-    });
-
-    it("actualiza username y name si el usuario existe y syncProfileWithIntegration es true", async () => {
-      const existingUser = {
-        id: "internal-1",
-        email: "test@example.com",
-        username: "olduser",
-        name: "Old Name",
-        syncProfileWithIntegration: true,
-      } as any;
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(existingUser);
-      const mockUpdatedUser = { ...existingUser, ...mappedUser } as any;
-      vi.mocked(prisma.user.update).mockResolvedValue(mockUpdatedUser);
-
-      const result = await upsertUserFromExternalUser(mappedUser);
-
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: "internal-1" },
-        data: {
-          username: mappedUser.username,
-          name: mappedUser.fullName,
-        },
-      });
-      expect(result).toBe(mockUpdatedUser);
+      expect(user.id).toBe("nueva-1");
     });
 
     it("con roles (los del proveedor en el login) los guarda al crear la cuenta", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.user.create).mockResolvedValue({ id: "internal-1" } as any);
+      stubLookups({});
 
-      await upsertUserFromExternalUser(mappedUser, { roles: ["admin"] });
+      await upsertExternalUser(P, person, { roles: ["admin"] });
 
-      expect(prisma.user.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({ email: mappedUser.email, roles: ["admin"] }),
+      expect(prisma.user.create).toHaveBeenCalledWith({ data: expect.objectContaining({ roles: ["admin"] }) });
+    });
+
+    it("la reconoce por externalId, sin mirar el correo, y le adopta el correo nuevo", async () => {
+      stubLookups({ byExternalId: stored({ email: "ana.vieja@example.com" }) });
+
+      const user = await upsertExternalUser(P, person);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "u-1" },
+        data: expect.objectContaining({ email: "Ana@Example.com", username: "ana" }),
+      });
+      expect(user.id).toBe("u-1");
+    });
+
+    it("si el correo nuevo ya lo tiene otra cuenta, conserva el guardado y lo avisa con UUIDs, sin el correo", async () => {
+      stubLookups({ byExternalId: stored({ email: "ana.vieja@example.com" }), emailHolder: { id: "otra-9" } });
+
+      await upsertExternalUser(P, person);
+
+      expect(vi.mocked(prisma.user.update).mock.calls[0][0].data).not.toHaveProperty("email");
+      expect(warn).toHaveBeenCalledWith({ userId: "u-1", heldByUserId: "otra-9" }, expect.any(String));
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/example\.com/);
+    });
+
+    it("el mismo externalId bajo otro proveedor no es esta persona: sigue buscando por correo", async () => {
+      stubLookups({ byExternalId: stored({ identityProvider: "otro-proveedor" }) });
+
+      await upsertExternalUser(P, person);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: "Ana@Example.com" } });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("sin externalId guardado la reconoce por correo exacto y completa el proveedor y el externalId (cuenta local que migra)", async () => {
+      stubLookups({ byEmail: stored({ email: "Ana@Example.com", externalId: null, identityProvider: null }) });
+
+      const user = await upsertExternalUser(P, person);
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "u-1" },
+        data: expect.objectContaining({ externalId: "ext-1", identityProvider: P }),
+      });
+      // Conserva su User.id, y con él su historial.
+      expect(user.id).toBe("u-1");
+    });
+
+    it("la reconoce por correo sin distinguir mayúsculas, y el correo guardado pasa a ser el del proveedor", async () => {
+      stubLookups({ byEmailInsensitive: stored({ email: "ana@example.com", externalId: null, identityProvider: null }) });
+
+      const user = await upsertExternalUser(P, person);
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "u-1" },
+        data: expect.objectContaining({ email: "Ana@Example.com" }),
+      });
+      expect(user.id).toBe("u-1");
+    });
+
+    it("al reconocerla por correo no pisa un externalId ni un proveedor que ya tenía", async () => {
+      stubLookups({ byEmail: stored({ email: "Ana@Example.com", externalId: "ext-viejo", identityProvider: "external-auth" }) });
+
+      await upsertExternalUser(P, person);
+
+      const { data } = vi.mocked(prisma.user.update).mock.calls[0][0];
+      expect(data).not.toHaveProperty("externalId");
+      expect(data).not.toHaveProperty("identityProvider");
+    });
+
+    it("actualiza username y name si syncProfileWithIntegration es true", async () => {
+      stubLookups({ byExternalId: stored({ username: "viejo", name: "Nombre viejo" }) });
+
+      await upsertExternalUser(P, person);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "u-1" },
+        data: expect.objectContaining({ username: "ana", name: "Ana del Proveedor" }),
       });
     });
 
-    it("con roles los sobrescribe en la cuenta existente, también para dejarla sin ninguno", async () => {
-      const existingUser = { id: "internal-1", email: "test@example.com", roles: ["admin"], syncProfileWithIntegration: true } as any;
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(existingUser);
-      vi.mocked(prisma.user.update).mockResolvedValue(existingUser);
+    it("actualiza solo el username y preserva el name si syncProfileWithIntegration es false", async () => {
+      stubLookups({ byExternalId: stored({ syncProfileWithIntegration: false, name: "Nombre elegido acá" }) });
 
-      await upsertUserFromExternalUser(mappedUser, { roles: [] });
+      await upsertExternalUser(P, person);
+
+      const { data } = vi.mocked(prisma.user.update).mock.calls[0][0];
+      expect(data).toMatchObject({ username: "ana" });
+      expect(data).not.toHaveProperty("name");
+    });
+
+    it("sin username en lo que informa el proveedor no toca el que ya había; null lo limpia", async () => {
+      stubLookups({ byExternalId: stored({ username: "ana.vieja" }) });
+
+      await upsertExternalUser(P, { ...person, username: undefined });
+      expect(vi.mocked(prisma.user.update).mock.calls[0][0].data).not.toHaveProperty("username");
+
+      await upsertExternalUser(P, { ...person, username: null });
+      expect(vi.mocked(prisma.user.update).mock.calls[1][0].data).toMatchObject({ username: null });
+    });
+
+    it("con roles los sobrescribe en la cuenta existente, también para dejarla sin ninguno", async () => {
+      stubLookups({ byExternalId: stored({ roles: ["admin"] }) });
+
+      await upsertExternalUser(P, person, { roles: [] });
 
       expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: "internal-1" },
+        where: { id: "u-1" },
         data: expect.objectContaining({ roles: [] }),
       });
     });
 
-    it("sin roles (sincronizar contactos) no toca los de la cuenta ni al crearla ni al actualizarla", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(null);
-      vi.mocked(prisma.user.create).mockResolvedValue({ id: "internal-1" } as any);
-      await upsertUserFromExternalUser(mappedUser);
+    it("sin roles (sincronizar el directorio) no toca los de la cuenta ni al crearla ni al actualizarla", async () => {
+      stubLookups({});
+      await upsertExternalUser(P, person);
       expect(vi.mocked(prisma.user.create).mock.calls[0][0].data).not.toHaveProperty("roles");
 
-      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({ id: "internal-1", email: "test@example.com", syncProfileWithIntegration: true } as any);
-      vi.mocked(prisma.user.update).mockResolvedValue({ id: "internal-1" } as any);
-      await upsertUserFromExternalUser(mappedUser);
+      stubLookups({ byExternalId: stored() });
+      await upsertExternalUser(P, person);
       expect(vi.mocked(prisma.user.update).mock.calls[0][0].data).not.toHaveProperty("roles");
     });
 
-    it("actualiza solo username y preserva name si syncProfileWithIntegration es false", async () => {
-      const existingUser = {
-        id: "internal-1",
-        email: "test@example.com",
-        username: "olduser",
-        name: "Custom Local Name",
-        syncProfileWithIntegration: false,
-      } as any;
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(existingUser);
-      const mockUpdatedUser = { ...existingUser, username: mappedUser.username } as any;
-      vi.mocked(prisma.user.update).mockResolvedValue(mockUpdatedUser);
+    it("nunca toca status: una cuenta desactivada sigue desactivada aunque el proveedor la sincronice (invariante 5)", async () => {
+      stubLookups({ byExternalId: stored({ status: "INACTIVE" }) });
 
-      const result = await upsertUserFromExternalUser(mappedUser);
+      await upsertExternalUser(P, person);
 
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: "internal-1" },
-        data: {
-          username: mappedUser.username,
-        },
+      expect(vi.mocked(prisma.user.update).mock.calls[0][0].data).not.toHaveProperty("status");
+    });
+
+    it("el username del proveedor gana: se le quita a la otra cuenta en la misma transacción, sin 500 (invariante 13)", async () => {
+      stubLookups({ byExternalId: stored(), usernameHolder: { id: "otra-1" } });
+
+      const user = await upsertExternalUser(P, person);
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { username: { equals: "ana", mode: "insensitive" }, id: { not: "u-1" } },
+        select: { id: true },
       });
-      expect(result).toBe(mockUpdatedUser);
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "otra-1" }, data: { username: null } });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(user.id).toBe("u-1");
+      // El aviso lleva UUIDs, nunca el correo ni el username.
+      expect(warn).toHaveBeenCalledWith({ userId: "otra-1", adoptedByUserId: "u-1" }, expect.any(String));
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/Ana@|"ana"/);
+    });
+
+    it("una cuenta nueva también le quita el username a quien lo tenía", async () => {
+      stubLookups({ usernameHolder: { id: "otra-1" } });
+
+      const user = await upsertExternalUser(P, person);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "otra-1" }, data: { username: null } });
+      expect(user.id).toBe("nueva-1");
+      expect(warn).toHaveBeenCalledWith({ userId: "otra-1" }, expect.any(String));
+    });
+
+    it("sin username no busca quién lo tenía", async () => {
+      stubLookups({});
+
+      await upsertExternalUser(P, { ...person, username: null });
+
+      expect(prisma.user.findFirst).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ username: expect.anything() }) }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("findProviderUsersWithoutAvatar", () => {
+    it("pide las cuentas activas de ese proveedor, sin avatar y con el perfil sincronizado", async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([{ id: "u-1", username: "ana", externalId: "ext-1" }] as any);
+
+      const result = await findProviderUsersWithoutAvatar("mi-proveedor");
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: { identityProvider: "mi-proveedor", avatarFileId: null, syncProfileWithIntegration: true, status: "ACTIVE" },
+        select: { id: true, username: true, externalId: true },
+      });
+      expect(result).toEqual([{ id: "u-1", username: "ana", externalId: "ext-1" }]);
     });
   });
 
   describe("updateAvatarFileId", () => {
-    it("nunca toca status: una cuenta desactivada sigue desactivada aunque EXTERNAL_AUTH la sincronice (invariante 5)", async () => {
-      const existingUser = { id: "internal-1", email: "test@example.com", status: "INACTIVE", syncProfileWithIntegration: true } as any;
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(existingUser);
-      vi.mocked(prisma.user.update).mockResolvedValue(existingUser);
-
-      await upsertUserFromExternalUser({ id: "ext-1", email: "test@example.com", username: "testuser", fullName: "Test User" });
-
-      const updateArgs = vi.mocked(prisma.user.update).mock.calls[0][0];
-      expect(updateArgs.data).not.toHaveProperty("status");
-    });
-
     it("actualiza el avatarFileId sin alterar syncProfileWithIntegration", async () => {
       const mockUser = { id: "u-1", avatarFileId: "file-1" } as any;
       vi.mocked(prisma.user.update).mockResolvedValue(mockUser);

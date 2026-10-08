@@ -50,9 +50,9 @@ export const updateLocalUserSchema = yup
       value.status !== undefined,
   );
 
-/// En modo external-auth los datos de la cuenta los administra EXTERNAL_AUTH: desde acá solo
-/// se activa o desactiva su acceso al chat (D19).
-export const updateExternalUserUserSchema = yup.object({
+/// Con un proveedor externo los datos de la cuenta los administra el proveedor:
+/// desde acá solo se activa o desactiva su acceso al chat (D19).
+export const updateExternalUserSchema = yup.object({
   status: yup.string().oneOf(Object.values(UserStatus)).required(),
 });
 

@@ -42,7 +42,7 @@ function sessionIdentity(overrides: Record<string, unknown> = {}) {
       permissions: [],
       app: "link",
       exp: now + 3600,
-      authProvider: "external-auth" as const,
+      authProvider: "external-test" as const,
     },
     ...overrides,
   };

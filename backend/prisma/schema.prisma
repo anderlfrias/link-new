@@ -186,9 +186,9 @@ model User {
   /// usa: todas van por `id` (ver backend/README.md).
   externalId String? @unique @map("external_id")
 
-  /// Sistema externo que sincronizó este perfil por última vez (ej. "external-auth").
-  /// Null cuando el usuario nunca se sincronizó desde un proveedor externo.
-  /// Ver `constants/identity-provider.constant.ts`.
+  /// Id del proveedor de autenticación externo que sincronizó este perfil por
+  /// última vez (ej. "external-auth", ver `auth-providers/api.ts`). Null cuando el usuario
+  /// nunca se sincronizó desde un proveedor externo.
   identityProvider String? @map("identity_provider")
 
   /// Nombre de usuario. En modo external-auth lo define EXTERNAL_AUTH; en modo local es
@@ -205,7 +205,7 @@ model User {
   avatarFile   StoredFile? @relation("UserAvatarFile", fields: [avatarFileId], references: [id])
 
   /// Si es true (default), el login — y la sincronización de contactos vía
-  /// `/apps/users/by-codes` (ver `auth.service.ts`, `syncAppUsers`) — sigue
+  /// `/apps/users/by-codes` (ver el `onLogin` del proveedor) — sigue
   /// actualizando `name`/avatar desde el proveedor de identidad externo
   /// configurado (hoy EXTERNAL_AUTH, pero el mecanismo es genérico: podría ser
   /// cualquier otro). Pasa a false la primera vez que este usuario cambia su

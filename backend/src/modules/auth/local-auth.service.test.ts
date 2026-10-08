@@ -1,7 +1,7 @@
 import { LocalCredential, UserStatus } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LOCAL_AUTH_CONFIG, TEST_SESSION_JWT_SECRET, useAuthMode } from "../../test/auth-mode";
+import { TEST_SESSION_JWT_SECRET, useLocalAuth } from "../../test/auth-mode";
 import { BadRequestError } from "../../utils/errors";
 
 vi.mock("./auth.repository", () => ({
@@ -119,7 +119,7 @@ beforeEach(async () => {
 });
 
 describe("loginWithLocalAccount", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("con la contraseña correcta devuelve el token y la respuesta de §7", async () => {
     vi.mocked(findLoginCandidates).mockResolvedValue([buildAccount()]);
@@ -254,7 +254,7 @@ describe("loginWithLocalAccount", () => {
 });
 
 describe("changeOwnPassword", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("contraseña actual incorrecta -> 400 invalid_current_password, nunca 401 (invariante 11)", async () => {
     vi.mocked(findUserWithCredential).mockResolvedValue(buildAccount());
@@ -330,12 +330,13 @@ describe("changeOwnPassword", () => {
 });
 
 describe("getPublicAuthConfig", () => {
-  it("en modo external-auth solo dice el modo", async () => {
-    await expect(getPublicAuthConfig()).resolves.toEqual({ mode: "external-auth" });
+  it("con un proveedor externo solo dice su id", async () => {
+    // El proveedor activo en los tests es el de src/test/setup.ts.
+    await expect(getPublicAuthConfig()).resolves.toEqual({ mode: "external-test" });
   });
 
   describe("en modo local", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
+    useLocalAuth();
 
     it("suma la política de contraseñas, pero nunca la duración de sesión", async () => {
       vi.mocked(SettingsService.getLocalAuthPolicy).mockResolvedValue({ ...DEFAULT_POLICY, requireSymbol: true });
@@ -359,7 +360,7 @@ describe("getPublicAuthConfig", () => {
   });
 
 describe("política avanzada (LOCAL_AUTH_PLAN.md, Fase 6)", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   const LOCKOUT = { ...DEFAULT_POLICY, maxFailedLoginAttempts: 5, lockoutDurationMinutes: 30 };
 

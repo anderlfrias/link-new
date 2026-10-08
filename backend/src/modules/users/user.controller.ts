@@ -1,10 +1,10 @@
 import { UserStatus } from "@prisma/client";
 import { NextFunction, Request, Response } from "express";
-import env from "../../config/env";
+import { isExternalProvider } from "../../auth-providers/registry";
 import { validateBody } from "../../middlewares/validate.middleware";
 import * as AccountAdminService from "./account-admin.service";
 import * as UserService from "./user.service";
-import { updateLocalUserSchema, updateExternalUserUserSchema } from "./user.validator";
+import { updateExternalUserSchema, updateLocalUserSchema } from "./user.validator";
 
 function currentUserId(req: Request): string {
   return req.user!.internalUserId!;
@@ -27,7 +27,7 @@ export async function listAdmin(req: Request, res: Response, next: NextFunction)
     const search = typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined;
     const status = Object.values(UserStatus).find((value) => value === req.query.status);
     const hasPassword =
-      env.auth.mode === "local" && (req.query.hasPassword === "true" || req.query.hasPassword === "false")
+      !isExternalProvider() && (req.query.hasPassword === "true" || req.query.hasPassword === "false")
         ? req.query.hasPassword === "true"
         : undefined;
 
@@ -47,10 +47,10 @@ function panelActor(req: Request): AccountAdminService.AccountAdminActor {
   return { userId: req.user!.internalUserId!, via: "panel" };
 }
 
-/// El body permitido depende del modo (LOCAL_AUTH_PLAN.md §7): en external-auth solo
-/// `status`. Se decide en cada request, igual que `requireAuthMode`.
+/// El body permitido depende del modo (LOCAL_AUTH_PLAN.md §7): con un proveedor
+/// externo solo `status`. Se decide en cada request, igual que `localAuthOnly`.
 export function validateUpdateAccount(req: Request, res: Response, next: NextFunction) {
-  const schema = env.auth.mode === "local" ? updateLocalUserSchema : updateExternalUserUserSchema;
+  const schema = isExternalProvider() ? updateExternalUserSchema : updateLocalUserSchema;
   return validateBody(schema)(req, res, next);
 }
 

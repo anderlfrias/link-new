@@ -33,7 +33,7 @@ vi.mock("../auth/jwt", () => ({
         permissions: [],
         app: "link",
         exp: 0,
-        authProvider: "external-auth",
+        authProvider: "external-test",
       },
     };
   }),

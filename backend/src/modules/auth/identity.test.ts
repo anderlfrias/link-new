@@ -1,9 +1,7 @@
 import { User, UserStatus } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requireExternalUserConfig } from "../../config/auth-config";
-import env from "../../config/env";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
+import { useLocalAuth } from "../../test/auth-mode";
 import { ForbiddenError, UnauthorizedError } from "../../utils/errors";
 
 vi.mock("./auth.repository", () => ({
@@ -20,7 +18,8 @@ import { AuthenticatedIdentity } from "./auth.types";
 import { assertNotPasswordChangeOnly, authenticateAccessToken, resolveInternalUser } from "./identity";
 import { signSessionToken } from "./jwt";
 
-const EXTERNAL_AUTH_JWT_SECRET = requireExternalUserConfig(env.auth).jwtSecret;
+// El secreto con el que un proveedor externo firma su propio token: no es el de sesión de LINK.
+const PROVIDER_JWT_SECRET = "provider-own-secret";
 
 function buildUser(overrides: Partial<User> = {}): User {
   return {
@@ -49,7 +48,7 @@ function nowSeconds(): number {
 
 function sessionIdentity(
   overrides: Partial<AuthenticatedIdentity> = {},
-  authProvider: "local" | "external-auth" = "local",
+  authProvider = "local",
 ): AuthenticatedIdentity {
   return {
     mustChangePassword: false,
@@ -76,8 +75,8 @@ beforeEach(() => {
 
 // La resolución es una sola, sin ramas por modo: la sesión es siempre la de LINK.
 describe.each([
-  { label: "modo local", authProvider: "local" as const },
-  { label: "modo external-auth", authProvider: "external-auth" as const },
+  { label: "cuentas locales", authProvider: "local" as const },
+  { label: "proveedor externo", authProvider: "external-test" as const },
 ])("resolveInternalUser — $label", ({ authProvider }) => {
   const identity = (overrides: Partial<AuthenticatedIdentity> = {}) => sessionIdentity(overrides, authProvider);
 
@@ -169,11 +168,11 @@ describe("assertNotPasswordChangeOnly", () => {
 });
 
 describe.each([
-  { label: "modo local", config: LOCAL_AUTH_CONFIG },
-  // El modo de vitest.config.ts: no hace falta cambiarlo.
-  { label: "modo external-auth", config: undefined },
-])("authenticateAccessToken — $label", ({ config }) => {
-  if (config) useAuthMode(config);
+  { label: "cuentas locales", local: true },
+  // El de src/test/setup.ts: no hace falta cambiarlo.
+  { label: "proveedor externo", local: false },
+])("authenticateAccessToken — $label", ({ local }) => {
+  if (local) useLocalAuth();
 
   it("acepta la sesión de LINK y la resuelve", async () => {
     vi.mocked(findUserById).mockResolvedValue(buildUser());
@@ -193,14 +192,14 @@ describe.each([
     expect(findUserById).not.toHaveBeenCalled();
   });
 
-  it("rechaza el JWT de EXTERNAL_AUTH: ya no autentica en ningún lado (invariante 1)", async () => {
-    const external-authToken = jwt.sign(
+  it("rechaza el token de un proveedor externo: no autentica en ningún lado (invariante 1)", async () => {
+    const providerToken = jwt.sign(
       { id: "ext-1", email: "ana@example.com", username: "ana", name: "Ana", roles: [], app: "x" },
-      EXTERNAL_AUTH_JWT_SECRET,
+      PROVIDER_JWT_SECRET,
       { algorithm: "HS256", expiresIn: 3600 },
     );
 
-    await expect(authenticateAccessToken(external-authToken)).rejects.toBeInstanceOf(jwt.JsonWebTokenError);
+    await expect(authenticateAccessToken(providerToken)).rejects.toBeInstanceOf(jwt.JsonWebTokenError);
     expect(findUserById).not.toHaveBeenCalled();
   });
 });

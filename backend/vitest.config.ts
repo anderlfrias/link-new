@@ -5,15 +5,20 @@ export default defineConfig({
     environment: "node",
     globals: true,
     include: ["src/**/*.test.ts"],
+    // Deja un proveedor de autenticación externo de mentira activo en cada archivo de
+    // test (ver src/test/setup.ts).
+    setupFiles: ["src/test/setup.ts"],
     // config/env.ts hace process.exit(1) si falta alguna de estas al importarse
     // (ver docs/design/testing-plan/00-infrastructure-setup.md) — se setean acá para que
     // cualquier test que importe código del backend no mate el proceso entero.
     env: {
       DATABASE_URL: "postgresql://test:test@localhost:5432/test",
       PORT: "4000",
-      EXTERNAL_AUTH_API_URL: "https://external-auth.test.local",
-      APP_CODE_EXTERNAL_AUTH: "test-app-code",
-      EXTERNAL_AUTH_JWT_SECRET: "test-jwt-secret",
+      // Vacías a propósito: dotenv no pisa una variable ya definida, así que el .env de
+      // quien corre los tests no puede configurar un proveedor externo.
+      EXTERNAL_AUTH_API_URL: "",
+      APP_CODE_EXTERNAL_AUTH: "",
+      EXTERNAL_AUTH_JWT_SECRET: "",
       // 32 caracteres o más: firma las sesiones de LINK en todos los modos.
       SESSION_JWT_SECRET: "test-session-jwt-secret-0123456789abcdef",
       MAX_UPLOAD_SIZE_MB: "25",

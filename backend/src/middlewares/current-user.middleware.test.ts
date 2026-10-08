@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedIdentity, MappedUser } from "../modules/auth/auth.types";
 import { UnauthorizedError } from "../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../test/auth-mode";
+import { useLocalAuth } from "../test/auth-mode";
 
 vi.mock("../config/prisma", () => ({
   prisma: { user: { findUnique: vi.fn() } },
@@ -31,7 +31,7 @@ function buildMappedUser(overrides: Partial<MappedUser> = {}): MappedUser {
     permissions: [],
     app: "link",
     exp: Math.floor(Date.now() / 1000) + 3600,
-    authProvider: "external-auth",
+    authProvider: "external-test",
     ...overrides,
   };
 }
@@ -57,10 +57,10 @@ function activeAccount(overrides: Record<string, unknown> = {}) {
 }
 
 describe.each([
-  { label: "modo external-auth", config: undefined, authProvider: "external-auth" as const },
-  { label: "modo local", config: LOCAL_AUTH_CONFIG, authProvider: "local" as const },
-])("attachInternalUser — $label", ({ config, authProvider }) => {
-  if (config) useAuthMode(config);
+  { label: "proveedor externo", local: false, authProvider: "external-test" as const },
+  { label: "cuentas locales", local: true, authProvider: "local" as const },
+])("attachInternalUser — $label", ({ local, authProvider }) => {
+  if (local) useLocalAuth();
 
   beforeEach(() => {
     vi.mocked(prisma.user.findUnique).mockReset();

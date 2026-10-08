@@ -1,5 +1,7 @@
 import http from "http";
 import app from "./app";
+import { initAuthProvider } from "./auth-providers/init";
+import { currentProviderId } from "./auth-providers/registry";
 import env, { envWarnings } from "./config/env";
 import { logger } from "./config/logger";
 import { initSocket } from "./socket";
@@ -23,19 +25,29 @@ const PORT = env.PORT;
 // slow-loris ya requiere estar autenticado.
 const REQUEST_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
 
-const httpServer = http.createServer(app);
-httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
-initSocket(httpServer);
-startMessageRetentionWorker();
-startUploadCleanupWorker();
-startFileMigrationWorker();
-startAuditRetentionWorker();
+/// Valida el proveedor de autenticación antes de abrir nada: si su configuración es
+/// inválida, el backend no arranca (igual que con un `.env` inválido).
+async function start() {
+  await initAuthProvider();
 
-// env.ts no puede loguearlos: cuando valida el .env todavía no existe el logger.
-envWarnings.forEach((warning) => logger.warn(warning));
+  const httpServer = http.createServer(app);
+  httpServer.requestTimeout = REQUEST_TIMEOUT_MS;
+  initSocket(httpServer);
+  startMessageRetentionWorker();
+  startUploadCleanupWorker();
+  startFileMigrationWorker();
+  startAuditRetentionWorker();
 
-httpServer.listen(PORT, () => {
-  // El modo de autenticación se deduce del .env (LOCAL_AUTH_PLAN.md, D1): así
-  // queda a la vista al arrancar, sin tener que deducirlo leyendo el .env.
-  logger.info({ port: PORT, authMode: env.auth.mode }, "server listening");
+  // env.ts no puede loguearlos: cuando valida el .env todavía no existe el logger.
+  envWarnings.forEach((warning) => logger.warn(warning));
+
+  httpServer.listen(PORT, () => {
+    // Quién autentica queda a la vista al arrancar: "local" o el id del proveedor externo.
+    logger.info({ port: PORT, authProvider: currentProviderId() }, "server listening");
+  });
+}
+
+start().catch((error) => {
+  logger.fatal({ err: error }, "failed to start");
+  process.exit(1);
 });

@@ -1,4 +1,6 @@
-import env from "../config/env";
+import { isExternalProviderConfigured } from "../auth-providers/init";
+// Carga y valida el .env: `isExternalProviderConfigured` lee `process.env`.
+import "../config/env";
 import { logger } from "../config/logger";
 import { prisma } from "../config/prisma";
 import { runWithContext } from "../config/request-context";
@@ -75,9 +77,9 @@ function temporaryPasswordNotice(password: string): string {
 }
 
 export async function runAuthAdminCli(argv: string[], output: CliOutput = process): Promise<number> {
-  if (env.auth.mode !== "local") {
+  if (isExternalProviderConfigured()) {
     output.stderr.write(
-      "Este comando solo corre en modo local: el .env tiene EXTERNAL_AUTH configurado, y ahí las cuentas las administra EXTERNAL_AUTH.\n",
+      "Este comando solo corre con cuentas locales: el .env tiene un proveedor de autenticación externo configurado, y ahí las cuentas las administra el proveedor.\n",
     );
     return 1;
   }

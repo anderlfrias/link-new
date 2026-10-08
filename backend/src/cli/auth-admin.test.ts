@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../test/auth-mode";
 import { NotFoundError } from "../utils/errors";
 
 vi.mock("../modules/users/account-admin.service", () => ({
@@ -8,6 +7,9 @@ vi.mock("../modules/users/account-admin.service", () => ({
 }));
 
 vi.mock("../config/prisma", () => ({ prisma: { $disconnect: vi.fn() } }));
+
+// El CLI decide por el entorno, sin cargar ningún proveedor: sin uno configurado son cuentas locales.
+vi.mock("../auth-providers/init", () => ({ isExternalProviderConfigured: vi.fn() }));
 
 // Logger espiado: la contraseña temporal no puede pasar nunca por acá (D18).
 const loggedCalls: unknown[][] = [];
@@ -27,6 +29,7 @@ vi.mock("../config/logger", () => {
   return { logger: fake };
 });
 
+import { isExternalProviderConfigured } from "../auth-providers/init";
 import * as AccountAdminService from "../modules/users/account-admin.service";
 import { runAuthAdminCli } from "./auth-admin";
 
@@ -48,18 +51,21 @@ beforeEach(() => {
 });
 
 describe("auth-admin CLI", () => {
-  it("se niega a correr en modo external-auth", async () => {
+  it("se niega a correr con un proveedor de autenticación externo configurado", async () => {
+    vi.mocked(isExternalProviderConfigured).mockReturnValue(true);
     const io = captureOutput();
 
     const code = await runAuthAdminCli(["create-admin", "--email", "jefa@example.com"], io.output);
 
     expect(code).toBe(1);
-    expect(io.stderr()).toMatch(/solo corre en modo local/);
+    expect(io.stderr()).toMatch(/solo corre con cuentas locales/);
     expect(AccountAdminService.bootstrapAdmin).not.toHaveBeenCalled();
   });
 
-  describe("en modo local", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
+  describe("con cuentas locales", () => {
+    beforeEach(() => {
+      vi.mocked(isExternalProviderConfigured).mockReturnValue(false);
+    });
 
     it("create-admin imprime la contraseña temporal una sola vez, solo por la salida del comando", async () => {
       vi.mocked(AccountAdminService.bootstrapAdmin).mockResolvedValue({

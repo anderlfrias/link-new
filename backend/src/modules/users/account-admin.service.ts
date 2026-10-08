@@ -1,6 +1,5 @@
 import { AuditAction, Prisma, UserStatus } from "@prisma/client";
-import { requireLocalAuth } from "../../config/auth-config";
-import env from "../../config/env";
+import { isExternalProvider, requireLocalAuth } from "../../auth-providers/registry";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { BadRequestError, ConflictError, NotFoundError } from "../../utils/errors";
 import * as AuditService from "../audit/audit.service";
@@ -108,7 +107,7 @@ export async function updateUserAccount(
   targetId: string,
   input: UpdateUserAccountInput,
 ): Promise<AdminAccountView> {
-  const local = env.auth.mode === "local";
+  const local = !isExternalProvider();
   const result = await Repo.runInTransaction(async (tx) => {
     const target = await Repo.findAccount(tx, targetId);
     if (!target) {
@@ -190,7 +189,7 @@ export async function createLocalUser(
   actor: AccountAdminActor,
   input: CreateLocalUserInput,
 ): Promise<{ user: AdminAccountView; temporaryPassword?: string }> {
-  requireLocalAuth(env.auth);
+  requireLocalAuth();
   const policy = await SettingsService.getLocalAuthPolicy();
   const { password, generated } = resolveAssignedPassword(input.password, policy);
   // El hash antes de abrir la transacción: scrypt tarda y no necesita la base.
@@ -228,7 +227,7 @@ export async function resetLocalPassword(
   targetId: string,
   input: { password?: string },
 ): Promise<{ temporaryPassword?: string }> {
-  requireLocalAuth(env.auth);
+  requireLocalAuth();
   const policy = await SettingsService.getLocalAuthPolicy();
   const { password, generated } = resolveAssignedPassword(input.password, policy);
   const passwordHash = await hashPassword(password);
@@ -261,7 +260,7 @@ export async function resetLocalPassword(
 /// Desbloqueo por un admin (POST /admin/users/:id/unlock, D17): reinicia el
 /// contador de intentos. Se audita solo si la cuenta estaba bloqueada.
 export async function unlockLocalUser(actor: AccountAdminActor, targetId: string): Promise<void> {
-  requireLocalAuth(env.auth);
+  requireLocalAuth();
   await Repo.runInTransaction(async (tx) => {
     const target = await Repo.findAccount(tx, targetId);
     if (!target) {
@@ -296,7 +295,7 @@ export async function bootstrapAdmin(input: {
   name?: string;
   username?: string;
 }): Promise<{ userId: string; created: boolean; temporaryPassword: string }> {
-  requireLocalAuth(env.auth);
+  requireLocalAuth();
   const via: AccountAdminVia = "cli";
   const policy = await SettingsService.getLocalAuthPolicy();
   const temporaryPassword = generateTemporaryPassword(policy);
@@ -370,7 +369,7 @@ export async function bootstrapAdmin(input: {
 
 /// `reset-password` del CLI (D18): para cuando ningún admin puede entrar.
 export async function resetPasswordByEmail(email: string): Promise<{ userId: string; temporaryPassword: string }> {
-  requireLocalAuth(env.auth);
+  requireLocalAuth();
   const account = await Repo.runInTransaction((tx) => Repo.findAccountByEmail(tx, email));
   if (!account) {
     throw new NotFoundError("No hay ninguna cuenta con ese correo.");

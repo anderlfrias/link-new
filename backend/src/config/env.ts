@@ -25,14 +25,10 @@ const schema = yup.object({
   NODE_ENV: optionalString(),
   DATABASE_URL: yup.string().required(),
   PORT: yup.number().default(4000),
-  // Autenticación (LOCAL_AUTH_PLAN.md, D1): con las tres EXTERNAL_AUTH_* el login lo valida
-  // EXTERNAL_AUTH; sin ninguna, cuentas locales; con una o dos, no arranca. En los dos
-  // casos hace falta SESSION_JWT_SECRET (firma las sesiones de LINK;
-  // LOCAL_AUTH_JWT_SECRET es su nombre anterior). La combinación la valida
-  // `resolveAuthConfig` (auth-config.ts), no este schema.
-  EXTERNAL_AUTH_API_URL: optionalString().url(),
-  APP_CODE_EXTERNAL_AUTH: optionalString(),
-  EXTERNAL_AUTH_JWT_SECRET: optionalString(),
+  // Autenticación: SESSION_JWT_SECRET firma las sesiones de LINK, en todos los modos
+  // (LOCAL_AUTH_JWT_SECRET es su nombre anterior); la valida `resolveAuthConfig`
+  // (auth-config.ts), no este schema. Las variables de un proveedor externo las
+  // lee y valida el propio proveedor al arrancar (ver auth-providers/api.ts).
   SESSION_JWT_SECRET: optionalString(),
   LOCAL_AUTH_JWT_SECRET: optionalString(),
   // Solo semilla de AppSettings.maxUploadSizeMb en el primer arranque (ver
@@ -107,16 +103,9 @@ const schema = yup.object({
 });
 
 type ParsedEnv = yup.InferType<typeof schema>;
-type AuthEnvKey =
-  | "EXTERNAL_AUTH_API_URL"
-  | "APP_CODE_EXTERNAL_AUTH"
-  | "EXTERNAL_AUTH_JWT_SECRET"
-  | "SESSION_JWT_SECRET"
-  | "LOCAL_AUTH_JWT_SECRET";
+type AuthEnvKey = "SESSION_JWT_SECRET" | "LOCAL_AUTH_JWT_SECRET";
 
-/// Las variables de autenticación no se exponen sueltas, solo ya resueltas en
-/// `auth`: así ningún módulo puede leer `EXTERNAL_AUTH_API_URL` sin pasar por el modo
-/// activo (ver `requireExternalUserConfig` en auth-config.ts).
+/// Las variables de autenticación no se exponen sueltas, solo ya resueltas en `auth`.
 export type Env = Omit<ParsedEnv, AuthEnvKey> & { auth: AuthConfig };
 
 let env: Env;
@@ -126,15 +115,11 @@ let env: Env;
 export const envWarnings: string[] = [];
 
 try {
-  const { EXTERNAL_AUTH_API_URL, APP_CODE_EXTERNAL_AUTH, EXTERNAL_AUTH_JWT_SECRET, SESSION_JWT_SECRET, LOCAL_AUTH_JWT_SECRET, ...rest } =
-    schema.validateSync(process.env, { abortEarly: false, stripUnknown: true });
-  const { config, warnings } = resolveAuthConfig({
-    EXTERNAL_AUTH_API_URL,
-    APP_CODE_EXTERNAL_AUTH,
-    EXTERNAL_AUTH_JWT_SECRET,
-    SESSION_JWT_SECRET,
-    LOCAL_AUTH_JWT_SECRET,
+  const { SESSION_JWT_SECRET, LOCAL_AUTH_JWT_SECRET, ...rest } = schema.validateSync(process.env, {
+    abortEarly: false,
+    stripUnknown: true,
   });
+  const { config, warnings } = resolveAuthConfig({ SESSION_JWT_SECRET, LOCAL_AUTH_JWT_SECRET });
   env = { ...rest, auth: config };
   envWarnings.push(...warnings);
 } catch (error) {

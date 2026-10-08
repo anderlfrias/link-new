@@ -1,14 +1,7 @@
-import { LocalCredential, User } from "@prisma/client";
+import { LocalCredential, User, UserStatus } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { getLogger } from "../../config/request-context";
-import { IDENTITY_PROVIDER } from "../../constants/identity-provider.constant";
-import { MappedUser } from "./auth.types";
-
-/// Búsqueda exacta por email: la del modo external-auth, igual que siempre (el email
-/// del JWT de EXTERNAL_AUTH es la clave con la que se reconoce al perfil local).
-export function findUserByEmail(email: string): Promise<User | null> {
-  return prisma.user.findUnique({ where: { email } });
-}
+import type { DirectoryUser } from "../../auth-providers/api";
 
 export function findUserById(id: string): Promise<User | null> {
   return prisma.user.findUnique({ where: { id } });
@@ -90,65 +83,90 @@ export async function savePasswordChange(
   ]);
 }
 
-/// Solo estos 4 campos de `MappedUser` importan acá — así también sirve para
-/// upsertear contactos de `/apps/users/by-codes` (auth.service.ts,
-/// `syncAppUsers`), que no traen `roles`/`permissions`/`app`/`exp`.
-type ExternalUserProfileFields = Pick<MappedUser, "id" | "email" | "username" | "fullName">;
-
-/// `username` es un campo de identidad (cómo lo conoce el proveedor externo,
-/// necesario para pedirle su foto por username — ver `getProfilePictureByUsername`
-/// en auth.service.ts) — siempre se actualiza. `name` es un campo de *perfil*:
-/// solo se sincroniza desde afuera mientras `syncProfileWithIntegration` siga
-/// en true para ese usuario (ver ese campo en schema.prisma). No se puede
-/// resolver esto en un solo `upsert` (la condición depende de la fila ya
-/// existente), por eso primero se busca y después se decide qué actualizar.
+/// Crea o actualiza la cuenta de una persona del proveedor externo `providerId`
+/// (login o sincronización del directorio).
 ///
-/// Migración entre modos (LOCAL_AUTH_PLAN.md, D20 y §10):
-/// - La cuenta se reconoce por correo. Primero el exacto; si no hay, sin
-///   distinguir mayúsculas: así una cuenta creada en modo local conserva su
-///   `User.id` (y con él su historial) cuando la instalación pasa a EXTERNAL_AUTH. En
-///   ese caso el correo guardado pasa a ser el de EXTERNAL_AUTH, que es con el que se
-///   la busca de ahí en más.
-/// - En modo external-auth manda el username de EXTERNAL_AUTH: si otra cuenta lo tiene, se le
-///   quita en la misma transacción. Antes, ese choque terminaba en un 500 por
-///   el índice único.
+/// Cómo se la reconoce (AUTH_PROVIDERS_PLAN, §4.7): primero por `externalId`
+/// (único en la instalación); si no, por correo exacto; si no, por correo sin
+/// distinguir mayúsculas. Así una cuenta creada en modo local conserva su
+/// `User.id` (y con él su historial) cuando la instalación pasa a un proveedor
+/// externo, y a partir de ahí se la reconoce por `externalId`. Al reconocerla por
+/// correo se completan `identityProvider` y `externalId` si estaban vacíos; si ya
+/// tenían otro valor no se pisan.
 ///
-/// `options.roles`: los roles que entrega el proveedor en el login. Se
-/// guardan siempre que vengan (se sobrescriben en cada login); al sincronizar
-/// contactos (sin roles) los de la cuenta quedan como están.
-export async function upsertUserFromExternalUser(
-  mappedUser: ExternalUserProfileFields,
+/// `name` es un campo de *perfil*: solo se sincroniza desde afuera mientras
+/// `syncProfileWithIntegration` siga en true para ese usuario (ver ese campo en
+/// schema.prisma). No se puede resolver en un solo `upsert` (la condición depende de
+/// la fila ya existente), por eso primero se busca y después se decide qué
+/// actualizar. `username` es un campo de identidad: manda el del proveedor, y si otra
+/// cuenta lo tiene se le quita en la misma transacción (antes ese choque terminaba en
+/// un 500 por el índice único). `status` nunca se toca: una cuenta desactivada sigue
+/// desactivada aunque el proveedor la sincronice.
+///
+/// `options.roles`: los roles que entrega el proveedor en el login. Se guardan
+/// siempre que vengan (se sobrescriben en cada login); al sincronizar el directorio
+/// (sin roles) los de la cuenta quedan como están.
+export async function upsertExternalUser(
+  providerId: string,
+  user: DirectoryUser,
   options: { roles?: string[] } = {},
 ): Promise<User> {
+  const byExternalId = await prisma.user.findUnique({ where: { externalId: user.externalId } });
+  // El mismo `externalId` bajo otro proveedor no es esta persona.
+  const matchedByExternalId =
+    byExternalId && (byExternalId.identityProvider === null || byExternalId.identityProvider === providerId)
+      ? byExternalId
+      : null;
   const existing =
-    (await prisma.user.findUnique({ where: { email: mappedUser.email } })) ??
-    (await prisma.user.findFirst({ where: { email: { equals: mappedUser.email, mode: "insensitive" } } }));
+    matchedByExternalId ??
+    (await prisma.user.findUnique({ where: { email: user.email } })) ??
+    (await prisma.user.findFirst({ where: { email: { equals: user.email, mode: "insensitive" } } }));
+
+  // Reconocida por `externalId`, su correo puede haber cambiado en el proveedor: se
+  // adopta el nuevo salvo que otra cuenta ya lo tenga (el correo es único).
+  let email = user.email;
+  if (matchedByExternalId && matchedByExternalId.email !== user.email) {
+    const holder = await prisma.user.findFirst({
+      where: { email: { equals: user.email, mode: "insensitive" }, id: { not: matchedByExternalId.id } },
+      select: { id: true },
+    });
+    if (holder) {
+      // UUIDs, nunca correos ni usernames (LOGGING_PLAN.md §4.4).
+      getLogger().warn(
+        { userId: matchedByExternalId.id, heldByUserId: holder.id },
+        "provider email is held by another account: kept the stored one",
+      );
+      email = matchedByExternalId.email;
+    }
+  }
 
   const write = existing
     ? prisma.user.update({
         where: { id: existing.id },
         data: {
-          username: mappedUser.username,
-          ...(existing.email !== mappedUser.email ? { email: mappedUser.email } : {}),
-          ...(existing.syncProfileWithIntegration ? { name: mappedUser.fullName } : {}),
+          ...(user.username !== undefined ? { username: user.username } : {}),
+          ...(existing.email !== email ? { email } : {}),
+          ...(existing.syncProfileWithIntegration ? { name: user.fullName } : {}),
           ...(options.roles ? { roles: options.roles } : {}),
+          ...(existing.externalId === null ? { externalId: user.externalId } : {}),
+          ...(existing.identityProvider === null ? { identityProvider: providerId } : {}),
         },
       })
     : prisma.user.create({
         data: {
-          email: mappedUser.email,
-          name: mappedUser.fullName,
-          username: mappedUser.username,
-          externalId: mappedUser.id,
-          identityProvider: IDENTITY_PROVIDER.EXTERNAL_AUTH,
+          email: user.email,
+          name: user.fullName,
+          username: user.username ?? null,
+          externalId: user.externalId,
+          identityProvider: providerId,
           ...(options.roles ? { roles: options.roles } : {}),
         },
       });
 
-  const holder = mappedUser.username
+  const holder = user.username
     ? await prisma.user.findFirst({
         where: {
-          username: { equals: mappedUser.username, mode: "insensitive" },
+          username: { equals: user.username, mode: "insensitive" },
           ...(existing ? { id: { not: existing.id } } : {}),
         },
         select: { id: true },
@@ -161,13 +179,29 @@ export async function upsertUserFromExternalUser(
   // UUIDs, nunca correos ni usernames (LOGGING_PLAN.md §4.4).
   getLogger().warn(
     { userId: holder.id, ...(existing ? { adoptedByUserId: existing.id } : {}) },
-    "external-auth username was held by another account: removed from it",
+    "provider username was held by another account: removed from it",
   );
-  const [, user] = await prisma.$transaction([
+  const [, saved] = await prisma.$transaction([
     prisma.user.update({ where: { id: holder.id }, data: { username: null } }),
     write,
   ]);
-  return user;
+  return saved;
+}
+
+/// Cuentas activas de `providerId` sin avatar y cuyo perfil se sincroniza: las
+/// únicas a las que el proveedor tiene sentido pedirles una foto.
+export function findProviderUsersWithoutAvatar(
+  providerId: string,
+): Promise<Array<{ id: string; username: string | null; externalId: string | null }>> {
+  return prisma.user.findMany({
+    where: {
+      identityProvider: providerId,
+      avatarFileId: null,
+      syncProfileWithIntegration: true,
+      status: UserStatus.ACTIVE,
+    },
+    select: { id: true, username: true, externalId: true },
+  });
 }
 
 export function updateAvatarFileId(userId: string, avatarFileId: string | null): Promise<User> {

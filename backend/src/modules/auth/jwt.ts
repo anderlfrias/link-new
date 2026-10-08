@@ -1,55 +1,13 @@
 import jwt, { JsonWebTokenError } from "jsonwebtoken";
-import { requireExternalUserConfig } from "../../config/auth-config";
+import { currentProviderId } from "../../auth-providers/registry";
 import env from "../../config/env";
-import { AuthenticatedIdentity, SessionTokenPayload, MappedUser, ExternalUserRole, ExternalUserTokenPayload } from "./auth.types";
+import { AuthenticatedIdentity, SessionTokenPayload } from "./auth.types";
 
 /// Emisor y audiencia de los tokens de sesión de LINK (LOCAL_AUTH_PLAN.md, D5).
 /// No cuestan nada y evitan aceptar el token de otra app firmado con el mismo
 /// secreto.
 export const SESSION_TOKEN_ISSUER = "link";
 export const SESSION_TOKEN_AUDIENCE = "link";
-
-/// Mismo criterio de armado de nombre que usa EXTERNAL_AUTH en el JWT (`name` +
-/// apellidos) y en `/apps/users/by-codes` (ver auth.service.ts, `mapExternalUserAppUser`).
-export function buildFullName(parts: {
-  name?: string;
-  firstSurname?: string;
-  secondSurname?: string;
-}): string {
-  return [parts.name, parts.firstSurname, parts.secondSurname]
-    .filter((part): part is string => Boolean(part))
-    .join(" ");
-}
-
-export function mapTokenToUser(payload: ExternalUserTokenPayload): MappedUser {
-  const fullName = buildFullName(payload);
-
-  const roles = payload.roles.map((role: ExternalUserRole) => role.role);
-  const permissions = payload.roles.flatMap(
-    (role: ExternalUserRole) => role.restrictions?.map((restriction) => restriction.code) ?? [],
-  );
-
-  return {
-    id: payload.id,
-    email: payload.email,
-    username: payload.username,
-    fullName,
-    roles,
-    permissions,
-    app: payload.app,
-    exp: payload.exp,
-    authProvider: "external-auth",
-  };
-}
-
-/// Verifica el JWT que EXTERNAL_AUTH devuelve en el login. Solo se usa en ese momento: a
-/// partir de ahí la sesión es el token propio de LINK (`signSessionToken`) y el de
-/// EXTERNAL_AUTH no se acepta en ningún otro lugar. En modo local tira
-/// (`requireExternalUserConfig`).
-export function verifyToken(token: string): ExternalUserTokenPayload {
-  const { jwtSecret } = requireExternalUserConfig(env.auth);
-  return jwt.verify(token, jwtSecret, { algorithms: ["HS256"] }) as ExternalUserTokenPayload;
-}
 
 /// Firma la sesión de una cuenta (D5): HS256 con `SESSION_JWT_SECRET`, `sub` =
 /// id interno, y `pcr` ("password change required") solo si el token es
@@ -70,9 +28,9 @@ export function signSessionToken(
 }
 
 /// El único verificador de tokens de request: solo acepta la sesión propia de
-/// LINK. El token de un proveedor externo (EXTERNAL_AUTH) no autentica en ningún lado
-/// aunque esté bien firmado. Los errores son los de `jsonwebtoken`
-/// (`TokenExpiredError` incluido): los middlewares ya los traducen a 401.
+/// LINK. El token de un proveedor externo no autentica en ningún lado aunque esté
+/// bien firmado. Los errores son los de `jsonwebtoken` (`TokenExpiredError`
+/// incluido): los middlewares ya los traducen a 401.
 export function verifyAccessToken(token: string): AuthenticatedIdentity {
   const payload = jwt.verify(token, env.auth.sessionSecret, {
     algorithms: ["HS256"],
@@ -95,7 +53,7 @@ export function verifyAccessToken(token: string): AuthenticatedIdentity {
       permissions: [],
       app: SESSION_TOKEN_AUDIENCE,
       exp: payload.exp ?? 0,
-      authProvider: env.auth.mode,
+      authProvider: currentProviderId(),
     },
     mustChangePassword: payload.pcr === true,
     iat: payload.iat,

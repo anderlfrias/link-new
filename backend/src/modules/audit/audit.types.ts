@@ -1,11 +1,10 @@
 import { AuditAction, ConversationType, FileProvider, MessageType } from "@prisma/client";
-import type { AuthMode } from "../../config/auth-config";
 
 /// Motivo de un `LOGIN_FAILED`, tal como el backend realmente lo puede
-/// distinguir. Los cuatro primeros son del modo external-auth. Ojo:
-/// `forbidden_by_provider` no significa "contraseña incorrecta" — EXTERNAL_AUTH
-/// devuelve 403 tanto para credenciales inválidas como para falta de acceso a
-/// la app, y no se pueden separar (ver el comentario en auth.service.ts).
+/// distinguir. Los cuatro primeros son de un proveedor externo. Ojo:
+/// `forbidden_by_provider` no significa "contraseña incorrecta" — muchos
+/// proveedores rechazan igual las credenciales inválidas y la falta de acceso a
+/// la app, y no se pueden separar (ver `loginErrorFor` en external-login.service.ts).
 /// Nombrarlo "invalid_credentials" sería registrar una conclusión que el
 /// sistema no tiene. Los del modo local sí distinguen la causa: la respuesta
 /// HTTP es la misma a propósito (anti-enumeración, LOCAL_AUTH_PLAN.md D12),
@@ -62,8 +61,9 @@ export type AuditMetadataMap = {
   /// `provider` es el modo de la instalación al momento del intento. Las filas
   /// anteriores a LOCAL_AUTH_PLAN.md no lo traen: quien las lea tiene que
   /// interpretar "ausente" como "external-auth".
-  LOGIN: { provider: AuthMode };
-  LOGIN_FAILED: { provider: AuthMode; reason: LoginFailureReason };
+  /// `provider`: "local", o el id del proveedor externo que autenticó.
+  LOGIN: { provider: string };
+  LOGIN_FAILED: { provider: string; reason: LoginFailureReason };
   /// Acciones de administración de cuentas: van en la misma transacción que su
   /// efecto. Ninguna lleva la contraseña, su hash ni su longitud, ni el token.
   CREATE_USER: { via: AccountAdminVia; roles: string[] };

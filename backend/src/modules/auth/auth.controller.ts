@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import { AuditAction, UserStatus } from "@prisma/client";
-import jwt, { JwtPayload } from "jsonwebtoken";
+import { AuditAction } from "@prisma/client";
+import { currentProviderId, getAuthProvider } from "../../auth-providers/registry";
 import { getClientIp } from "../../config/client-ip";
-import env from "../../config/env";
 import {
   BadRequestError,
   ForbiddenError,
@@ -13,10 +12,8 @@ import * as AuditService from "../audit/audit.service";
 import { LoginFailureReason } from "../audit/audit.types";
 import * as AuthService from "./auth.service";
 import { LocalLoginError } from "./auth.errors";
+import * as ExternalLoginService from "./external-login.service";
 import * as LocalAuthService from "./local-auth.service";
-import { filterKnownRoles } from "../../constants/roles.constant";
-import * as SettingsService from "../settings/settings.service";
-import { mapTokenToUser, signSessionToken, verifyToken } from "./jwt";
 
 export function mapLoginFailureReason(error: unknown): LoginFailureReason {
   // El login local ya sabe el motivo real (D12): la respuesta HTTP es la misma
@@ -39,10 +36,6 @@ export function mapLoginFailureReason(error: unknown): LoginFailureReason {
   return "provider_error";
 }
 
-function sessionTokenExp(token: string): number {
-  return (jwt.decode(token) as JwtPayload).exp ?? 0;
-}
-
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { user, password } = req.body as { user?: string; password?: string };
@@ -50,88 +43,24 @@ export async function login(req: Request, res: Response, next: NextFunction) {
       throw new BadRequestError("Ingresá tu usuario y tu contraseña.");
     }
 
-    if (env.auth.mode === "local") {
-      const { record, response } = await LocalAuthService.loginWithLocalAccount(user, password);
-      void AuditService.record({
-        action: AuditAction.LOGIN,
-        userId: record.id,
-        actorEmail: record.email,
-        metadata: { provider: "local" },
-      });
-      res.json(response);
-      return;
-    }
-
+    // Con un proveedor externo, el login lo valida el proveedor y LINK emite igual su
+    // propia sesión (ver external-login.service.ts); si no, cuentas locales. En los dos
+    // casos el resultado es el mismo: la cuenta y la respuesta.
     // Misma regla de IP que el rate limiting y la auditoría (config/client-ip.ts):
-    // CF-Connecting-IP solo cuenta si la instalación declara que está detrás
-    // de Cloudflare. Esta IP es la que EXTERNAL_AUTH usa para sus propios bloqueos.
-    // Este es el token de EXTERNAL_AUTH: sirve solo para este login (verificarlo, y pedirle a
-    // EXTERNAL_AUTH la foto y el directorio). La sesión de LINK es otro token, más abajo.
-    const providerToken = await AuthService.login(user, password, getClientIp(req));
-    const mappedUser = mapTokenToUser(verifyToken(providerToken));
-    // Los roles de EXTERNAL_AUTH se guardan en la cuenta en cada login (solo los que la app
-    // conoce): a partir de acá se leen de la base, igual que en el modo local.
-    const internalUser = await AuthService.upsertUsuario(mappedUser, filterKnownRoles(mappedUser.roles));
-    // Un admin puede cortarle el acceso al chat a una cuenta aunque EXTERNAL_AUTH
-    // siga aceptando su contraseña (LOCAL_AUTH_PLAN.md, D19). Se informa
-    // recién acá, con las credenciales ya validadas por EXTERNAL_AUTH.
-    if (internalUser.status !== UserStatus.ACTIVE) {
-      throw new ForbiddenError(
-        "Tu cuenta está desactivada en este chat. Si creés que es un error, contactá a un administrador.",
-        "account_disabled",
-      );
-    }
+    // CF-Connecting-IP solo cuenta si la instalación declara que está detrás de
+    // Cloudflare. Esta IP es la que el proveedor puede usar para sus propios bloqueos.
+    const provider = getAuthProvider();
+    const { record, response } = provider
+      ? await ExternalLoginService.loginWithExternalProvider(provider, user, password, getClientIp(req))
+      : await LocalAuthService.loginWithLocalAccount(user, password);
 
     void AuditService.record({
       action: AuditAction.LOGIN,
-      userId: internalUser.id,
-      actorEmail: mappedUser.email,
-      metadata: { provider: env.auth.mode },
+      userId: record.id,
+      actorEmail: record.email,
+      metadata: { provider: currentProviderId() },
     });
-
-    // LINK emite siempre su propia sesión: se verifica en cada request, el socket y las
-    // descargas sin volver a EXTERNAL_AUTH, y la revocación y la duración de sesión funcionan
-    // igual que en el modo local (AUTH_PROVIDERS_PLAN, decisión 1).
-    const { sessionTtlHours } = await SettingsService.getLocalAuthPolicy();
-    const sessionToken = signSessionToken(internalUser, { ttlHours: sessionTtlHours, mustChangePassword: false });
-
-    res.json({
-      token: sessionToken,
-      // `fullName` sale de `internalUser.name` (esta base), no de `mappedUser`
-      // (el JWT del proveedor externo tal cual): si este usuario ya cambió su
-      // nombre acá, `upsertUsuario` no lo pisó (ver auth.repository.ts), pero
-      // el JWT externo sigue teniendo el nombre viejo — mandar `mappedUser.fullName`
-      // acá mostraría ese nombre viejo en el propio cliente aunque la base ya
-      // tenga el correcto.
-      user: {
-        ...mappedUser,
-        // La sesión es la de LINK: vence cuando vence su token, no el de EXTERNAL_AUTH.
-        exp: sessionTokenExp(sessionToken),
-        roles: internalUser.roles,
-        fullName: internalUser.name,
-        internalUserId: internalUser.id,
-        notificationSoundEnabled: internalUser.notificationSoundEnabled,
-        language: internalUser.language,
-        // En modo external-auth la contraseña la administra EXTERNAL_AUTH: nunca hay cambio
-        // obligatorio de este lado (LOCAL_AUTH_PLAN.md §7).
-        mustChangePassword: false,
-        mustChangePasswordReason: null,
-      },
-    });
-
-    // Fire-and-forget: no debe retrasar ni romper el login si el proveedor
-    // externo está lento o caído (syncProfilePicture nunca lanza — ver
-    // auth.service.ts). No hace nada si este usuario ya desactivó la
-    // sincronización al editar su foto acá.
-    void AuthService.syncProfilePicture(
-      internalUser.id,
-      internalUser.avatarFileId,
-      providerToken,
-      internalUser.syncProfileWithIntegration,
-    );
-    // Y el directorio de contactos (con throttle): es acá, con el token del
-    // proveedor que solo existe en este momento, y no al listar usuarios.
-    void AuthService.syncDirectoryThrottled(providerToken);
+    res.json(response);
   } catch (error) {
     // El intento fallido se registra con la identidad INTENTADA y sin userId:
     // puede no existir ningún User local para ese usuario (ver el comentario de
@@ -143,7 +72,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
         action: AuditAction.LOGIN_FAILED,
         userId: null,
         actorEmail: typeof req.body?.user === "string" ? req.body.user : null,
-        metadata: { provider: env.auth.mode, reason: mapLoginFailureReason(error) },
+        metadata: { provider: currentProviderId(), reason: mapLoginFailureReason(error) },
       });
     }
     next(error);

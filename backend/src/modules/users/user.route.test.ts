@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
+import { useLocalAuth } from "../../test/auth-mode";
 
 vi.mock("./account-admin.service", () => ({
   updateUserAccount: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("../auth/jwt", () => ({
         permissions: [],
         app: "link",
         exp: 0,
-        authProvider: "external-auth",
+        authProvider: "external-test",
       },
     };
   }),
@@ -116,7 +116,7 @@ describe("admin users routes — modo external-auth", () => {
 });
 
 describe("admin users routes — modo local", () => {
-  useAuthMode(LOCAL_AUTH_CONFIG);
+  useLocalAuth();
 
   it("POST / crea la cuenta y devuelve la temporal (201)", async () => {
     vi.mocked(AccountAdminService.createLocalUser).mockResolvedValue({

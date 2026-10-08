@@ -1,26 +1,24 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it } from "vitest";
 import { signSessionToken } from "../modules/auth/jwt";
-import { LOCAL_AUTH_CONFIG, TEST_SESSION_JWT_SECRET, useAuthMode } from "../test/auth-mode";
-import type { MappedUser, ExternalUserTokenPayload } from "../modules/auth/auth.types";
+import { TEST_SESSION_JWT_SECRET, useLocalAuth } from "../test/auth-mode";
+import type { MappedUser } from "../modules/auth/auth.types";
 import { ForbiddenError, UnauthorizedError } from "../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
 import { authenticate, authenticateForPasswordChange, requireRoles } from "./auth.middleware";
 
-// Mismo secret que EXTERNAL_AUTH_JWT_SECRET en vitest.config.ts.
-const EXTERNAL_AUTH_JWT_SECRET = "test-jwt-secret";
+// El token que emite un proveedor externo en su propio login: bien firmado, pero no es
+// una sesión de LINK.
+const PROVIDER_JWT_SECRET = "provider-own-secret";
 
-function buildExternalUserPayload(overrides: Partial<ExternalUserTokenPayload> = {}): ExternalUserTokenPayload {
+function buildProviderTokenPayload() {
   return {
     id: "ext-1",
     email: "user@example.com",
     username: "user1",
     name: "Ana",
-    firstSurname: "Gómez",
     roles: [{ role: "admin" }],
-    app: "chat-interno",
     exp: Math.floor(Date.now() / 1000) + 3600,
-    ...overrides,
   };
 }
 
@@ -37,10 +35,10 @@ function run(middleware: typeof authenticate, token: string) {
 
 // `authenticate` verifica con el mismo verificador en los dos modos: solo la sesión de LINK.
 describe.each([
-  { label: "modo external-auth", config: undefined, authProvider: "external-auth" },
-  { label: "modo local", config: LOCAL_AUTH_CONFIG, authProvider: "local" },
-])("authenticate — $label", ({ config, authProvider }) => {
-  if (config) useAuthMode(config);
+  { label: "proveedor externo", local: false, authProvider: "external-test" },
+  { label: "cuentas locales", local: true, authProvider: "local" },
+])("authenticate — $label", ({ local, authProvider }) => {
+  if (local) useLocalAuth();
 
   it("sin header Authorization -> UnauthorizedError 'Missing token'", () => {
     const req = createMockRequest();
@@ -101,9 +99,9 @@ describe.each([
     expect(error.message).toBe("Token expired");
   });
 
-  it("el JWT de EXTERNAL_AUTH -> 401 Invalid token: ya no autentica, ni firmado con el secreto de EXTERNAL_AUTH ni con el de sesión (invariante 1)", () => {
-    for (const secret of [EXTERNAL_AUTH_JWT_SECRET, TEST_SESSION_JWT_SECRET]) {
-      const token = jwt.sign(buildExternalUserPayload(), secret, { algorithm: "HS256" });
+  it("el token de un proveedor externo -> 401 Invalid token: no autentica, ni firmado con su secreto ni con el de sesión (invariante 1)", () => {
+    for (const secret of [PROVIDER_JWT_SECRET, TEST_SESSION_JWT_SECRET]) {
+      const token = jwt.sign(buildProviderTokenPayload(), secret, { algorithm: "HS256" });
 
       const { error } = run(authenticate, token);
 
@@ -156,7 +154,7 @@ describe("requireRoles", () => {
       permissions: [],
       app: "chat-interno",
       exp: Math.floor(Date.now() / 1000) + 3600,
-      authProvider: "external-auth",
+      authProvider: "external-test",
       ...overrides,
     };
   }

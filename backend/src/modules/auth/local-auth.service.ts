@@ -1,7 +1,6 @@
 import { randomBytes } from "crypto";
 import { AuditAction, LocalCredential, User, UserStatus } from "@prisma/client";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import env from "../../config/env";
+import { getAuthProvider } from "../../auth-providers/registry";
 import { getLogger } from "../../config/request-context";
 import { BadRequestError } from "../../utils/errors";
 import * as AuditService from "../audit/audit.service";
@@ -22,7 +21,8 @@ import { endLiveSessions } from "./live-sessions";
 import { LoginUserResponse, MustChangePasswordReason, PublicAuthConfig } from "./auth.types";
 
 export { LocalLoginError };
-import { SESSION_TOKEN_AUDIENCE, signSessionToken } from "./jwt";
+import { signSessionToken } from "./jwt";
+import { buildLoginResponse, tokenExp } from "./login-response";
 import {
   evaluatePasswordPolicy,
   hashPassword,
@@ -52,10 +52,6 @@ function invalidCredentials(reason: LoginFailureReason): LocalLoginError {
 
 function toSecondPrecision(date: Date): Date {
   return new Date(Math.floor(date.getTime() / 1000) * 1000);
-}
-
-function tokenExp(token: string): number {
-  return (jwt.decode(token) as JwtPayload).exp ?? 0;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -160,25 +156,7 @@ export async function loginWithLocalAccount(identifier: string, password: string
 
   return {
     record: account,
-    response: {
-      token,
-      user: {
-        id: account.id,
-        email: account.email,
-        username: account.username,
-        fullName: account.name,
-        roles: account.roles,
-        permissions: [],
-        app: SESSION_TOKEN_AUDIENCE,
-        exp: tokenExp(token),
-        authProvider: "local",
-        internalUserId: account.id,
-        mustChangePassword: reason !== null,
-        mustChangePasswordReason: reason,
-        notificationSoundEnabled: account.notificationSoundEnabled,
-        language: account.language,
-      },
-    },
+    response: buildLoginResponse(account, token, { authProvider: "local", mustChangePasswordReason: reason }),
   };
 }
 
@@ -253,11 +231,12 @@ export async function changeOwnPassword(
   return { token, exp: tokenExp(token) };
 }
 
-/// `GET /auth/config` (D14). En modo local suma lo necesario para elegir una
-/// contraseña; nunca la duración de sesión.
+/// `GET /auth/config` (D14). Con cuentas locales suma lo necesario para elegir una
+/// contraseña; nunca la duración de sesión. Con un proveedor externo, `mode` es su id.
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
-  if (env.auth.mode === "external-auth") {
-    return { mode: "external-auth" };
+  const provider = getAuthProvider();
+  if (provider) {
+    return { mode: provider.id };
   }
   const policy = await SettingsService.getLocalAuthPolicy();
   return {

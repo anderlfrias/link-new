@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
-import { LOCAL_AUTH_CONFIG, useAuthMode } from "../../test/auth-mode";
+import { useLocalAuth } from "../../test/auth-mode";
 import { BadRequestError } from "../../utils/errors";
 
 vi.mock("./auth.service", () => ({}));
@@ -82,7 +82,7 @@ describe("PATCH /auth/password", () => {
   });
 
   describe("en modo local", () => {
-    useAuthMode(LOCAL_AUTH_CONFIG);
+    useLocalAuth();
 
     it("sin token -> 401", async () => {
       const res = await request(app).patch("/auth/password").send({ currentPassword: "a", newPassword: "b" });

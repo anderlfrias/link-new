@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { authenticate, authenticateForPasswordChange, requireAuthMode } from "../../middlewares/auth.middleware";
+import { authenticate, authenticateForPasswordChange, localAuthOnly } from "../../middlewares/auth.middleware";
 import { attachInternalUser } from "../../middlewares/current-user.middleware";
 import { validateBody } from "../../middlewares/validate.middleware";
 import {
@@ -31,11 +31,11 @@ router.post("/login", loginIpRateLimiter, loginUserIpRateLimiter, loginUserRateL
 // Público: el frontend lo necesita antes de tener sesión, o con un token
 // restringido que no puede leer /settings/public (LOCAL_AUTH_PLAN.md, D14).
 router.get("/config", getAuthConfig);
-// Solo modo local (404 en external-auth). Único lugar donde sirve un token restringido
+// Solo con cuentas locales (404 con un proveedor externo). Único lugar donde sirve un token restringido
 // (`pcr`, D13): por eso `authenticateForPasswordChange` y no `authenticate`.
 router.patch(
   "/password",
-  requireAuthMode("local"),
+  localAuthOnly(),
   authenticateForPasswordChange,
   attachInternalUser,
   passwordChangeRateLimiter,
