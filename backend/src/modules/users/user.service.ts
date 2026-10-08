@@ -54,8 +54,8 @@ export async function listUsersForAdmin(
       groupsAdministeredCount: groupAdminByUser.get(user.id) ?? 0,
     },
     // En modo local la app asigna los roles y administra las contraseñas,
-    // así que el panel puede mostrarlos (LOCAL_AUTH_PLAN.md §7). En external-auth
-    // los roles vienen de EXTERNAL_AUTH y no se conocen para un tercero.
+    // así que el panel puede mostrarlos (LOCAL_AUTH_PLAN.md §7). Con un
+    // proveedor externo los roles los administra el proveedor y no se editan desde acá.
     ...(local
       ? {
           localRoles: roles,

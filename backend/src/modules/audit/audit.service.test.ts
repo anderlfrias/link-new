@@ -50,7 +50,7 @@ describe("AuditService", () => {
           action: AuditAction.LOGIN,
           userId: "user-explicit-2",
           actorEmail: "explicit@test.com",
-          metadata: { provider: "external-auth" },
+          metadata: { provider: "mi-proveedor" },
         });
       });
 
@@ -70,7 +70,7 @@ describe("AuditService", () => {
           action: AuditAction.LOGIN_FAILED,
           userId: null,
           actorEmail: "attempted@test.com",
-          metadata: { provider: "external-auth", reason: "invalid_credentials" },
+          metadata: { provider: "mi-proveedor", reason: "invalid_credentials" },
         });
       });
 

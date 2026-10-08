@@ -30,7 +30,7 @@ describe("AuthProviderError", () => {
   });
 
   it("conserva el mensaje que se le da", () => {
-    expect(new AuthProviderError("provider_error", "EXTERNAL_AUTH answered 502").message).toBe("EXTERNAL_AUTH answered 502");
+    expect(new AuthProviderError("provider_error", "provider answered 502").message).toBe("provider answered 502");
   });
 });
 

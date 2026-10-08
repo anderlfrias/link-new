@@ -40,10 +40,10 @@ Reglas:
 | Nivel | Cuándo | Ejemplo en este repo |
 |---|---|---|
 | `fatal` | El proceso no puede seguir y va a morir | configuración de entorno inválida |
-| `error` | Algo falló inesperadamente y alguien tiene que mirarlo | EXTERNAL_AUTH devolvió un shape desconocido; no se pudo borrar el archivo físico |
-| `warn` | Esperado pero digno de registro; la app degradó y siguió | Giphy sin API key; foto de perfil de EXTERNAL_AUTH no disponible; un 4xx |
+| `error` | Algo falló inesperadamente y alguien tiene que mirarlo | El proveedor externo devolvió un shape desconocido; no se pudo borrar el archivo físico |
+| `warn` | Esperado pero digno de registro; la app degradó y siguió | Giphy sin API key; foto de perfil del proveedor externo no disponible; un 4xx |
 | `info` | Cambio de estado que vale registrar en producción | server escuchando; barrido de retención borró N mensajes; archivo migrado a S3 |
-| `debug` | Solo útil investigando; apagado en producción | status de la respuesta de EXTERNAL_AUTH; foto de perfil cacheada |
+| `debug` | Solo útil investigando; apagado en producción | status de la respuesta del proveedor externo; foto de perfil cacheada |
 | `trace` | No se usa en este repo | — |
 
 Criterio para dudas entre `info` y `debug`: **si en producción se emite una línea por cada acción
@@ -60,11 +60,11 @@ de un usuario, es `debug`.** `info` es para cosas que pasan de a decenas por dí
 `backend/src/modules/auth/auth.service.ts:37-38`:
 
 ```ts
-    console.log(`EXTERNAL_AUTH login request returned status ${response.status}`);
-    console.log(`EXTERNAL_AUTH login request body: ${await response.clone().text()}`);
+    console.log(`el proveedor externo login request returned status ${response.status}`);
+    console.log(`el proveedor externo login request body: ${await response.clone().text()}`);
 ```
 
-La segunda línea loguea el body completo de la respuesta de login de EXTERNAL_AUTH, **que contiene el JWT
+La segunda línea loguea el body completo de la respuesta de login del proveedor externo, **que contiene el JWT
 del usuario**. Cada login exitoso deja una credencial válida en texto plano en
 `~/.pm2/logs/link-backend-out.log`, un archivo sin rotación (Fase 5) que cualquiera con acceso al
 server puede leer, y que se copia en cualquier backup del server.
@@ -77,7 +77,7 @@ ya está dentro de una string interpolada. La única solución es no construir e
 Borrar las dos líneas y dejar únicamente el status, en `debug`:
 
 ```ts
-    getLogger().debug({ status: response.status }, "external-auth login responded");
+    getLogger().debug({ status: response.status }, "externo login responded");
 ```
 
 **Nunca** el body, ni truncado, ni "solo los primeros 50 caracteres" (el token puede empezar en
@@ -104,10 +104,10 @@ que contenga un valor centinela reconocible:
 
 | Líneas | Qué es | Nivel |
 |---|---|---|
-| 108, 121, 132 | Falla al traer la foto de perfil de EXTERNAL_AUTH (request falló / status raro / no es data URI) | `warn` — la app sigue funcionando sin foto |
+| 108, 121, 132 | Falla al traer la foto de perfil del proveedor externo (request falló / status raro / no es data URI) | `warn` — la app sigue funcionando sin foto |
 | 201 | Foto de perfil cacheada OK | `debug` — una por login |
 | 203 | Falla al cachear la foto | `error` |
-| 312, 320, 328, 334 | Sincronización de usuarios de EXTERNAL_AUTH: request falló / status raro / JSON inválido / shape inesperado | `error` |
+| 312, 320, 328, 334 | Sincronización de usuarios del proveedor externo: request falló / status raro / JSON inválido / shape inesperado | `error` |
 | 361 | Entrada de usuario malformada, se saltea | `warn` — degradación parcial esperable |
 | 389, 404 | Fallas al persistir usuarios sincronizados | `error` |
 
@@ -284,7 +284,7 @@ npm run dev --workspace=backend 2>&1 | grep -i "eyJ" || echo "OK: sin JWT en el 
 ```
 
 Commits sugeridos (uno por bloque, el de auth primero):
-`fix(backend): dejar de loguear el body de la respuesta de login de EXTERNAL_AUTH`
+`fix(backend): dejar de loguear el body de la respuesta de login del proveedor externo`
 `refactor(backend): migrar console.* a logger estructurado`
 `test(backend): guardian que prohibe console.* en el backend`
 

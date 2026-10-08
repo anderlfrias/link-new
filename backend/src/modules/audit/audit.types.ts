@@ -60,7 +60,7 @@ export type AuditMetadataMap = {
 
   /// `provider` es el modo de la instalación al momento del intento. Las filas
   /// anteriores a LOCAL_AUTH_PLAN.md no lo traen: quien las lea tiene que
-  /// interpretar "ausente" como "external-auth".
+  /// interpretar "ausente" como "un proveedor externo".
   /// `provider`: "local", o el id del proveedor externo que autenticó.
   LOGIN: { provider: string };
   LOGIN_FAILED: { provider: string; reason: LoginFailureReason };

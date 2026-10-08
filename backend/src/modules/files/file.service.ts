@@ -292,9 +292,9 @@ export async function getFileChecksum(fileId: string): Promise<string | null> {
   return file?.checksum ?? null;
 }
 
-/// Usado por el módulo auth para cachear la foto de perfil de EXTERNAL_AUTH como
-/// `StoredFile` (ver auth.service.ts `syncProfilePicture`). No pasa por
-/// `ALLOWED_MIME_TYPES` como `uploadFile` — EXTERNAL_AUTH puede devolver cualquier
+/// Usado por el módulo auth para cachear la foto de perfil del proveedor externo como
+/// `StoredFile` (ver auth.service.ts `setAvatarFromProvider`). No pasa por
+/// `ALLOWED_MIME_TYPES` como `uploadFile` — el proveedor puede devolver cualquier
 /// tipo de imagen, y este flujo no viene de un formulario del usuario.
 export async function storeAvatar(userId: string, buffer: Buffer, mimeType: string): Promise<StoredFileResponse> {
   // Un avatar se sirve sin autenticación: tiene que ser una imagen de verdad (PNG,

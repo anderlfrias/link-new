@@ -195,7 +195,7 @@ test("main no cambia POSTGRES_PASSWORD=change-me de un .env existente y avisa", 
 });
 
 test("genera SESSION_JWT_SECRET también cuando hay un proveedor de login externo configurado", () => {
-  const withProvider = SAMPLE + "EXTERNAL_AUTH_API_URL=https://auth.example.com\nAPP_CODE_EXTERNAL_AUTH=link\nEXTERNAL_AUTH_JWT_SECRET=secreto\n";
+  const withProvider = SAMPLE + "AUTH_PROVIDER_MODULE=/opt/link-plugins/provider.cjs\n";
 
   const { content, filled } = fillEnv(withProvider, { created: false });
 

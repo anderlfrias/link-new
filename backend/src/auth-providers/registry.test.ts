@@ -9,7 +9,7 @@ import {
   setAuthProvider,
 } from "./registry";
 
-// src/test/setup.ts deja un proveedor de mentira activo: cada test restaura ese estado.
+// Por defecto los tests corren con cuentas locales: cada test restaura ese estado.
 const original = getAuthProvider();
 afterEach(() => setAuthProvider(original));
 

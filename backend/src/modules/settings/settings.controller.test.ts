@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
-import { useLocalAuth } from "../../test/auth-mode";
+import { useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import { createMockNext, createMockRequest, createMockResponse } from "../../test/http-mocks";
 import * as SettingsController from "./settings.controller";
 import { adminSettingsRouter, publicSettingsRouter } from "./settings.route";
@@ -273,6 +273,8 @@ describe("PATCH /admin/settings — ajustes de contraseñas y cuentas locales", 
   });
 
   describe("con un proveedor de autenticación externo", () => {
+    useExternalProvider();
+
     it.each([
       { passwordMinLength: 16 },
       { passwordRequireUppercase: true },

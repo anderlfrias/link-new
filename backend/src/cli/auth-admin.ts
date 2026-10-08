@@ -9,7 +9,7 @@ import { AppError } from "../utils/errors";
 
 /// CLI de administración de cuentas del modo local (LOCAL_AUTH_PLAN.md, D18):
 /// crear el primer admin y restablecer una contraseña cuando ningún admin puede
-/// entrar. También arranca una migración de external-auth a local (§10).
+/// entrar. También arranca una migración de un proveedor externo a local (§10).
 ///
 ///   npm run auth:admin -- create-admin --email <correo> [--name <nombre>] [--username <usuario>]
 ///   npm run auth:admin -- reset-password --email <correo>

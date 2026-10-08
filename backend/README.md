@@ -228,19 +228,19 @@ La **identidad** del usuario (quién es, cómo se autentica, sus credenciales) e
 
 ## Proveedor de Autenticación
 
-Cada instalación autentica con **un** proveedor, que se deduce del `.env` al arrancar (`src/config/auth-config.ts`, ver [LOCAL_AUTH_PLAN.md](../docs/design/LOCAL_AUTH_PLAN.md)):
+Cada instalación autentica con **un** proveedor, que se elige con el `.env` al arrancar (`src/auth-providers/init.ts`, ver [LOCAL_AUTH_PLAN.md](../docs/design/LOCAL_AUTH_PLAN.md) y [auth-providers.md](../docs/auth-providers.md)):
 
-* **`external-auth`** — con las tres variables `EXTERNAL_AUTH_*` definidas: un proveedor externo (EXTERNAL_AUTH) valida las credenciales en el login y el chat sincroniza su perfil y sus roles.
-* **`local`** — sin ninguna `EXTERNAL_AUTH_*`: la propia aplicación administra sus usuarios y sus credenciales. Ver [Modo local](./src/modules/auth/README.md#modo-local).
+* **Un proveedor externo** — con `AUTH_PROVIDER_MODULE` definida: el módulo que señala valida las credenciales en el login y el chat sincroniza su perfil y sus roles.
+* **`local`** — sin `AUTH_PROVIDER_MODULE`: la propia aplicación administra sus usuarios y sus credenciales. Ver [Modo local](./src/modules/auth/README.md#modo-local).
 
-En los dos modos LINK emite su propia sesión (JWT firmado con `SESSION_JWT_SECRET`, obligatoria): el token del proveedor externo solo se usa en el login. Con solo una o dos `EXTERNAL_AUTH_*`, el servidor no arranca. El modo activo se loguea al arrancar (`authMode` en la línea `server listening`).
+En los dos modos LINK emite su propia sesión (JWT firmado con `SESSION_JWT_SECRET`, obligatoria): el token del proveedor externo solo se usa en el login. Si el módulo del proveedor no existe o su configuración es inválida, el servidor no arranca. El proveedor activo se loguea al arrancar (`authProvider` en la línea `server listening`: `local` o su id).
 
 El modo es de la instalación, no de cada cuenta, y no se guarda en la base: `User` es el perfil dentro del chat y no sabe con qué proveedor se autentica (ver "Identidad vs. perfil dentro del chat"). Las credenciales del modo local viven aparte, en `LocalCredential`.
 
 Por eso una instalación puede cambiar de modo conservando el historial de sus usuarios. El procedimiento está en [LOCAL_AUTH_PLAN.md §10](../docs/design/LOCAL_AUTH_PLAN.md#10-cambiar-de-modo-en-una-instalación-existente). En resumen:
 
-* **`external-auth` → `local`:** backup; sacar las `EXTERNAL_AUTH_*` del `.env` (`SESSION_JWT_SECRET` se conserva); reiniciar; `npm run auth:admin -- create-admin --email <correo de un admin actual>`. Esa cuenta conserva su historial y pasa a ser admin local; desde el panel (filtro "sin contraseña") se asignan las contraseñas del resto.
-* **`local` → `external-auth`:** backup; alinear desde el panel el correo de cada cuenta con el de EXTERNAL_AUTH; agregar las `EXTERNAL_AUTH_*` y reiniciar. Cada cuenta se reconoce por correo (sin distinguir mayúsculas) en su primer login con EXTERNAL_AUTH, con el mismo `User.id`. Si el username de EXTERNAL_AUTH lo tiene otra cuenta, se le quita a esa (queda un `warn` con los dos UUIDs).
+* **proveedor externo → `local`:** backup; sacar `AUTH_PROVIDER_MODULE` y las variables del proveedor del `.env` (`SESSION_JWT_SECRET` se conserva); reiniciar; `npm run auth:admin -- create-admin --email <correo de un admin actual>`. Esa cuenta conserva su historial y pasa a ser admin local; desde el panel (filtro "sin contraseña") se asignan las contraseñas del resto.
+* **`local` → proveedor externo:** backup; alinear desde el panel el correo de cada cuenta con el del proveedor; agregar `AUTH_PROVIDER_MODULE` y las variables del proveedor, y reiniciar. Cada cuenta se reconoce por correo (sin distinguir mayúsculas) en su primer login con el proveedor, con el mismo `User.id`. Si el username del proveedor lo tiene otra cuenta, se le quita a esa (queda un `warn` con los dos UUIDs).
 
 ---
 

@@ -59,7 +59,7 @@ enum AuditAction {
   CHANGE_IMAGE        @map("change_image")
   SET_GROUP_ADMIN     @map("set_group_admin")
 
-  /// Autenticación. No existe LOGOUT a propósito: el JWT de EXTERNAL_AUTH es stateless
+  /// Autenticación. No existe LOGOUT a propósito: el JWT del proveedor externo es stateless
   /// y el logout ocurre enteramente en el cliente (descarta el token) — el
   /// backend no lo observa. Auditar un evento que no se puede detectar daría un
   /// trail con huecos que parecen datos.
@@ -196,7 +196,7 @@ export type AuditMetadataMap = {
 
   LOGIN: undefined;
   /// El motivo tal como el backend REALMENTE lo puede distinguir. Ojo:
-  /// `forbidden_by_provider` no significa "contraseña incorrecta" — EXTERNAL_AUTH
+  /// `forbidden_by_provider` no significa "contraseña incorrecta" — el proveedor externo
   /// devuelve 403 tanto para credenciales inválidas como para falta de acceso a
   /// la app, y no se pueden separar (ver el comentario en auth.service.ts).
   /// Nombrarlo "invalid_credentials" sería registrar una conclusión que el
@@ -405,9 +405,9 @@ El mapeo tiene que reflejar lo que `auth.service.ts#login` realmente tira, sin i
 
 | Error que tira `login()` | `reason` | Por qué ese nombre |
 |---|---|---|
-| `ForbiddenError` (status 403, o `/forbidden/` en el body) | `forbidden_by_provider` | EXTERNAL_AUTH usa 403 para credenciales inválidas **y** para falta de acceso a la app, sin distinguir. El comentario de `auth.service.ts` lo dice explícitamente: registrar `invalid_credentials` acá sería afirmar algo que el sistema no sabe. |
-| `UnauthorizedError` (status 401, o `!data.success`/`!data.token`) | `invalid_credentials` | Acá EXTERNAL_AUTH sí afirma credenciales incorrectas |
-| `ServiceUnavailableError` por `!response.ok` | `provider_error` | EXTERNAL_AUTH respondió, pero con un status inesperado |
+| `ForbiddenError` (status 403, o `/forbidden/` en el body) | `forbidden_by_provider` | El proveedor externo usa 403 para credenciales inválidas **y** para falta de acceso a la app, sin distinguir. El comentario de `auth.service.ts` lo dice explícitamente: registrar `invalid_credentials` acá sería afirmar algo que el sistema no sabe. |
+| `UnauthorizedError` (status 401, o `!data.success`/`!data.token`) | `invalid_credentials` | Acá el proveedor externo sí afirma credenciales incorrectas |
+| `ServiceUnavailableError` por `!response.ok` | `provider_error` | El proveedor externo respondió, pero con un status inesperado |
 | `ServiceUnavailableError` por el `fetch` que tira (timeout/red) | `provider_unreachable` | No hubo respuesta |
 | `BadRequestError` (falta usuario o contraseña) | **no se audita** | No es un intento de autenticación, es una request mal formada |
 
@@ -424,8 +424,8 @@ El mapeo tiene que reflejar lo que `auth.service.ts#login` realmente tira, sin i
 ### Tests obligatorios — extender `auth.controller.test.ts`
 
 - [x] Login exitoso → una fila `LOGIN` con el `userId` interno y el email
-- [x] 403 de EXTERNAL_AUTH → una fila `LOGIN_FAILED` con `reason: "forbidden_by_provider"` y `userId: null`
-- [x] 401 de EXTERNAL_AUTH → `reason: "invalid_credentials"`
+- [x] 403 del proveedor externo → una fila `LOGIN_FAILED` con `reason: "forbidden_by_provider"` y `userId: null`
+- [x] 401 del proveedor externo → `reason: "invalid_credentials"`
 - [x] `fetch` que tira → `reason: "provider_unreachable"` (o el que hayas documentado)
 - [x] Request sin usuario/contraseña → **ninguna** fila de auditoría
 - [x] **El error original se sigue propagando** al cliente con el mismo status y mensaje que antes

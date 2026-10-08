@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthenticatedIdentity, MappedUser } from "../modules/auth/auth.types";
 import { UnauthorizedError } from "../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
-import { useLocalAuth } from "../test/auth-mode";
+import { useExternalProvider, useLocalAuth } from "../test/auth-mode";
 
 vi.mock("../config/prisma", () => ({
   prisma: { user: { findUnique: vi.fn() } },
@@ -59,6 +59,7 @@ describe.each([
   { label: "cuentas locales", local: true, authProvider: "local" as const },
 ])("attachInternalUser — $label", ({ local, authProvider }) => {
   if (local) useLocalAuth();
+  else useExternalProvider();
 
   beforeEach(() => {
     vi.mocked(prisma.user.findUnique).mockReset();

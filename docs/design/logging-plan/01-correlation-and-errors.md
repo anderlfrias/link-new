@@ -341,7 +341,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   if (err instanceof AppError) {
     // Un 4xx no es un bug del server (un 403 es el sistema funcionando), así
     // que va en warn y sin stack. Un AppError 5xx sí — ServiceUnavailableError
-    // significa que EXTERNAL_AUTH o Giphy no responden, y ahí el stack importa.
+    // significa que el proveedor externo o Giphy no responden, y ahí el stack importa.
     if (err.statusCode >= 500) {
       log.error({ err, statusCode: err.statusCode }, "request failed");
     } else {

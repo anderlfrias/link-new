@@ -56,9 +56,9 @@ router.patch(
   updatePreferences,
 );
 
-// Límite propio, más chico que `MAX_UPLOAD_SIZE_MB` (adjuntos): EXTERNAL_AUTH guarda
-// esto como data URI en un campo de texto de su base, no en storage de
-// archivos — no tiene sentido mandarle fotos de perfil gigantes.
+// Límite propio, más chico que `MAX_UPLOAD_SIZE_MB` (adjuntos): un avatar
+// no necesita más, y hay proveedores que lo guardan como data URI en un campo de texto de su
+// base — no tiene sentido mandarles fotos de perfil gigantes.
 const MAX_AVATAR_SIZE_MB = 5;
 const avatarUpload = multer({
   storage: multer.memoryStorage(),

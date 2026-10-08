@@ -112,7 +112,7 @@ SeaweedFS + Cloudflare en paralelo. Si la validación saliera mal, el trabajo de
 | Tests | **Vitest** en ambos workspaces + `supertest` |
 | Deploy | **PM2**, `instances: 1`, `exec_mode: "fork"`, `max_memory_restart: "500M"` |
 | Reverse proxy | **No hay nginx/Caddy/Docker en el repo.** Cloudflare se infiere de comentarios de código (`trust proxy 1`, `cf-connecting-ip`) y del dominio `https://chat.example.com` |
-| Auth | JWT HS256 emitido por **EXTERNAL_AUTH** (externo) |
+| Auth | JWT HS256 emitido por **El proveedor externo** (externo) |
 | AWS SDK | **No existe** ninguna dependencia S3 hoy |
 
 **Restricción de escalado:** socket.io no tiene adapter de Redis, así que PM2 **no puede
@@ -1124,7 +1124,7 @@ mensaje. Es el Riesgo 2 de §13.
 
 - **Cierre de `/uploads` y retiro de `express.static` (S10):** se removió `express.static('/uploads')` de `backend/src/app.ts`. Todo archivo ahora pasa por `GET /api/v1/files/:id/content` con headers CORP `cross-origin` y soporte de Range (`res.sendFile(..., { acceptRanges: true })`).
 - **Autenticación dual en `/content`:**
-  - `?t=<hmac>`: token firmado con SHA-256 (`fileId`, `userId`, `exp`) usando `FILE_URL_SIGNING_SECRET` (o fallback a `EXTERNAL_AUTH_JWT_SECRET`). Apto para `<img>`, `<audio>` y enlaces nativos de descarga streaming.
+  - `?t=<hmac>`: token firmado con SHA-256 (`fileId`, `userId`, `exp`) usando `FILE_URL_SIGNING_SECRET` (o fallback a el secreto del proveedor). Apto para `<img>`, `<audio>` y enlaces nativos de descarga streaming.
   - `Authorization: Bearer <jwt>`: verificación tradicional por header para clientes API/scripts.
   - Avatares públicos: `isAvatarFile(fileId)` permite acceso directo sin token para avatares activos de usuarios (§12.1 Supuesto 6).
 - **Control de acceso e IDOR cerrado (S11):** `canAccessFile` evalúa en una consulta indexada las 5 reglas de §5.4 (admin, avatar público, creador, miembro en imagen de conversación, miembro en adjunto de mensaje). `GET /files/:id` ahora rechaza con 403 a usuarios sin relación con el archivo.

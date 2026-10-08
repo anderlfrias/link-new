@@ -76,8 +76,7 @@ enum AuditAction {
   CHANGE_IMAGE        @map("change_image")
   SET_GROUP_ADMIN     @map("set_group_admin")
 
-  /// Autenticación. No existe LOGOUT a propósito: los JWT (de EXTERNAL_AUTH o los del
-  /// modo local) son stateless y el logout ocurre enteramente en el cliente
+  /// Autenticación. No existe LOGOUT a propósito: los JWT (la sesión de LINK) son stateless y el logout ocurre enteramente en el cliente
   /// (descarta el token) — el backend no lo observa. Auditar un evento que no
   /// se puede detectar daría un trail con huecos que parecen datos.
   LOGIN           @map("login")
@@ -181,19 +180,19 @@ enum FileTypeRestrictionMode {
 model User {
   id String @id @default(uuid())
 
-  /// Identificador del usuario en el sistema externo de autenticación (hoy
-  /// EXTERNAL_AUTH). Null para las cuentas creadas en modo local. Ninguna relación lo
+  /// Identificador del usuario en el proveedor de autenticación externo. Único en
+  /// toda la instalación. Null para las cuentas creadas en modo local. Ninguna relación lo
   /// usa: todas van por `id` (ver backend/README.md).
   externalId String? @unique @map("external_id")
 
   /// Id del proveedor de autenticación externo que sincronizó este perfil por
-  /// última vez (ej. "external-auth", ver `auth-providers/api.ts`). Null cuando el usuario
+  /// última vez (ver `auth-providers/api.ts`). Null cuando el usuario
   /// nunca se sincronizó desde un proveedor externo.
   identityProvider String? @map("identity_provider")
 
-  /// Nombre de usuario. En modo external-auth lo define EXTERNAL_AUTH; en modo local es
-  /// opcional (LOCAL_AUTH_PLAN.md, D11): `a-z 0-9 . _`, sin "@", guardado en
-  /// minúsculas. Las cuentas que vienen de EXTERNAL_AUTH conservan el suyo.
+  /// Nombre de usuario. Con un proveedor externo lo define el proveedor; con cuentas
+  /// locales es opcional (LOCAL_AUTH_PLAN.md, D11): `a-z 0-9 . _`, sin "@", guardado
+  /// en minúsculas. Las cuentas que vienen de un proveedor externo conservan el suyo.
   username String? @unique
 
   name  String
@@ -207,8 +206,7 @@ model User {
   /// Si es true (default), el login — y la sincronización de contactos vía
   /// `/apps/users/by-codes` (ver el `onLogin` del proveedor) — sigue
   /// actualizando `name`/avatar desde el proveedor de identidad externo
-  /// configurado (hoy EXTERNAL_AUTH, pero el mecanismo es genérico: podría ser
-  /// cualquier otro). Pasa a false la primera vez que este usuario cambia su
+  /// configurado. Pasa a false la primera vez que este usuario cambia su
   /// nombre o su foto acá (`auth.service.ts`, `setLocalName`/`setLocalAvatar`)
   /// — desde ese momento esos dos campos viven únicamente en esta base y
   /// nunca más se sobreescriben desde afuera.
@@ -218,7 +216,7 @@ model User {
 
   /// Preferencia 100% local del usuario — nunca sincronizada desde el
   /// proveedor externo de identidad (a diferencia de `name`/avatar, no tiene
-  /// equivalente en EXTERNAL_AUTH). Controla si `message:created` dispara un sonido
+  /// equivalente en el proveedor). Controla si `message:created` dispara un sonido
   /// en su cliente (ver frontend/src/features/conversations/hooks/use-new-message-sound.ts).
   notificationSoundEnabled Boolean @default(true) @map("notification_sound_enabled")
 
@@ -261,7 +259,7 @@ model User {
 /// entera de `User`, y con el hash ahí alcanzaría con que algún endpoint la
 /// serializara para filtrarlo. Un `User` sin fila acá existe, pero en modo
 /// local no puede entrar hasta que un admin le asigne una contraseña (por
-/// ejemplo, las cuentas que vienen de EXTERNAL_AUTH).
+/// ejemplo, las cuentas que vienen de un proveedor externo).
 model LocalCredential {
   userId                 String    @id @map("user_id")
   user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -350,7 +348,7 @@ model ConversationMember {
   lastDeliveredAt        DateTime? @map("last_delivered_at")
 
   /// True si este miembro es admin de ESTE grupo (concepto separado del rol
-  /// app-wide "admin" de EXTERNAL_AUTH — ver `GroupPermissionLevel`). El creador de
+  /// app-wide "admin" — ver `GroupPermissionLevel`). El creador de
   /// la conversación siempre lo tiene en true al crearse (ver
   /// conversation.repository.ts, createConversation) y nunca puede
   /// degradarse (invariante forzado en conversation.service.ts,
@@ -746,8 +744,8 @@ model AppSettings {
   /// Si es true, elimina físicamente el archivo local solo tras verificar y commitear en S3.
   fileMigrationDeleteLocalAfterCommit Boolean @default(false) @map("file_migration_delete_local_after_commit")
 
-  // Sesión y contraseñas del modo local (LOCAL_AUTH_PLAN.md §4.4). En modo
-  // external-auth no aplican: la sesión y las contraseñas las define EXTERNAL_AUTH. Los
+  // Sesión y contraseñas del modo local (LOCAL_AUTH_PLAN.md §4.4). La duración de la
+  // sesión rige con cualquier proveedor; las contraseñas solo con cuentas locales. Los
   // defaults no cambian nada hasta que un admin lo decida, salvo el largo
   // mínimo de 12 (acá no hay un comportamiento anterior que preservar).
   /// Duración de la sesión (token) en horas.

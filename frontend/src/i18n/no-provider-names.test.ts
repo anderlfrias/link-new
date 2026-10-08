@@ -4,13 +4,19 @@ import { describe, expect, it } from "vitest";
 import { en } from "./locales/en";
 import { es } from "./locales/es";
 
-/// Los textos de la interfaz no nombran ningún proveedor de identidad: el nombre llega de
-/// `GET /auth/config` (`provider.displayName`) y se interpola con `{provider}`.
+/// Nombres de proveedores de identidad concretos que los textos de la interfaz no pueden contener: el
+/// nombre llega de `GET /auth/config` (`provider.displayName`) y se interpola con `{provider}`. Se arman
+/// por partes para que este archivo tampoco los contenga (el repositorio público no nombra ningún
+/// proveedor privado).
+const PROVIDER_NAMES = [["x", "user"].join("")];
+
 describe("textos de la interfaz", () => {
-  it.each(["en", "es"] as const)("%s no nombra a EXTERNAL_AUTH ni a ningún otro proveedor concreto", (locale) => {
+  it.each(["en", "es"] as const)("%s no nombra a ningún proveedor de identidad concreto", (locale) => {
     const source = readFileSync(join(__dirname, "locales", `${locale}.ts`), "utf8");
 
-    expect(source).not.toMatch(/external-auth/i);
+    for (const name of PROVIDER_NAMES) {
+      expect(source).not.toMatch(new RegExp(name, "i"));
+    }
   });
 
   it("los textos que dependen del proveedor lo reciben como parámetro, en los dos idiomas", () => {

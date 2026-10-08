@@ -2,7 +2,7 @@ import "dotenv/config";
 import * as yup from "yup";
 import { AuthConfig, AuthConfigError, resolveAuthConfig } from "./auth-config";
 
-/// Un string vacío (`EXTERNAL_AUTH_API_URL=""`) cuenta como "no definida": es la forma
+/// Un string vacío (`AUTH_PROVIDER_MODULE=""`) cuenta como "no definida": es la forma
 /// natural de apagar una variable en un .env sin borrar la línea. Sin esto,
 /// `url()` lo rechazaría como URL inválida en vez de tratarlo como ausente.
 function optionalString() {

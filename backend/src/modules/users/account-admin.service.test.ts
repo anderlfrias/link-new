@@ -1,7 +1,7 @@
 import { LocalCredential, Prisma, UserStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setAuthProvider } from "../../auth-providers/registry";
-import { createFakeProvider, useLocalAuth } from "../../test/auth-mode";
+import { createFakeProvider, useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import { ConflictError, NotFoundError } from "../../utils/errors";
 
 vi.mock("./account-admin.repository", () => ({
@@ -110,7 +110,9 @@ function auditCalls() {
   return vi.mocked(Repo.createAuditEntry).mock.calls.map(([tx, data]) => ({ tx, data }));
 }
 
-describe("updateUserAccount — modo external-auth", () => {
+describe("updateUserAccount — con un proveedor de autenticación externo", () => {
+  useExternalProvider();
+
   it("desactiva la cuenta, audita UPDATE_USER en la misma transacción y corta sus sockets (invariante 5)", async () => {
     vi.mocked(Repo.findAccount).mockResolvedValue(account());
 
@@ -132,7 +134,7 @@ describe("updateUserAccount — modo external-auth", () => {
     expect(view.status).toBe(UserStatus.INACTIVE);
   });
 
-  it("solo cambia el estado: el resto de los datos los administra EXTERNAL_AUTH", async () => {
+  it("solo cambia el estado: el resto de los datos los administra el proveedor", async () => {
     vi.mocked(Repo.findAccount).mockResolvedValue(account());
 
     await updateUserAccount(PANEL, "target-1", { name: "Otro", email: "otro@example.com", status: UserStatus.INACTIVE });
@@ -352,7 +354,7 @@ describe("resetLocalPassword", () => {
     expect(endLiveSessions).toHaveBeenCalledWith("target-1");
   });
 
-  it("le da contraseña a una cuenta que no tenía (por ejemplo, de la época EXTERNAL_AUTH)", async () => {
+  it("le da contraseña a una cuenta que no tenía (por ejemplo, de cuando la instalación usaba un proveedor externo)", async () => {
     vi.mocked(Repo.findAccount).mockResolvedValue(account({ localCredential: null }));
 
     await resetLocalPassword(PANEL, "target-1", {});
@@ -414,17 +416,17 @@ describe("bootstrapAdmin (CLI create-admin, D18)", () => {
     expect(auditCalls()[0].data).toMatchObject({ action: "CREATE_USER", metadata: { via: "cli", roles: ["admin"] } });
   });
 
-  it("sobre una cuenta existente (por ejemplo de EXTERNAL_AUTH) conserva su User.id y le da credencial y rol admin", async () => {
+  it("sobre una cuenta existente (por ejemplo de un proveedor externo) conserva su User.id y le da credencial y rol admin", async () => {
     vi.mocked(Repo.findAccountByEmail).mockResolvedValue(
-      account({ id: "external-auth-era-1", roles: [], localCredential: null, status: UserStatus.INACTIVE }),
+      account({ id: "external-era-1", roles: [], localCredential: null, status: UserStatus.INACTIVE }),
     );
 
     const result = await bootstrapAdmin({ email: "ana@example.com" });
 
-    expect(result).toMatchObject({ userId: "external-auth-era-1", created: false });
+    expect(result).toMatchObject({ userId: "external-era-1", created: false });
     expect(Repo.createAccount).not.toHaveBeenCalled();
-    expect(vi.mocked(Repo.setAdminAssignedPassword).mock.calls[0][1]).toBe("external-auth-era-1");
-    expect(Repo.updateAccount).toHaveBeenCalledWith(TX, "external-auth-era-1", {
+    expect(vi.mocked(Repo.setAdminAssignedPassword).mock.calls[0][1]).toBe("external-era-1");
+    expect(Repo.updateAccount).toHaveBeenCalledWith(TX, "external-era-1", {
       roles: ["admin"],
       status: UserStatus.ACTIVE,
       tokensValidAfter: expect.any(Date),

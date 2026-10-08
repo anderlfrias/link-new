@@ -4,8 +4,8 @@ Chat interno para equipos y organizaciones, pensado para instalarse en infraestr
 Monorepo con un backend en Express + Socket.IO + Prisma (PostgreSQL) y un frontend en Next.js.
 
 > **Autenticación:** LINK funciona con cuentas propias (modo local, sin dependencias externas) o
-> delegando el login en un servicio de identidad externo compatible con EXTERNAL_AUTH. El modo se elige
-> en el `.env`; ver [Autenticación](#autenticación).
+> delegando el login en un sistema de identidad externo, con un proveedor de autenticación que se
+> instala como plugin. Se elige en el `.env`; ver [Autenticación](#autenticación).
 
 ## Funcionalidades
 
@@ -53,8 +53,9 @@ docker run --rm -v "$PWD":/work -w /work node:24-bookworm-slim node scripts/setu
 
 (En PowerShell, `${PWD}` en lugar de `"$PWD"`.)
 
-Si la instalación usa EXTERNAL_AUTH en lugar de cuentas propias (ver [Autenticación](#autenticación)), completar
-las tres `EXTERNAL_AUTH_*` en `.env`. `SESSION_JWT_SECRET` (que el script genera) se usa en los dos modos.
+Si la instalación usa un proveedor de autenticación externo en lugar de cuentas propias (ver
+[Autenticación](#autenticación)), definir `AUTH_PROVIDER_MODULE` y las variables del proveedor en `.env`.
+`SESSION_JWT_SECRET` (que el script genera) se usa con cualquier proveedor.
 
 ```bash
 docker compose up -d --build
@@ -148,7 +149,6 @@ Las más importantes del backend:
 | `DATABASE_URL` | sí | Conexión a PostgreSQL. |
 | `AUTH_PROVIDER_MODULE` | no | Ruta absoluta al módulo de un proveedor de autenticación externo ([guía](docs/auth-providers.md)). Sin definir, cuentas locales. |
 | `SESSION_JWT_SECRET` | sí | Firma las sesiones de LINK, en todos los modos. 32 caracteres o más; cambiarla cierra todas las sesiones. (`LOCAL_AUTH_JWT_SECRET`, su nombre anterior, se sigue aceptando con un aviso.) |
-| `EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET` | según el modo | Las tres activan el modo EXTERNAL_AUTH; sin ninguna, el modo es local. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | sí | Notificaciones push. Con claves inválidas el backend no arranca. |
 | `CORS_ORIGIN` | en producción | Origen(es) del frontend, separados por coma. Con `NODE_ENV=production` es obligatoria (sin ella el backend no arranca); `*` acepta cualquier origen a propósito. Fuera de producción, sin definir acepta cualquier origen. |
 | `TRUST_PROXY` | no | Proxies delante del backend: `1` (por defecto), `2`, o `false` si el backend está expuesto directo. Ver [SECURITY.md](SECURITY.md#reverse-proxy-e-ip-del-cliente). |
@@ -169,12 +169,12 @@ la base.
 
 El modo se deduce de las variables de entorno del backend:
 
-- **EXTERNAL_AUTH** (las tres `EXTERNAL_AUTH_*` definidas): el login se delega en un servicio de identidad
-  externo compatible con EXTERNAL_AUTH, que emite un JWT HS256. LINK verifica ese token **solo en el login**,
-  crea o actualiza el perfil local del usuario, guarda sus roles (por ejemplo `admin`) y emite su
-  propia sesión: de ahí en más ese token de EXTERNAL_AUTH no se acepta en ningún lado. Los detalles del
-  contrato están en [`backend/src/modules/auth/README.md`](backend/src/modules/auth/README.md).
-- **Local** (ninguna `EXTERNAL_AUTH_*`): las cuentas y sus contraseñas viven
+- **Proveedor externo** (`AUTH_PROVIDER_MODULE` definida): el login se delega en un sistema de identidad
+  externo, a través de un proveedor de autenticación. LINK le pide que valide las credenciales **solo
+  en el login**, crea o actualiza el perfil local del usuario, guarda sus roles (por ejemplo `admin`) y
+  emite su propia sesión: de ahí en más el token del sistema externo no se acepta en ningún lado. Cómo
+  escribir, instalar y probar un proveedor: [`docs/auth-providers.md`](docs/auth-providers.md).
+- **Local** (sin `AUTH_PROVIDER_MODULE`): las cuentas y sus contraseñas viven
   en la base de LINK. Se inicia sesión con el correo o el nombre de usuario.
   - El primer admin se crea por terminal con `npm run auth:admin -- create-admin --email <correo>`
     (con Docker, `docker compose exec backend npm run auth:admin -- …`; sin compilar,
@@ -187,13 +187,9 @@ El modo se deduce de las variables de entorno del backend:
   - Detalles en [`backend/src/modules/auth/README.md`](backend/src/modules/auth/README.md) y en
     [`docs/design/LOCAL_AUTH_PLAN.md`](docs/design/LOCAL_AUTH_PLAN.md).
 
-Otros sistemas de identidad se conectan con un **proveedor de autenticación**: un módulo que valida las
-credenciales y que se carga con `AUTH_PROVIDER_MODULE`, sin modificar el código de LINK. Ver
-[`docs/auth-providers.md`](docs/auth-providers.md).
-
-En los dos modos un admin puede desactivar el acceso de una cuenta al chat. Con solo una o dos
-`EXTERNAL_AUTH_*`, el backend no arranca, para no caer por error en el modo local. Para pasar una
-instalación existente de un modo al otro, ver
+En los dos modos un admin puede desactivar el acceso de una cuenta al chat. Si el módulo del proveedor
+no se encuentra o su configuración es inválida, el backend no arranca (en lugar de caer por error en las
+cuentas locales). Para pasar una instalación existente de un modo al otro, ver
 [LOCAL_AUTH_PLAN.md §10](docs/design/LOCAL_AUTH_PLAN.md#10-cambiar-de-modo-en-una-instalación-existente).
 
 ## Base de datos y migraciones
@@ -208,7 +204,7 @@ migraciones de Prisma (`backend/prisma/migrations/`):
 | `npm run db:baseline` | Solo una vez, en instalaciones creadas antes de las migraciones (ver abajo). |
 
 No hace falta ningún *seed*: la fila de configuración global se crea sola en el primer arranque.
-Los usuarios se crean al iniciar sesión (modo EXTERNAL_AUTH).
+Con un proveedor externo, los usuarios se crean al iniciar sesión.
 
 **Instalaciones existentes creadas con `prisma db push`.** Antes de usar migraciones hay que
 marcar la migración inicial como ya aplicada, sin ejecutarla ni tocar datos:

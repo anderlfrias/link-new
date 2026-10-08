@@ -18,7 +18,7 @@ export function findAccount(tx: Tx, userId: string): Promise<Account | null> {
   return tx.user.findUnique({ where: { id: userId }, include: { localCredential: true } });
 }
 
-/// Sin distinguir mayúsculas: las cuentas que vienen de EXTERNAL_AUTH pueden tenerlas.
+/// Sin distinguir mayúsculas: las cuentas que vienen de un proveedor externo pueden tenerlas.
 export function findAccountByEmail(tx: Tx, email: string): Promise<Account | null> {
   return tx.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },

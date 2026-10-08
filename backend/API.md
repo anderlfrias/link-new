@@ -31,11 +31,11 @@ Todas las rutas salvo `POST /api/v1/auth/login` y `GET /api/v1/auth/config` requ
 Authorization: Bearer <token>
 ```
 
-El `token` es exactamente el que devuelve el login: la sesión de LINK, un JWT firmado por este backend en los dos modos (ver sección 2). El token de EXTERNAL_AUTH nunca llega al cliente y no sirve para autenticar. Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo. También responde `401` si la sesión fue revocada (cambio o restablecimiento de contraseña, en modo local) o si la cuenta fue desactivada.
+El `token` es exactamente el que devuelve el login: la sesión de LINK, un JWT firmado por este backend con cualquier proveedor de autenticación (ver sección 2). El token de un proveedor externo nunca llega al cliente y no sirve para autenticar. Expira según su propio `exp` — no hay refresh token; cuando expira, el backend responde `401 Token expired` y hay que loguear de nuevo. También responde `401` si la sesión fue revocada (cambio o restablecimiento de contraseña, con cuentas locales) o si la cuenta fue desactivada.
 
 ### Ids: interno vs externo
 
-Cualquier `userId` que aparezca en request o response de este API (`memberIds`, `senderId`, `createdById`, `userId` en un evento de socket, etc.) es el **id interno** (UUID de la tabla `User` local) — `user.internalUserId` en la respuesta del login. **Nunca** es el id externo de EXTERNAL_AUTH (`user.id`). Guardar `internalUserId` como "mi id" en el estado del frontend desde el login.
+Cualquier `userId` que aparezca en request o response de este API (`memberIds`, `senderId`, `createdById`, `userId` en un evento de socket, etc.) es el **id interno** (UUID de la tabla `User` local) — `user.internalUserId` en la respuesta del login. **Nunca** es el id de la persona en un proveedor externo (que no sale del backend). Guardar `internalUserId` como "mi id" en el estado del frontend desde el login.
 
 ### Formato de error
 
@@ -56,7 +56,7 @@ Status codes:
 | `403` | Token válido, pero no autorizado para esa acción (ej. no sos miembro, o no sos el creador). Con `code: "password_change_required"`, el token es restringido y solo sirve para cambiar la contraseña |
 | `404` | El recurso no existe o está borrado lógicamente |
 | `429` | Rate limit |
-| `503` | EXTERNAL_AUTH (el servicio de autenticación externo) no respondió, solo en `/auth/login` |
+| `503` | El proveedor de autenticación externo no respondió, solo en `/auth/login` |
 
 ### Fechas
 
@@ -111,7 +111,7 @@ Con un proveedor de autenticación externo responde sin `passwordPolicy`, con `e
 
 Mismo request en los dos modos; `user` puede ser un nombre de usuario o un correo.
 
-- **Modo external-auth:** reenvía las credenciales al microservicio EXTERNAL_AUTH; no hay contraseñas propias de este backend. Con su respuesta correcta, guarda el perfil y los roles y emite la sesión de LINK.
+- **Proveedor externo:** le pide al proveedor que valide las credenciales; no hay contraseñas propias de este backend. Con su respuesta correcta, guarda el perfil y los roles y emite la sesión de LINK.
 - **Modo local:** valida contra las cuentas locales y emite la sesión de LINK.
 
 En los dos modos el token es un JWT HS256 propio (`iss` y `aud` `link`). Ver [`auth/README.md`](./src/modules/auth/README.md).
@@ -144,11 +144,11 @@ Response `200`:
 
 La respuesta tiene la misma forma con cualquier proveedor. `authProvider` es `"local"` o el id del proveedor externo, `username` puede ser `null` y `roles` salen de la base. Si `mustChangePassword` es `true`, el token es restringido: solo sirve para `PATCH /auth/password`, y `mustChangePasswordReason` dice por qué (`reset`: un admin la restableció; `expired`: venció; `policy`: no cumple la política vigente).
 
-Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores; en modo local, el mismo mensaje para cuenta inexistente, contraseña incorrecta y cuenta sin contraseña), `403` (en modo external-auth, EXTERNAL_AUTH devolvió `403` — puede ser credenciales incorrectas o falta de acceso a esta app; EXTERNAL_AUTH no distingue el motivo, así que el mensaje que ve el usuario es genérico a propósito, nunca "no tenés acceso"; en los dos modos, `code: "account_disabled"` si un admin desactivó la cuenta en este chat), `503` (EXTERNAL_AUTH caído o no responde en 5s), y rate limit propio: `429` tras 5 intentos en 15 minutos para el mismo usuario, o 20 en 15 minutos desde la misma IP (en modo local, también si la cuenta quedó bloqueada por intentos fallidos, con el mismo mensaje) (ver `backend/src/modules/auth/README.md`, "Errores posibles").
+Errores: `400` (falta `user`/`password`), `401` (credenciales inválidas o token expirado en llamadas posteriores; en modo local, el mismo mensaje para cuenta inexistente, contraseña incorrecta y cuenta sin contraseña), `403` (con un proveedor externo, el proveedor rechazó a la persona — puede ser credenciales incorrectas o falta de acceso a esta app; muchos proveedores no distinguen el motivo, así que el mensaje que ve el usuario es genérico a propósito, nunca "no tenés acceso"; con cualquier proveedor, `code: "account_disabled"` si un admin desactivó la cuenta en este chat), `503` (el proveedor está caído o no responde en 10 s), y rate limit propio: `429` tras 5 intentos en 15 minutos para el mismo usuario, o 20 en 15 minutos desde la misma IP (en modo local, también si la cuenta quedó bloqueada por intentos fallidos, con el mismo mensaje) (ver `backend/src/modules/auth/README.md`, "Errores posibles").
 
 ### `PATCH /api/v1/auth/password`
 
-Solo modo local (`404` en modo external-auth). Cambia la propia contraseña; acepta el token restringido del cambio obligatorio.
+Solo con cuentas locales (`404` con un proveedor externo). Cambia la propia contraseña; acepta el token restringido del cambio obligatorio.
 
 Request:
 ```json
@@ -161,7 +161,7 @@ Errores, siempre `400` con `code` y nunca `401` (que el cliente trata como sesi�
 
 Después del login, todo el resto del API (HTTP y socket) usa el mismo `token` — no hay un endpoint de logout ni de refresh; "cerrar sesión" en el frontend es simplemente descartar el token guardado y desconectar el socket.
 
-**`user.fullName` sale de la base local, no del JWT de EXTERNAL_AUTH tal cual.** Nombre y foto de perfil son locales a partir de que el usuario los edita acá (ver "Perfil: nombre y foto" abajo) — `User.syncProfileWithIntegration` (default `true`) controla si el login todavía los sincroniza desde EXTERNAL_AUTH; se apaga solo la primera vez que el usuario cambia cualquiera de los dos. Mientras esté apagado, `fullName` en esta respuesta es siempre el nombre guardado acá, aunque el JWT de EXTERNAL_AUTH diga otra cosa.
+**`user.fullName` sale de la base local, no de lo que informa el proveedor externo.** Nombre y foto de perfil son locales a partir de que el usuario los edita acá (ver "Perfil: nombre y foto" abajo) — `User.syncProfileWithIntegration` (default `true`) controla si el login todavía los sincroniza desde el proveedor externo; se apaga solo la primera vez que el usuario cambia cualquiera de los dos. Mientras esté apagado, `fullName` en esta respuesta es siempre el nombre guardado acá, aunque el proveedor diga otra cosa.
 
 ### Perfil: nombre y foto
 
@@ -172,7 +172,7 @@ PUT    /api/v1/auth/profile/picture  (multipart/form-data, campo "file")
 DELETE /api/v1/auth/profile/picture
 ```
 
-Los cuatro requieren `Authorization: Bearer <token>`. **Ninguno se relaciona con EXTERNAL_AUTH (ni con ningún otro proveedor de identidad) — son 100% locales.** `PATCH`/`PUT`/`DELETE` apagan `User.syncProfileWithIntegration` para ese usuario (una sola vez alcanza; no hace falta repetirlo en cada edición). A partir de ahí, ni el login ni la sincronización de contactos vuelven a pisar ese nombre/foto.
+Los cuatro requieren `Authorization: Bearer <token>`. **Ninguno se relaciona con ningún proveedor de identidad externo — son 100% locales.** `PATCH`/`PUT`/`DELETE` apagan `User.syncProfileWithIntegration` para ese usuario (una sola vez alcanza; no hace falta repetirlo en cada edición). A partir de ahí, ni el login ni la sincronización de contactos vuelven a pisar ese nombre/foto.
 
 ```js
 // Cambiar el nombre
@@ -215,7 +215,7 @@ await fetch("http://localhost:4000/api/v1/auth/profile/picture", {
 PATCH /api/v1/auth/profile/preferences   { "notificationSoundEnabled": false, "language": "en" }
 ```
 
-Requiere `Authorization: Bearer <token>`. 100% locales — no existen en EXTERNAL_AUTH ni en ningún otro proveedor de identidad, y a diferencia de `PATCH /profile` no tocan `syncProfileWithIntegration` (no tienen nada que ver con nombre/foto). Controla:
+Requiere `Authorization: Bearer <token>`. 100% locales — no existen en ningún proveedor de identidad externo, y a diferencia de `PATCH /profile` no tocan `syncProfileWithIntegration` (no tienen nada que ver con nombre/foto). Controla:
 - `notificationSoundEnabled` (`boolean`, opcional): si el cliente reproduce un tono al recibir un mensaje nuevo (default `true`).
 - `language` (`"es" | "en"`, opcional): idioma preferido de la interfaz (default `"es"`).
 
@@ -432,7 +432,7 @@ Crear un `GROUP`, agregar/quitar miembros, renombrar/cambiar imagen y borrar el 
 
 Borrar el grupo además requiere `AppSettings.allowGroupDelete: true` (default `true`) — interruptor maestro sobre **si** la acción existe, aparte de **quién** puede hacerla (`whoCanDeleteGroup`). Borrar un chat `PRIVATE` ("para mí", ver 4.7) requiere `AppSettings.allowConversationDelete: true` (default `true`) y no tiene tabla de "quién" — cualquier miembro puede ocultar su propia vista.
 
-Los defaults reproducen el comportamiento histórico de cada endpoint — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite. `GROUP_ADMINS_ONLY` (admin de ese grupo puntual, `isAdmin`) y `APP_ADMINS_ONLY` (rol `"admin"` de la instalación: de EXTERNAL_AUTH en modo external-auth, o asignado desde el panel en modo local) son conceptos **distintos** — uno no otorga el otro. Ver [`conversations/README.md`](./src/modules/conversations/README.md#autorización) y [`settings/README.md`](./src/modules/settings/README.md).
+Los defaults reproducen el comportamiento histórico de cada endpoint — ningún deploy nuevo cambia comportamiento hasta que un admin lo edite. `GROUP_ADMINS_ONLY` (admin de ese grupo puntual, `isAdmin`) y `APP_ADMINS_ONLY` (rol `"admin"` de la instalación: el que entrega el proveedor externo en cada login, o el asignado desde el panel con cuentas locales) son conceptos **distintos** — uno no otorga el otro. Ver [`conversations/README.md`](./src/modules/conversations/README.md#autorización) y [`settings/README.md`](./src/modules/settings/README.md).
 
 ### 4.9 Admins de grupo y overrides por grupo
 
@@ -964,7 +964,7 @@ npm install
 npm run dev   # ts-node, puerto 4000 por default
 ```
 
-Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `SESSION_JWT_SECRET` (firma las sesiones, en los dos modos) y, según el modo de autenticación, las tres `EXTERNAL_AUTH_*` (`EXTERNAL_AUTH_API_URL`, `APP_CODE_EXTERNAL_AUTH`, `EXTERNAL_AUTH_JWT_SECRET`) para usar EXTERNAL_AUTH, o ninguna de ellas para cuentas locales (ver [`docs/design/LOCAL_AUTH_PLAN.md`](../docs/design/LOCAL_AUTH_PLAN.md)). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
+Variables de entorno requeridas (`.env`, ver `.env.example`): `DATABASE_URL`, `SESSION_JWT_SECRET` (firma las sesiones, en los dos modos) y, solo con un proveedor de autenticación externo, `AUTH_PROVIDER_MODULE` y las variables del propio proveedor (ver [`docs/auth-providers.md`](../docs/auth-providers.md) y [`docs/design/LOCAL_AUTH_PLAN.md`](../docs/design/LOCAL_AUTH_PLAN.md)). Opcionales: `PORT` (default 4000), `MAX_UPLOAD_SIZE_MB` (default 2048 — solo usado como valor semilla de `AppSettings.maxUploadSizeMb` en el primer arranque, ver sección 12; después el valor real vive en la base y se edita vía `PATCH /api/v1/admin/settings`).
 
 **Health check.** `GET /health` (fuera de `/api`, sin autenticación) responde `200 { "status": "ok" }` si el backend llega a la base de datos (hace un `SELECT 1`, con un tope de 3 s), y `503 { "status": "unavailable" }` si no. Nunca devuelve el error ni detalles de la base. Es el chequeo del contenedor (`HEALTHCHECK` de `backend/Dockerfile`) y no se registra en el log de accesos. `GET /` responde "Backend is running" solo para decir que el proceso está vivo.
 
@@ -1088,7 +1088,7 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, m
 {
   "users": [
     {
-      "id": "user-uuid", "name": "Ana", "email": "ana@x.com", "username": "ana.external-auth",
+      "id": "user-uuid", "name": "Ana", "email": "ana@x.com", "username": "ana.perez",
       "avatarFileId": "file-uuid", "avatarFile": { "path": "avatars/..." },
       "status": "ACTIVE", "syncProfileWithIntegration": true, "createdAt": "...",
       "storage": { "fileCount": 12, "totalSize": 4582001 },
@@ -1099,17 +1099,17 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, m
 }
 ```
 
-`storage` = archivos activos subidos por ese usuario (bytes + cantidad). `activity.groupsAdministeredCount` = en cuántos `GROUP` es admin de grupo (`ConversationMember.isAdmin`, sección 4.9), no cuántos creó. `syncProfileWithIntegration` = si el perfil sigue sincronizado desde EXTERNAL_AUTH o ya fue editado localmente.
+`storage` = archivos activos subidos por ese usuario (bytes + cantidad). `activity.groupsAdministeredCount` = en cuántos `GROUP` es admin de grupo (`ConversationMember.isAdmin`, sección 4.9), no cuántos creó. `syncProfileWithIntegration` = si el perfil sigue sincronizado desde el proveedor externo o ya fue editado localmente.
 
-Filtros adicionales: `status` (`ACTIVE`/`INACTIVE`) y, solo en modo local, `hasPassword` (`true`/`false`). En modo local cada fila suma `localRoles`, `hasPassword`, `mustChangePassword` y `locked`. En modo external-auth esta vista no puede mostrar el rol de un usuario (no hay forma de saberlo salvo para quien está logueado en ese momento — ver `users/README.md` para el porqué).
+Filtros adicionales: `status` (`ACTIVE`/`INACTIVE`) y, solo en modo local, `hasPassword` (`true`/`false`). En modo local cada fila suma `localRoles`, `hasPassword`, `mustChangePassword` y `locked`. Con un proveedor externo esta vista no muestra el rol de un usuario (lo administra el proveedor y se guarda en cada login — ver `users/README.md` para el porqué).
 
 ### 14.2 `PATCH /:id` — Editar una cuenta
 
-Modo external-auth: `{ "status": "INACTIVE" }` (o `ACTIVE`): desactiva o reactiva el acceso al chat; el resto de los datos se administra en EXTERNAL_AUTH. Modo local: `{ name?, email?, username?, roles?, status? }`. Responde la cuenta actualizada (`{ id, name, email, username, status, localRoles, hasPassword, mustChangePassword, locked }`).
+Con un proveedor externo: `{ "status": "INACTIVE" }` (o `ACTIVE`): desactiva o reactiva el acceso al chat; el resto de los datos se administra en el proveedor. Con cuentas locales: `{ name?, email?, username?, roles?, status? }`. Responde la cuenta actualizada (`{ id, name, email, username, status, localRoles, hasPassword, mustChangePassword, locked }`).
 
 Errores: `409` con `code` `cannot_modify_self` (desactivarse o quitarse el rol de admin a uno mismo), `last_admin` (modo local: no puede quedar la instalación sin admin activo), `email_taken` o `username_taken`; `404` si la cuenta no existe.
 
-### 14.3 Solo modo local (`404` en modo external-auth)
+### 14.3 Solo con cuentas locales (`404` con un proveedor externo)
 
 - `POST /` — `{ name, email, username?, roles?, password? }` → `201 { user, temporaryPassword? }`. La contraseña temporal se devuelve **una sola vez** y solo si se generó; la cuenta queda con el cambio obligatorio.
 - `POST /:id/password-reset` — `{ password? }` → `200 { temporaryPassword? }`. Deja el cambio obligatorio, desbloquea la cuenta y revoca sus sesiones.

@@ -1,7 +1,7 @@
 import { LocalCredential, UserStatus } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TEST_SESSION_JWT_SECRET, useLocalAuth } from "../../test/auth-mode";
+import { TEST_SESSION_JWT_SECRET, useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import { BadRequestError } from "../../utils/errors";
 
 vi.mock("./auth.repository", () => ({
@@ -328,16 +328,19 @@ describe("changeOwnPassword", () => {
 });
 
 describe("getPublicAuthConfig", () => {
-  it("con un proveedor externo dice quién es y sus capacidades: sin cambio de contraseña y con cuentas de solo estado", async () => {
-    // El proveedor activo en los tests es el de src/test/setup.ts.
-    const config = await getPublicAuthConfig();
+  describe("con un proveedor externo", () => {
+    useExternalProvider();
 
-    expect(config).toEqual({
-      provider: { id: "external-test", displayName: "External Test", external: true },
-      capabilities: { passwordChange: false, accountManagement: "status-only" },
+    it("dice quién es y sus capacidades: sin cambio de contraseña y con cuentas de solo estado", async () => {
+      const config = await getPublicAuthConfig();
+
+      expect(config).toEqual({
+        provider: { id: "external-test", displayName: "External Test", external: true },
+        capabilities: { passwordChange: false, accountManagement: "status-only" },
+      });
+      expect(config).not.toHaveProperty("passwordPolicy");
+      expect(SettingsService.getLocalAuthPolicy).not.toHaveBeenCalled();
     });
-    expect(config).not.toHaveProperty("passwordPolicy");
-    expect(SettingsService.getLocalAuthPolicy).not.toHaveBeenCalled();
   });
 
   describe("con cuentas locales", () => {

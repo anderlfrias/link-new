@@ -6,7 +6,7 @@ export interface AdminUserFilters {
   /// Los dos modos.
   status?: UserStatus;
   /// Solo modo local: cuentas con o sin contraseña asignada. Sirve, por
-  /// ejemplo, después de migrar desde EXTERNAL_AUTH (LOCAL_AUTH_PLAN.md §10).
+  /// ejemplo, después de migrar desde un proveedor externo (LOCAL_AUTH_PLAN.md §10).
   hasPassword?: boolean;
 }
 
@@ -36,7 +36,7 @@ export interface AdminUserListItem {
   avatarFileId: string | null;
   avatarFile: { path: string } | null;
   status: UserStatus;
-  /// Si el perfil sigue sincronizado desde EXTERNAL_AUTH o ya fue editado localmente
+  /// Si el perfil sigue sincronizado desde el proveedor externo o ya fue editado localmente
   /// (ver auth.repository.ts, setLocalName/setLocalAvatar).
   syncProfileWithIntegration: boolean;
   createdAt: Date;
@@ -74,7 +74,7 @@ export interface CreateLocalUserInput {
   password?: string;
 }
 
-/// Edición desde el panel. En modo external-auth solo cuenta `status`.
+/// Edición desde el panel. Con un proveedor externo solo cuenta `status`.
 export interface UpdateUserAccountInput {
   name?: string;
   email?: string;

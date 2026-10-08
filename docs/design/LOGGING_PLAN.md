@@ -60,7 +60,7 @@ no existe, y (b) cerrar los huecos del audit trail existente.
 Ordenados por gravedad, no por esfuerzo:
 
 1. **🔴 Fuga de credenciales en los logs.** `backend/src/modules/auth/auth.service.ts:37-38`
-   loguea el status **y el body completo** de la respuesta de login de EXTERNAL_AUTH. Ese body contiene el
+   loguea el status **y el body completo** de la respuesta de login del proveedor externo. Ese body contiene el
    JWT del usuario. Hoy, cada login exitoso deja un token válido en texto plano en
    `~/.pm2/logs/link-backend-out.log`. En una app de empresa esto es un incidente, no un TODO.
    **Se arregla en la Fase 2 y es el ítem de mayor prioridad de todo el plan.**
@@ -142,7 +142,7 @@ viole se considera no terminada:
    auditoría, ni "solo en `debug`", ni truncado. Loguear `messageId` y que quien investigue vaya a
    la base si tiene derecho a hacerlo.
 2. **Nunca loguear credenciales ni tokens**: `password`, `authorization`, `Cookie`, `set-cookie`,
-   el body de una respuesta de login, `EXTERNAL_AUTH_JWT_SECRET`, `SESSION_JWT_SECRET`,
+   el body de una respuesta de login, el secreto del proveedor, `SESSION_JWT_SECRET`,
    `FILE_URL_SIGNING_SECRET`, `S3_SECRET_ACCESS_KEY`, `VAPID_PRIVATE_KEY`. Tampoco, en modo local,
    los hashes de contraseña ni las contraseñas temporales: esas solo se muestran una vez al admin
    que las generó (panel o CLI), nunca por `logger` (LOCAL_AUTH_PLAN.md, D18).

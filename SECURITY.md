@@ -29,7 +29,7 @@ Solo se corrigen vulnerabilidades sobre la última versión publicada (rama `mai
   imagen Docker y `ecosystem.config.js` lo fijan) el backend no arranca sin esa variable.
   `CORS_ORIGIN=*` abre la API y el socket a cualquier origen, y solo conviene a propósito.
 - **Usar secretos propios y fuertes:**
-  - `SESSION_JWT_SECRET` (firma las sesiones de LINK) y, en modo EXTERNAL_AUTH, `EXTERNAL_AUTH_JWT_SECRET`.
+  - `SESSION_JWT_SECRET` (firma las sesiones de LINK) y los secretos que pida el proveedor de autenticación externo, si hay uno.
   - Un `FILE_URL_SIGNING_SECRET` dedicado, distinto de `SESSION_JWT_SECRET`.
   - Claves VAPID generadas para la instalación.
   - Nunca reutilizar los valores de ejemplo.

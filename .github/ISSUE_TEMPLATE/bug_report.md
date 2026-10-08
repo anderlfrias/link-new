@@ -22,7 +22,7 @@ labels: bug
 
 - Versión de LINK o commit:
 - Instalación: Docker / sin Docker
-- Modo de autenticación: EXTERNAL_AUTH / local
+- Autenticación: cuentas locales / proveedor externo (cuál)
 - Navegador y sistema operativo:
 
 ### Logs o capturas

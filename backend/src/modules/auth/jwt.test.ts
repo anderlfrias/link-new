@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { describe, expect, it } from "vitest";
-import { TEST_SESSION_JWT_SECRET, useLocalAuth } from "../../test/auth-mode";
+import { TEST_SESSION_JWT_SECRET, useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import { SESSION_TOKEN_AUDIENCE, SESSION_TOKEN_ISSUER, signSessionToken, verifyAccessToken } from "./jwt";
 
 // El secreto con el que un proveedor externo firma su propio token: no es el de sesión de LINK.
@@ -48,10 +48,10 @@ describe("signSessionToken", () => {
 // El verificador es el mismo con cualquier proveedor: solo acepta la sesión de LINK.
 describe.each([
   { label: "cuentas locales", local: true, expectedProvider: "local" },
-  // El de src/test/setup.ts: no hace falta cambiarlo.
   { label: "proveedor externo", local: false, expectedProvider: "external-test" },
 ])("verifyAccessToken — $label", ({ local, expectedProvider }) => {
   if (local) useLocalAuth();
+  else useExternalProvider();
 
   function signSession(
     claims: Record<string, unknown>,

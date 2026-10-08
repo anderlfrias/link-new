@@ -166,7 +166,7 @@ describe("auth.repository", () => {
     });
 
     it("al reconocerla por correo no pisa un externalId ni un proveedor que ya tenía", async () => {
-      stubLookups({ byEmail: stored({ email: "Ana@Example.com", externalId: "ext-viejo", identityProvider: "external-auth" }) });
+      stubLookups({ byEmail: stored({ email: "Ana@Example.com", externalId: "ext-viejo", identityProvider: "proveedor-viejo" }) });
 
       await upsertExternalUser(P, person);
 

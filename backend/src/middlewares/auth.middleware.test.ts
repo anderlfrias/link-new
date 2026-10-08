@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it } from "vitest";
 import { signSessionToken } from "../modules/auth/jwt";
-import { TEST_SESSION_JWT_SECRET, useLocalAuth } from "../test/auth-mode";
+import { TEST_SESSION_JWT_SECRET, useExternalProvider, useLocalAuth } from "../test/auth-mode";
 import type { MappedUser } from "../modules/auth/auth.types";
 import { ForbiddenError, UnauthorizedError } from "../utils/errors";
 import { createMockNext, createMockRequest, createMockResponse } from "../test/http-mocks";
@@ -39,6 +39,7 @@ describe.each([
   { label: "cuentas locales", local: true, authProvider: "local" },
 ])("authenticate — $label", ({ local, authProvider }) => {
   if (local) useLocalAuth();
+  else useExternalProvider();
 
   it("sin header Authorization -> UnauthorizedError 'Missing token'", () => {
     const req = createMockRequest();

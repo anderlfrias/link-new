@@ -11,7 +11,7 @@ export type UserWithCredential = User & { localCredential: LocalCredential | nul
 
 /// Cuentas que coinciden con lo que alguien escribió en el login local
 /// (LOCAL_AUTH_PLAN.md, D10): por email si tiene "@", si no por username, sin
-/// distinguir mayúsculas (las cuentas que vienen de EXTERNAL_AUTH pueden tenerlas).
+/// distinguir mayúsculas (las cuentas que vienen de un proveedor externo pueden tenerlas).
 /// Trae hasta dos: si hay dos que difieren solo en mayúsculas (dato
 /// heredado), el login no puede elegir y se rechaza.
 export function findLoginCandidates(identifier: string): Promise<UserWithCredential[]> {

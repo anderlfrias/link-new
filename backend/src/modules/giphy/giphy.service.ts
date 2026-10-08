@@ -11,8 +11,8 @@ import { StoredFileResponse } from "../files/file.types";
 import { GetTrendingGiphyOptions, GiphyMediaKind, GiphySearchResult, SearchGiphyOptions } from "./giphy.types";
 
 const GIPHY_API_BASE = "https://api.giphy.com/v1";
-/// Mismo timeout que EXTERNAL_AUTH (ver auth.service.ts) — cualquier llamada a un
-/// proveedor externo comparte el mismo criterio: no dejar el request colgado.
+/// Cualquier llamada a un servicio externo comparte el mismo criterio: no dejar el
+/// request colgado.
 const GIPHY_REQUEST_TIMEOUT_MS = 5000;
 const DEFAULT_SEARCH_LIMIT = 24;
 const MAX_SEARCH_LIMIT = 50;
@@ -34,8 +34,7 @@ async function assertFeatureEnabled(): Promise<void> {
   }
 }
 
-/// Cualquier llamada a la API de Giphy pasa por acá — mismo patrón que
-/// `fetchExternalUserProfilePicture` (auth.service.ts): AbortController con timeout,
+/// Cualquier llamada a la API de Giphy pasa por acá: AbortController con timeout,
 /// nunca deja un request colgado, nunca expone la causa cruda del error.
 async function fetchGiphy(path: string, params: Record<string, string | number>): Promise<unknown> {
   const apiKey = assertGiphyConfigured();

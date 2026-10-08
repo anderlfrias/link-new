@@ -20,8 +20,8 @@ export function createFakeProvider(overrides: Partial<AuthProvider> = {}): AuthP
 }
 
 /// Pone la instalación con ese proveedor externo (o con cuentas locales, `null`)
-/// durante cada test del `describe` que lo llama, y restaura el de `setup.ts` al
-/// terminar. El proveedor activo se consulta en cada request, no al importar, así que
+/// durante cada test del `describe` que lo llama, y restaura el que había al
+/// terminar. Por defecto los tests corren con cuentas locales. El proveedor activo se consulta en cada request, no al importar, así que
 /// alcanza con reemplazarlo: no hace falta `vi.resetModules`.
 function useProvider(provider: () => AuthProvider | null): void {
   let original: AuthProvider | null;
@@ -34,7 +34,7 @@ function useProvider(provider: () => AuthProvider | null): void {
   });
 }
 
-/// Cuentas locales (el modo integrado).
+/// Cuentas locales (el modo integrado, y el que hay por defecto).
 export function useLocalAuth(): void {
   useProvider(() => null);
 }

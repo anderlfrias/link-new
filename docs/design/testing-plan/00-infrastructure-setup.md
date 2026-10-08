@@ -63,9 +63,9 @@ export default defineConfig({
     env: {
       DATABASE_URL: "postgresql://test:test@localhost:5432/test",
       PORT: "4000",
-      EXTERNAL_AUTH_API_URL: "https://external-auth.test.local",
-      APP_CODE_EXTERNAL_AUTH: "test-app-code",
-      EXTERNAL_AUTH_JWT_SECRET: "test-jwt-secret",
+      la URL del proveedor: "https://externo.test.local",
+      el código de la aplicación: "test-app-code",
+      el secreto del proveedor: "test-jwt-secret",
       MAX_UPLOAD_SIZE_MB: "25",
       VAPID_PUBLIC_KEY: "test-vapid-public-key",
       VAPID_PRIVATE_KEY: "test-vapid-private-key",

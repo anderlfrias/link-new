@@ -47,7 +47,7 @@ Un test rápido (sin red real, sin base de datos real, sin browser real) que cor
 `vitest` y aísla la unidad bajo prueba mockeando sus dependencias externas:
 
 - Backend: se mockea Prisma (a nivel de repositorio, no service — ver sección 3),
-  `fetch` global (para llamadas a EXTERNAL_AUTH/Giphy), `socket.io` (`getIO()`), y librerías de
+  `fetch` global (para llamadas al proveedor externo/Giphy), `socket.io` (`getIO()`), y librerías de
   I/O externas (`web-push`, `music-metadata`).
 - Frontend: se mockea `apiRequest`/`fetch`, el cliente de socket (`lib/socket-client.ts`),
   y cualquier hook de Next.js que el componente use (`next/navigation`, etc).
@@ -101,14 +101,14 @@ archivos **tiene que** incluir un test que las cubra explícitamente — no alca
   usada por `editMessage()` y `deleteMessage()`): fuera de la ventana de edición/borrado
   configurada → rechazo. Es privada — no se importa directo, se cubre a través de
   `editMessage()`/`deleteMessage()`.
-- **Login EXTERNAL_AUTH devuelve 403 tanto para credenciales incorrectas como para falta de
+- **Login el proveedor externo devuelve 403 tanto para credenciales incorrectas como para falta de
   acceso a la app** (`backend/src/modules/auth/auth.service.ts#login`): el mensaje al
   usuario tiene que ser genérico a propósito — un test que espere un mensaje
   "distingue el motivo" está probando lo contrario de lo que el código hace a propósito.
-- **Autenticación local (modo sin EXTERNAL_AUTH):** las invariantes de seguridad del modo local
+- **Autenticación local (modo sin el proveedor externo):** las invariantes de seguridad del modo local
   (un solo verificador por modo, revocación por `tokensValidAfter`, anti-enumeración,
   bloqueo por intentos, token restringido de cambio obligatorio, secretos que nunca quedan
-  registrados, nunca sin admin, regresión del modo external-auth) están listadas en
+  registrados, nunca sin admin, regresión del modo externo) están listadas en
   [LOCAL_AUTH_PLAN.md §8](LOCAL_AUTH_PLAN.md#8-invariantes-de-seguridad-cobertura-obligatoria).
   Cualquier cambio en `backend/src/modules/auth/`, en los middlewares de autenticación o en
   la administración de cuentas tiene que mantenerlas cubiertas.

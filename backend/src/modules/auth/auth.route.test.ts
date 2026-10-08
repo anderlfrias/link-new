@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
-import { useLocalAuth } from "../../test/auth-mode";
+import { useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import { BadRequestError } from "../../utils/errors";
 
 vi.mock("./auth.service", () => ({}));
@@ -75,14 +75,18 @@ describe("GET /auth/config", () => {
 });
 
 describe("PATCH /auth/password", () => {
-  it("con un proveedor externo no existe: 404 aunque la sesión sea válida", async () => {
-    const res = await request(app)
-      .patch("/auth/password")
-      .set("Authorization", `Bearer ${localToken(false)}`)
-      .send({ currentPassword: "a", newPassword: "b" });
+  describe("con un proveedor externo", () => {
+    useExternalProvider();
 
-    expect(res.status).toBe(404);
-    expect(LocalAuthService.changeOwnPassword).not.toHaveBeenCalled();
+    it("no existe: 404 aunque la sesión sea válida", async () => {
+      const res = await request(app)
+        .patch("/auth/password")
+        .set("Authorization", `Bearer ${localToken(false)}`)
+        .send({ currentPassword: "a", newPassword: "b" });
+
+      expect(res.status).toBe(404);
+      expect(LocalAuthService.changeOwnPassword).not.toHaveBeenCalled();
+    });
   });
 
   describe("en modo local", () => {

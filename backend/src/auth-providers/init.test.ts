@@ -1,52 +1,36 @@
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { getAuthProvider, setAuthProvider } from "./registry";
 import { authProviderModule, initAuthProvider, isExternalProviderConfigured } from "./init";
 import { AuthProviderLoadError } from "./loader";
 
-// src/test/setup.ts deja un proveedor de mentira activo: cada test restaura ese estado.
+// Por defecto los tests corren con cuentas locales: cada test restaura ese estado.
 const original = getAuthProvider();
 afterEach(() => {
   setAuthProvider(original);
-  vi.unstubAllEnvs();
 });
 
 const EXAMPLE_MODULE = join(__dirname, "example", "index");
 
-const EXTERNAL_AUTH_ENV = {
-  EXTERNAL_AUTH_API_URL: "https://external-auth.test.local",
-  APP_CODE_EXTERNAL_AUTH: "test-app-code",
-  EXTERNAL_AUTH_JWT_SECRET: "test-jwt-secret",
-};
-
-function stubExternalUserEnv(vars: Record<string, string> = EXTERNAL_AUTH_ENV) {
-  for (const [name, value] of Object.entries(vars)) vi.stubEnv(name, value);
-}
-
 describe("authProviderModule", () => {
-  it("AUTH_PROVIDER_MODULE manda, sin espacios alrededor", () => {
+  it("es AUTH_PROVIDER_MODULE, sin espacios alrededor", () => {
     expect(authProviderModule({ AUTH_PROVIDER_MODULE: `  ${EXAMPLE_MODULE}  ` })).toBe(EXAMPLE_MODULE);
   });
 
-  it("AUTH_PROVIDER_MODULE gana sobre la configuración del proveedor interno de EXTERNAL_AUTH", () => {
-    expect(authProviderModule({ ...EXTERNAL_AUTH_ENV, AUTH_PROVIDER_MODULE: EXAMPLE_MODULE })).toBe(EXAMPLE_MODULE);
-  });
-
-  it("sin AUTH_PROVIDER_MODULE, la configuración de EXTERNAL_AUTH elige el proveedor interno (temporal)", () => {
-    expect(authProviderModule(EXTERNAL_AUTH_ENV)).toMatch(/external-auth[\\/]index$/);
-  });
-
-  it("sin nada configurado, o con las variables vacías, son cuentas locales", () => {
+  it("sin nada configurado, o con la variable vacía o en blanco, son cuentas locales", () => {
     expect(authProviderModule({})).toBeUndefined();
-    expect(authProviderModule({ AUTH_PROVIDER_MODULE: "  ", EXTERNAL_AUTH_API_URL: "" })).toBeUndefined();
+    expect(authProviderModule({ AUTH_PROVIDER_MODULE: "" })).toBeUndefined();
+    expect(authProviderModule({ AUTH_PROVIDER_MODULE: "   " })).toBeUndefined();
+  });
+
+  it("las variables propias de un proveedor no lo eligen: solo AUTH_PROVIDER_MODULE", () => {
+    expect(authProviderModule({ MI_PROVEEDOR_URL: "https://auth.example.com" })).toBeUndefined();
   });
 });
 
 describe("isExternalProviderConfigured", () => {
-  it("es verdadero con AUTH_PROVIDER_MODULE o con la configuración de un proveedor, aunque esté incompleta", () => {
+  it("es verdadero con AUTH_PROVIDER_MODULE", () => {
     expect(isExternalProviderConfigured({ AUTH_PROVIDER_MODULE: EXAMPLE_MODULE })).toBe(true);
-    expect(isExternalProviderConfigured(EXTERNAL_AUTH_ENV)).toBe(true);
-    expect(isExternalProviderConfigured({ EXTERNAL_AUTH_API_URL: "https://external-auth.test.local" })).toBe(true);
   });
 
   it("sin configuración de ningún proveedor es falso", () => {
@@ -68,15 +52,6 @@ describe("initAuthProvider", () => {
     expect(getAuthProvider()).toBe(provider);
   });
 
-  it("el proveedor interno de EXTERNAL_AUTH se carga por la misma vía que cualquier plugin", async () => {
-    stubExternalUserEnv();
-
-    const provider = await initAuthProvider(EXTERNAL_AUTH_ENV);
-
-    expect(provider?.id).toBe("external-auth");
-    expect(getAuthProvider()).toBe(provider);
-  });
-
   it("un módulo inexistente lanza: el backend no arranca, y no deja nada activo", async () => {
     setAuthProvider(null);
 
@@ -86,14 +61,19 @@ describe("initAuthProvider", () => {
     expect(getAuthProvider()).toBeNull();
   });
 
-  it("con la configuración del proveedor incompleta lanza, y el mensaje dice qué falta", async () => {
+  it("un proveedor cuyo init lanza impide el arranque, y el mensaje dice por qué", async () => {
     setAuthProvider(null);
-    stubExternalUserEnv({ EXTERNAL_AUTH_API_URL: "https://external-auth.test.local", APP_CODE_EXTERNAL_AUTH: "", EXTERNAL_AUTH_JWT_SECRET: "" });
+    const original = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
 
-    await expect(initAuthProvider({ EXTERNAL_AUTH_API_URL: "https://external-auth.test.local" })).rejects.toThrow(
-      "Incomplete EXTERNAL_AUTH configuration: missing APP_CODE_EXTERNAL_AUTH, EXTERNAL_AUTH_JWT_SECRET.",
-    );
-    // No deja a medias un proveedor sin validar.
+    try {
+      // El de ejemplo se niega a arrancar en producción.
+      await expect(initAuthProvider({ AUTH_PROVIDER_MODULE: EXAMPLE_MODULE })).rejects.toThrow(
+        'The "example" auth provider could not start',
+      );
+    } finally {
+      process.env.NODE_ENV = original;
+    }
     expect(getAuthProvider()).toBeNull();
   });
 });

@@ -54,12 +54,12 @@ describe("errorHandler", () => {
 
   it("AppError 5xx (ServiceUnavailableError) -> se loguea en error con el err incluido", () => {
     const res = createMockResponse();
-    const error = new ServiceUnavailableError("EXTERNAL_AUTH no responde");
+    const error = new ServiceUnavailableError("El proveedor no responde");
 
     errorHandler(error, createMockRequest(), res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(503);
-    expect(res.json).toHaveBeenCalledWith({ error: "EXTERNAL_AUTH no responde" });
+    expect(res.json).toHaveBeenCalledWith({ error: "El proveedor no responde" });
     expect(logSpy.error).toHaveBeenCalledWith({ err: error, statusCode: 503 }, "request failed");
     expect(logSpy.warn).not.toHaveBeenCalled();
   });

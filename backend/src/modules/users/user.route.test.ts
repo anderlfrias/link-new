@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../../middlewares/error.middleware";
-import { useLocalAuth } from "../../test/auth-mode";
+import { useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 
 vi.mock("./account-admin.service", () => ({
   updateUserAccount: vi.fn(),
@@ -77,7 +77,9 @@ beforeEach(() => {
   vi.mocked(AccountAdminService.unlockLocalUser).mockReset();
 });
 
-describe("admin users routes — modo external-auth", () => {
+describe("admin users routes — con un proveedor de autenticación externo", () => {
+  useExternalProvider();
+
   it("un usuario sin rol admin -> 403", async () => {
     const res = await request(app).patch("/admin/users/u-2").set("Authorization", "Bearer user-token").send({ status: "INACTIVE" });
 
@@ -95,7 +97,7 @@ describe("admin users routes — modo external-auth", () => {
     });
   });
 
-  it("PATCH /:id con datos de la cuenta y sin status -> 400 (los administra EXTERNAL_AUTH)", async () => {
+  it("PATCH /:id con datos de la cuenta y sin status -> 400 (los administra el proveedor)", async () => {
     const res = await request(app).patch("/admin/users/u-2").set("Authorization", "Bearer admin-token").send({ name: "Otro" });
 
     expect(res.status).toBe(400);
@@ -106,7 +108,7 @@ describe("admin users routes — modo external-auth", () => {
     ["post", "/admin/users"],
     ["post", "/admin/users/u-2/password-reset"],
     ["post", "/admin/users/u-2/unlock"],
-  ])("%s %s no existe en modo external-auth (404)", async (method, path) => {
+  ])("%s %s no existe con un proveedor externo (404)", async (method, path) => {
     const res = await (request(app) as any)[method](path).set("Authorization", "Bearer admin-token").send({});
 
     expect(res.status).toBe(404);

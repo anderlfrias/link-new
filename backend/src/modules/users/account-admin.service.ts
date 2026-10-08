@@ -93,8 +93,8 @@ async function assertAvailable(tx: Repo.Tx, fields: { email?: string; username?:
   }
 }
 
-/// Editar una cuenta (PATCH /admin/users/:id). En modo external-auth solo cambia el
-/// estado: los datos de la cuenta los administra EXTERNAL_AUTH (D19). En modo local
+/// Editar una cuenta (PATCH /admin/users/:id). Con un proveedor externo solo
+/// cambia el estado: los datos de la cuenta los administra el proveedor (D19). Con cuentas locales
 /// también nombre, email, username y roles (D11).
 ///
 /// Reglas (invariante 12): nadie puede desactivarse ni quitarse el rol de
@@ -160,8 +160,8 @@ export async function updateUserAccount(
       ...(changed.username ? { username: next.username } : {}),
       ...(changed.roles ? { roles: next.roles } : {}),
       ...(changed.status ? { status: next.status } : {}),
-      // En modo local, desactivar también revoca los tokens emitidos (D9). En
-      // external-auth no hace falta: `resolveInternalUser` rechaza la cuenta inactiva.
+      // Con cuentas locales, desactivar también revoca los tokens emitidos (D9). Con un proveedor
+      // externo no hace falta: `resolveInternalUser` rechaza la cuenta inactiva.
       ...(local && deactivates ? { tokensValidAfter: toSecondPrecision(new Date()) } : {}),
     });
     await Repo.createAuditEntry(
@@ -221,7 +221,7 @@ export async function createLocalUser(
 /// Restablecimiento por un admin (POST /admin/users/:id/password-reset).
 /// Deja el cambio obligatorio, desbloquea la cuenta, revoca sus tokens y
 /// corta sus sockets. También sirve para darle contraseña a una cuenta que no
-/// tenía (por ejemplo, las que vienen de EXTERNAL_AUTH, §10).
+/// tenía (por ejemplo, las que vienen de un proveedor externo, §10).
 export async function resetLocalPassword(
   actor: AccountAdminActor,
   targetId: string,
@@ -287,7 +287,7 @@ export async function unlockLocalUser(actor: AccountAdminActor, targetId: string
 }
 
 /// `create-admin` del CLI (D18): crea la cuenta o, si ya hay una con ese
-/// correo (por ejemplo de la época EXTERNAL_AUTH), le da credencial y rol admin
+/// correo (por ejemplo de cuando la instalación usaba un proveedor externo), le da credencial y rol admin
 /// conservando su `User.id` y con él su historial (§10). Siempre deja una
 /// contraseña temporal con el cambio obligatorio, y la cuenta activa.
 export async function bootstrapAdmin(input: {

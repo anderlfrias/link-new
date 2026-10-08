@@ -44,7 +44,7 @@ El repo documenta cada módulo en su propio `README.md` y esa es la convención 
       otros campos de retención, con la advertencia de que el borrado es irreversible
 - [x] **`backend/src/modules/auth/README.md`**: que el login se audita (`LOGIN` / `LOGIN_FAILED`),
       y la nota de que `forbidden_by_provider` **no** equivale a "contraseña incorrecta" — es la
-      misma ambigüedad de EXTERNAL_AUTH que ese README ya explica para el mensaje de error al usuario
+      misma ambigüedad del proveedor externo que ese README ya explica para el mensaje de error al usuario
 
 ---
 

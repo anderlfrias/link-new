@@ -1,6 +1,6 @@
 # Users
 
-Directorio de usuarios locales (`User`, `prisma/schema.prisma`) — perfil, no autenticación (eso es [`auth`](../auth/README.md)) — y administración de cuentas desde el panel. Quién crea las filas de `User` depende del modo ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)): en modo external-auth las crea/actualiza `auth` (`upsertUserFromExternalUser`) al iniciar sesión o al sincronizar el directorio de la app; en modo local las crea un admin, desde este módulo o con el CLI (`src/cli/auth-admin.ts`).
+Directorio de usuarios locales (`User`, `prisma/schema.prisma`) — perfil, no autenticación (eso es [`auth`](../auth/README.md)) — y administración de cuentas desde el panel. Quién crea las filas de `User` depende del modo ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md)): con un proveedor externo las crea/actualiza `auth` (`upsertExternalUser`) al iniciar sesión o cuando el proveedor sincroniza su directorio; con cuentas locales las crea un admin, desde este módulo o con el CLI (`src/cli/auth-admin.ts`).
 
 ## `GET /api/v1/users` — Directorio de contactos
 
@@ -28,7 +28,7 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, m
 {
   "users": [
     {
-      "id": "user-uuid", "name": "Ana", "email": "ana@x.com", "username": "ana.external-auth",
+      "id": "user-uuid", "name": "Ana", "email": "ana@x.com", "username": "ana.perez",
       "avatarFileId": "file-uuid", "avatarFile": { "path": "avatars/..." },
       "status": "ACTIVE", "syncProfileWithIntegration": true, "createdAt": "...",
       "storage": { "fileCount": 12, "totalSize": 4582001 },
@@ -42,27 +42,27 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 30, m
 - `storage` — archivos activos (`deletedAt: null`) subidos por ese usuario, agregados solo para los ids de la página actual (`StoredFile.groupBy` por `createdById`), igual de barato que el resto de las queries paginadas de este backend.
 - `activity.conversationCount`/`messagesSentCount` — conteos directos de las relaciones `conversationMemberships`/`sentMessages` de `User` (Prisma `_count`, sin N+1).
 - `activity.groupsAdministeredCount` — cuántos `GROUP` tiene con `ConversationMember.isAdmin: true` (ver [`conversations/README.md#admins-de-grupo`](../conversations/README.md#admins-de-grupo)), no cuántos creó — un admin de grupo no tiene por qué ser el creador.
-- `syncProfileWithIntegration` — si el nombre/foto de este usuario todavía se actualiza solo desde EXTERNAL_AUTH, o si ya fue editado localmente (`auth.repository.ts`, `setLocalName`/`setLocalAvatar`) y dejó de sincronizarse.
+- `syncProfileWithIntegration` — si el nombre/foto de este usuario todavía se actualiza solo desde el proveedor externo, o si ya fue editado localmente (`auth.repository.ts`, `setLocalName`/`setLocalAvatar`) y dejó de sincronizarse.
 
-Filtros adicionales: `status` (`ACTIVE` o `INACTIVE`, los dos modos) y `hasPassword` (`true` o `false`, solo modo local: cuentas con o sin contraseña asignada, útil después de migrar desde EXTERNAL_AUTH). En modo local cada fila suma `localRoles`, `hasPassword`, `mustChangePassword` y `locked`; nunca el hash ni nada de la contraseña.
+Filtros adicionales: `status` (`ACTIVE` o `INACTIVE`, los dos modos) y `hasPassword` (`true` o `false`, solo modo local: cuentas con o sin contraseña asignada, útil después de migrar desde un proveedor externo). Con cuentas locales cada fila suma `localRoles`, `hasPassword`, `mustChangePassword` y `locked`; nunca el hash ni nada de la contraseña.
 
 ### Roles en cada modo
 
-- **Modo external-auth:** los roles se guardan en `User.roles` en cada login, a partir del JWT de EXTERNAL_AUTH (solo los que la app conoce, hoy `"admin"`), y de ahí se leen en cada request. Es lo que EXTERNAL_AUTH dijo la última vez que esa persona inició sesión: no hay ninguna llamada a EXTERNAL_AUTH que devuelva el rol de un tercero (`getAppUsers`, usado por `syncAppUsers`, solo trae `id/email/username/fullName`), así que quien nunca inició sesión acá no tiene roles. Se administran en EXTERNAL_AUTH: el panel no los edita.
-- **Modo local:** la app asigna los roles (`User.roles`, hoy solo `"admin"`), así que el panel los muestra y un admin los edita. En la API se siguen llamando `localRoles`.
+- **Proveedor externo:** los roles se guardan en `User.roles` en cada login, a partir de lo que informa el proveedor (solo los que la app conoce, hoy `"admin"`), y de ahí se leen en cada request. Es lo que el proveedor dijo la última vez que esa persona inició sesión: el directorio que sincroniza el proveedor no trae roles, así que quien nunca inició sesión acá no tiene ninguno. Se administran en el proveedor: el panel no los edita.
+- **Cuentas locales:** la app asigna los roles (`User.roles`, hoy solo `"admin"`), así que el panel los muestra y un admin los edita. En la API se siguen llamando `localRoles`.
 
 ### Desactivar cuentas (`status`)
 
-`UserStatus.INACTIVE` corta el acceso de una cuenta al chat en los dos modos ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md), D19). En modo external-auth, una cuenta desactivada no entra aunque EXTERNAL_AUTH acepte su contraseña (`403 account_disabled`), y `syncAppUsers` nunca la reactiva. Sus tokens vigentes se rechazan (`resolveInternalUser`) y sus sockets se cortan en el momento. Las cuentas nunca se borran: borrar rompería las relaciones de mensajes y auditoría. El directorio (`GET /`) ya filtra `status: ACTIVE`, así que una cuenta desactivada desaparece del selector de contactos.
+`UserStatus.INACTIVE` corta el acceso de una cuenta al chat en los dos modos ([LOCAL_AUTH_PLAN.md](../../../../docs/design/LOCAL_AUTH_PLAN.md), D19). Con un proveedor externo, una cuenta desactivada no entra aunque el proveedor acepte su contraseña (`403 account_disabled`), y la sincronización del directorio nunca la reactiva. Sus tokens vigentes se rechazan (`resolveInternalUser`) y sus sockets se cortan en el momento. Las cuentas nunca se borran: borrar rompería las relaciones de mensajes y auditoría. El directorio (`GET /`) ya filtra `status: ACTIVE`, así que una cuenta desactivada desaparece del selector de contactos.
 
 ### `PATCH /:id` — Editar una cuenta (los dos modos)
 
-- **Modo external-auth:** `{ status }`. Los datos de la cuenta los administra EXTERNAL_AUTH; desde acá solo se activa o desactiva su acceso al chat.
-- **Modo local:** `{ name?, email?, username?, roles?, status? }`. Email en minúsculas; username opcional, de 3 a 32 caracteres `a-z 0-9 . _`, sin "@" (un string vacío o `null` lo quita).
+- **Proveedor externo:** `{ status }`. Los datos de la cuenta los administra el proveedor; desde acá solo se activa o desactiva su acceso al chat.
+- **Cuentas locales:** `{ name?, email?, username?, roles?, status? }`. Email en minúsculas; username opcional, de 3 a 32 caracteres `a-z 0-9 . _`, sin "@" (un string vacío o `null` lo quita).
 
 Reglas: nadie puede desactivarse ni quitarse el rol de admin a sí mismo (`409 cannot_modify_self`), y en modo local la instalación nunca se queda sin un admin activo (`409 last_admin`). Email o username en uso por otra cuenta: `409 email_taken` / `username_taken`, sin distinguir mayúsculas. Desactivar corta los sockets de la cuenta y, en modo local, revoca sus tokens. Cada cambio se audita como `UPDATE_USER` (`{ via: "panel", changed }`) en la misma transacción.
 
-### Solo modo local (`404` en external-auth)
+### Solo con cuentas locales (`404` con un proveedor externo)
 
 | Método y ruta | Body | Respuesta |
 |---|---|---|
@@ -79,4 +79,4 @@ npm run auth:admin -- create-admin --email <correo> [--name <nombre>] [--usernam
 npm run auth:admin -- reset-password --email <correo>
 ```
 
-`auth:admin` corre el build (`dist/`); en desarrollo, sin compilar, `auth:admin:dev`. Con Docker: `docker compose exec backend npm run auth:admin -- create-admin --email <correo>`. `create-admin` crea la cuenta o, si ya hay una con ese correo (por ejemplo de la época EXTERNAL_AUTH), le da credencial y rol admin conservando su historial. La contraseña temporal sale **una sola vez** por la terminal, nunca por el logger. Se audita con `via: "cli"`. Se niega a correr en modo external-auth.
+`auth:admin` corre el build (`dist/`); en desarrollo, sin compilar, `auth:admin:dev`. Con Docker: `docker compose exec backend npm run auth:admin -- create-admin --email <correo>`. `create-admin` crea la cuenta o, si ya hay una con ese correo (por ejemplo de cuando la instalación usaba un proveedor externo), le da credencial y rol admin conservando su historial. La contraseña temporal sale **una sola vez** por la terminal, nunca por el logger. Se audita con `via: "cli"`. Se niega a correr con un proveedor externo configurado.

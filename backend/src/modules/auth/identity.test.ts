@@ -1,7 +1,7 @@
 import { User, UserStatus } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useLocalAuth } from "../../test/auth-mode";
+import { useExternalProvider, useLocalAuth } from "../../test/auth-mode";
 import { ForbiddenError, UnauthorizedError } from "../../utils/errors";
 
 vi.mock("./auth.repository", () => ({
@@ -167,10 +167,11 @@ describe("assertNotPasswordChangeOnly", () => {
 
 describe.each([
   { label: "cuentas locales", local: true },
-  // El de src/test/setup.ts: no hace falta cambiarlo.
+
   { label: "proveedor externo", local: false },
 ])("authenticateAccessToken — $label", ({ local }) => {
   if (local) useLocalAuth();
+  else useExternalProvider();
 
   it("acepta la sesión de LINK y la resuelve", async () => {
     vi.mocked(findUserById).mockResolvedValue(buildUser());

@@ -52,11 +52,11 @@ describe("config/env — autenticación", () => {
 
   it("no conoce las variables de ningún proveedor externo: las lee y valida el propio proveedor", async () => {
     stubAuthEnv(VALID_AUTH);
-    vi.stubEnv("EXTERNAL_AUTH_API_URL", "not-a-url");
+    vi.stubEnv("MI_PROVEEDOR_URL", "not-a-url");
 
     const { default: env } = await importFreshEnv();
 
-    expect(env).not.toHaveProperty("EXTERNAL_AUTH_API_URL");
+    expect(env).not.toHaveProperty("MI_PROVEEDOR_URL");
     expect(env.auth).toEqual({ sessionSecret: SESSION_SECRET });
   });
 

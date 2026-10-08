@@ -15,7 +15,7 @@ de ida y vuelta a esta sección):
 
 - **Repositorio en un test de service**: `vi.mock("./x.repository")` +
   `vi.mocked(XRepository.metodo).mockResolvedValue(...)`.
-- **`fetch` global** (EXTERNAL_AUTH en auth, Giphy): `vi.stubGlobal("fetch", vi.fn())` en un
+- **`fetch` global** (El proveedor externo en auth, Giphy): `vi.stubGlobal("fetch", vi.fn())` en un
   `beforeEach`, `vi.unstubAllGlobals()` en `afterEach`.
 - **Socket.IO** (`getIO()` usado en conversation/message service): `vi.mock("../../socket", () => ({ getIO: vi.fn(() => ({ to: vi.fn().mockReturnThis(), emit: vi.fn() })) }))`.
 - **`jsonwebtoken`**: no mockear la librería en sí — es determinística y barata; usar
@@ -96,23 +96,23 @@ las fases siguientes en vez de reinventarlo por archivo.
 ## Fase 2 — Auth (seguridad crítica — prioridad alta)
 
 Ver invariante obligatoria en `TESTING_PLAN.md` sección 4 sobre el mensaje 403 genérico
-de EXTERNAL_AUTH: no te la saltees.
+del proveedor externo: no te la saltees.
 
 - [x] `backend/src/modules/auth/jwt.ts` — `verifyToken` round-trip con tokens firmados
       vía `jsonwebtoken` (secret de test); `mapTokenToUser` mapea el payload a `MappedUser`
       extrayendo roles y permissions planos; `buildFullName` con combinaciones de
       nombre/apellidos presentes y ausentes. (11 tests en `jwt.test.ts`).
 - [x] `backend/src/modules/auth/auth.service.ts#login` — mockeando `fetch` global:
-      credenciales correctas → devuelve token; EXTERNAL_AUTH responde 403 → mensaje genérico
+      credenciales correctas → devuelve token; el proveedor externo responde 403 → mensaje genérico
       (**no** distingue "user no existe" de "password incorrecta" en el mensaje);
-      `fetch` tira (red caída) o timeout → `ServiceUnavailableError`; EXTERNAL_AUTH responde
+      `fetch` tira (red caída) o timeout → `ServiceUnavailableError`; el proveedor externo responde
       con body no-JSON (HTML/texto plano) → no explota y resuelve según el status HTTP.
       Además cubiertos `upsertUsuario`, `getOwnProfilePictureUrl`, `setProfilePicture`,
       `removeProfilePicture`, `updateOwnName`, `updateNotificationSoundEnabled` y
       `getAppUsers` con arrays directos o envueltos y descarte de entradas mal formadas.
       (18 tests en `auth.service.test.ts`).
 - [x] `backend/src/modules/auth/auth.repository.ts` — sí tiene lógica condicional real:
-      `upsertUserFromExternalUser` crea usuario nuevo si no existe, o actualiza `username` y
+      `upsertExternalUser` crea usuario nuevo si no existe, o actualiza `username` y
       solo toca `name` si `syncProfileWithIntegration === true` (conservando el nombre
       local si es false); `setLocalAvatar`/`setLocalName` desactivan la sincronización;
       `findAvatarPath` resuelve o devuelve null. (9 tests en `auth.repository.test.ts`).
@@ -280,7 +280,7 @@ Políticas globales de gobierno, flags de override por grupo, DTO público sin d
 ## Fase 7 — Users, Push, Giphy
 
 **Users**
-- [x] `user.service.ts` — sincronización con EXTERNAL_AUTH (`AuthService.syncAppUsers`), listado paginado para administración con agregación de storage usado (`sumStorageForUsers`) y grupos administrados (`countGroupAdminForUsers`). (3 tests en `user.service.test.ts`).
+- [x] `user.service.ts` — sincronización con el proveedor externo (`AuthService.syncAppUsers`), listado paginado para administración con agregación de storage usado (`sumStorageForUsers`) y grupos administrados (`countGroupAdminForUsers`). (3 tests en `user.service.test.ts`).
 - [x] `user.repository.ts#findAllForAdmin` / `#countAllForAdmin` — búsqueda combinada en nombre, email y username, paginación por cursor `beforeId`/`limit`, búsqueda de directorio de contactos activa, agregación de storage y membresías admin. (10 tests en `user.repository.test.ts`).
 - [x] `user.controller.ts` — mapeo service → HTTP para directorio público (`list`) y panel de administración (`listAdmin`). (6 tests en `user.controller.test.ts`).
 
@@ -337,7 +337,7 @@ encontró gaps puntuales, ya cerrados acá — fuera de la numeración de fases 
 todas ya estaban marcadas `[x]`:
 
 - [x] `backend/src/modules/auth/auth.service.ts` — la Fase 2 había dejado sin testear
-      toda la lógica de sincronización de avatar: `fetchExternalUserProfilePicture`
+      toda la lógica de sincronización de avatar: `fetchProfilePicture`
       (`getProfilePicture`/`getProfilePictureByUsername`, parseo de data URI, manejo
       de `USER_NOT_FOUND`/`PROFILE_PICTURE_NOT_FOUND`), `syncAvatar`
       (`syncProfilePicture`/`syncContactAvatar` — dedup por checksum para no

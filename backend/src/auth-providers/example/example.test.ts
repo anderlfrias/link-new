@@ -29,7 +29,7 @@ import { EXAMPLE_USERS } from "./index";
 /// este test antes que la instalación de alguien.
 const EXAMPLE_MODULE = join(__dirname, "index");
 
-// src/test/setup.ts deja un proveedor de mentira activo: cada test restaura ese estado.
+// Por defecto los tests corren con cuentas locales: cada test restaura ese estado.
 const original = getAuthProvider();
 
 function storedAccount(overrides: Record<string, unknown> = {}) {

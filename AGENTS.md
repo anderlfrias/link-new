@@ -20,7 +20,7 @@ El detalle completo de esta política, las decisiones técnicas (qué runner, c�
 mockea cada capa, dónde van los tests) y el plan por fases para cubrir todo el código
 que ya existe están en **[docs/design/TESTING_PLAN.md](docs/design/TESTING_PLAN.md)**. Si vas a tocar
 `backend/` o `frontend/`, leelo antes de escribir el test — ahí está el criterio de
-mocking de cada capa (Prisma, EXTERNAL_AUTH, socket.io, etc.) para no reinventarlo por archivo.
+mocking de cada capa (Prisma, proveedores de autenticación, socket.io, etc.) para no reinventarlo por archivo.
 
 ## Cómo correr los tests
 
