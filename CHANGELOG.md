@@ -8,6 +8,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ## [Unreleased]
 
 ### Añadido
+- **Licencia**: LINK pasa a ser software libre bajo la GNU Affero General Public License v3.0 (`AGPL-3.0-only`). Ver `LICENSE` y la sección "Licencia" del README.
 - **Docker**: `Dockerfile` de backend y frontend y `docker-compose.yml` (PostgreSQL + backend + frontend). El backend aplica las migraciones pendientes al arrancar.
 - **Migraciones de base de datos**: migración inicial `0_init` en `backend/prisma/migrations` y scripts `db:migrate`, `db:migrate:dev` y `db:baseline` (para instalaciones creadas con `prisma db push`).
 - **Autenticación local, con EXTERNAL_AUTH opcional**: el modo se deduce del `.env` (con las tres `EXTERNAL_AUTH_*`, EXTERNAL_AUTH; sin ninguna y con `LOCAL_AUTH_JWT_SECRET`, modo local). En modo local las cuentas y sus contraseñas viven en la base de LINK: se inicia sesión con el correo o el nombre de usuario, y el primer admin se crea con `npm run auth:admin -- create-admin --email <correo>`. Ver la sección "Autenticación" del README y `docs/design/LOCAL_AUTH_PLAN.md`.

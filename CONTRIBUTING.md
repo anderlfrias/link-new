@@ -85,6 +85,11 @@ La CI aplica las migraciones sobre una base vacía y falla si no coinciden con e
 - No commitear secretos, archivos `.env`, datos personales ni URLs o IPs de infraestructura real.
   En tests y ejemplos, usar dominios reservados como `example.com`.
 
+## Licencia de las contribuciones
+
+LINK se distribuye bajo la [AGPL-3.0-only](LICENSE). Abrir un pull request implica aceptar que la
+contribución se publique bajo esa misma licencia.
+
 ## Reportar problemas
 
 - Bugs y propuestas: abrir un issue con la plantilla correspondiente.

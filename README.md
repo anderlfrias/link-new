@@ -274,11 +274,18 @@ Documentación técnica:
 
 ## Licencia
 
-La licencia del proyecto todavía no está definida.
+Copyright © 2026 Anderson Frias.
+
+LINK es software libre bajo la [GNU Affero General Public License v3.0](LICENSE), solo esa versión
+(`AGPL-3.0-only`). En la práctica, se puede usar, estudiar, modificar y redistribuir. Quien
+distribuya una versión modificada, o la ofrezca a otras personas a través de una red (por ejemplo,
+una instalación de LINK con cambios propios que usa un equipo), tiene que ofrecerles el código
+fuente de esa versión bajo la misma licencia. El texto de [LICENSE](LICENSE) es el que vale: este
+resumen no lo reemplaza.
 
 El contenido de terceros (diseños de avatares, tipografías, íconos y dependencias con licencias
 a tener en cuenta) está en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 El nombre LINK, el logo y los íconos son assets de marca y se tratan aparte del código: no quedan
-cubiertos por la licencia que se elija para el código. La lista de archivos está en
+cubiertos por la AGPL. La lista de archivos está en
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#marca-nombre-logo-e-íconos).

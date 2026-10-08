@@ -1,7 +1,7 @@
 # Avisos de terceros
 
 Contenido de terceros que LINK usa o distribuye, y bajo qué licencia. El código propio del proyecto
-todavía no tiene licencia definida (ver [README.md](README.md#licencia)).
+está bajo la [AGPL-3.0-only](LICENSE) (ver [README.md](README.md#licencia)).
 
 Este resumen no es una revisión legal. Si actualizás una dependencia o un asset de esta lista,
 actualizá también este archivo.

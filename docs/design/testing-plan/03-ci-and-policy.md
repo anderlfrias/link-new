@@ -10,8 +10,8 @@ tenga que diseñarla desde cero.
 
 ## 16.1 — Workflow de GitHub Actions
 
-El repo tiene remoto en GitHub (`Organizacion-Ejemplo/chat-interno`), así que
-GitHub Actions es la opción directa, sin infra adicional que levantar. Crear
+El repo está en GitHub, así que GitHub Actions es la opción directa, sin infra
+adicional que levantar. Crear
 `.github/workflows/tests.yml`:
 
 ```yaml
