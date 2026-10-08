@@ -1151,3 +1151,17 @@ Respuesta `200 OK`:
 
 `nextCursor` será `null` si no hay más páginas de resultados posteriores.
 
+---
+
+## 16. Notificaciones push (Web Push)
+
+Base HTTP: `/api/v1/push`. Requiere sesión. Las notificaciones llegan aunque la pestaña o el navegador estén cerrados, a quien no tiene esa conversación abierta en ese momento (ver [`push/push.service.ts`](./src/modules/push/push.service.ts)). El payload lleva el texto del mensaje.
+
+- `GET /vapid-public-key` → `200 { "publicKey": "..." }`. La clave pública VAPID del servidor, para `pushManager.subscribe()`.
+- `POST /subscribe` — `{ "endpoint": "https://fcm.googleapis.com/...", "keys": { "p256dh": "...", "auth": "..." } }` → `204`.
+  - `400` si falta algún campo o supera el tamaño máximo (endpoint 2048 caracteres, `p256dh` 200, `auth` 100).
+  - `400` con `code: "push_endpoint_not_allowed"` si el endpoint no es de un servicio push de un navegador: solo se aceptan `https` en el puerto 443 hacia `fcm.googleapis.com`, `android.googleapis.com`, `push.services.mozilla.com`, `notify.windows.com` y `push.apple.com` (y sus subdominios). El servidor le hace POST al endpoint cada vez que notifica, así que no puede apuntar a cualquier URL. Un navegador con otro servicio push se agrega en `push/push-endpoint.ts`.
+  - Si el endpoint ya está registrado por **otra** cuenta con claves distintas, no se reasigna y la respuesta es igual `204`. Con las mismas claves (otra persona entra en el mismo navegador) sí pasa a la cuenta nueva.
+- `POST /unsubscribe` — `{ "endpoint": "..." }` → `204`. Solo borra una suscripción de la cuenta que pide la baja; si no es suya o no existe, no hace nada.
+
+Las suscripciones se borran solas cuando el servicio push responde 404/410, cuando el endpoint no pasa la allowlist, y cuando se cierran las sesiones de la cuenta (se desactiva, o se cambia o restablece su contraseña). Una cuenta desactivada no recibe notificaciones. El frontend da de baja la suscripción del navegador al cerrar sesión.

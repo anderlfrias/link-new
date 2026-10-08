@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import env from "../../config/env";
+import { BadRequestError } from "../../utils/errors";
 import * as PushRepository from "./push.repository";
 
 const { mockSendNotification, MockWebPushError } = vi.hoisted(() => {
@@ -27,11 +28,16 @@ vi.mock("web-push", () => ({
 
 vi.mock("./push.repository", () => ({
   upsertSubscription: vi.fn(),
+  findByEndpoint: vi.fn(),
   deleteByEndpoint: vi.fn(),
+  deleteByEndpointForUser: vi.fn(),
   findByUserIds: vi.fn(),
 }));
 
 import { getPublicKey, notifyUsers, subscribe, unsubscribe } from "./push.service";
+
+const FCM_ENDPOINT_1 = "https://fcm.googleapis.com/fcm/send/sub-1";
+const FCM_ENDPOINT_2 = "https://fcm.googleapis.com/fcm/send/sub-2";
 
 describe("push.service", () => {
   beforeEach(() => {
@@ -46,29 +52,85 @@ describe("push.service", () => {
 
   describe("subscribe", () => {
     it("delegates upsert to repository with user ID and keys", async () => {
+      vi.mocked(PushRepository.findByEndpoint).mockResolvedValue(null);
       vi.mocked(PushRepository.upsertSubscription).mockResolvedValue({} as any);
 
       await subscribe("u-1", {
-        endpoint: "https://push.example.com/sub/1",
+        endpoint: FCM_ENDPOINT_1,
         keys: { p256dh: "key-p256", auth: "key-auth" },
       });
 
-      expect(PushRepository.upsertSubscription).toHaveBeenCalledWith(
-        "u-1",
-        "https://push.example.com/sub/1",
-        "key-p256",
-        "key-auth",
-      );
+      expect(PushRepository.upsertSubscription).toHaveBeenCalledWith("u-1", FCM_ENDPOINT_1, "key-p256", "key-auth");
+    });
+
+    it("rechaza un endpoint fuera de la allowlist sin guardarlo", async () => {
+      const attempt = subscribe("u-1", {
+        endpoint: "https://10.0.0.5:8443/internal",
+        keys: { p256dh: "key-p256", auth: "key-auth" },
+      });
+
+      await expect(attempt).rejects.toThrow(BadRequestError);
+      await expect(attempt).rejects.toMatchObject({ code: "push_endpoint_not_allowed" });
+      expect(PushRepository.findByEndpoint).not.toHaveBeenCalled();
+      expect(PushRepository.upsertSubscription).not.toHaveBeenCalled();
+    });
+
+    it("reasigna un endpoint de otro usuario si las claves coinciden (mismo navegador, otra persona)", async () => {
+      vi.mocked(PushRepository.findByEndpoint).mockResolvedValue({
+        id: "sub-1",
+        userId: "u-anterior",
+        endpoint: FCM_ENDPOINT_1,
+        p256dh: "key-p256",
+        auth: "key-auth",
+      } as any);
+      vi.mocked(PushRepository.upsertSubscription).mockResolvedValue({} as any);
+
+      await subscribe("u-1", { endpoint: FCM_ENDPOINT_1, keys: { p256dh: "key-p256", auth: "key-auth" } });
+
+      expect(PushRepository.upsertSubscription).toHaveBeenCalledWith("u-1", FCM_ENDPOINT_1, "key-p256", "key-auth");
+    });
+
+    it("no reasigna un endpoint de otro usuario si las claves no coinciden", async () => {
+      vi.mocked(PushRepository.findByEndpoint).mockResolvedValue({
+        id: "sub-1",
+        userId: "u-dueño",
+        endpoint: FCM_ENDPOINT_1,
+        p256dh: "key-p256",
+        auth: "key-auth",
+      } as any);
+
+      await expect(
+        subscribe("u-atacante", { endpoint: FCM_ENDPOINT_1, keys: { p256dh: "otra-clave", auth: "otra-auth" } }),
+      ).resolves.toBeUndefined();
+
+      expect(PushRepository.upsertSubscription).not.toHaveBeenCalled();
+    });
+
+    it("actualiza las claves de una suscripción propia", async () => {
+      vi.mocked(PushRepository.findByEndpoint).mockResolvedValue({
+        id: "sub-1",
+        userId: "u-1",
+        endpoint: FCM_ENDPOINT_1,
+        p256dh: "vieja",
+        auth: "vieja",
+      } as any);
+      vi.mocked(PushRepository.upsertSubscription).mockResolvedValue({} as any);
+
+      await subscribe("u-1", { endpoint: FCM_ENDPOINT_1, keys: { p256dh: "nueva", auth: "nueva" } });
+
+      expect(PushRepository.upsertSubscription).toHaveBeenCalledWith("u-1", FCM_ENDPOINT_1, "nueva", "nueva");
     });
   });
 
   describe("unsubscribe", () => {
-    it("delegates deletion to repository by endpoint", async () => {
-      vi.mocked(PushRepository.deleteByEndpoint).mockResolvedValue({ count: 1 } as any);
+    it("borra solo la suscripción del usuario actual", async () => {
+      vi.mocked(PushRepository.deleteByEndpointForUser).mockResolvedValue({ count: 1 } as any);
 
-      await unsubscribe("https://push.example.com/sub/1");
+      await unsubscribe("u-1", FCM_ENDPOINT_1);
 
-      expect(PushRepository.deleteByEndpoint).toHaveBeenCalledWith("https://push.example.com/sub/1");
+      expect(PushRepository.deleteByEndpointForUser).toHaveBeenCalledWith(FCM_ENDPOINT_1, "u-1");
+      // Nunca por endpoint a secas: saber el endpoint de otra persona no alcanza.
+      expect(PushRepository.deleteByEndpoint).not.toHaveBeenCalled();
     });
   });
 
@@ -92,14 +154,14 @@ describe("push.service", () => {
         {
           id: "sub-1",
           userId: "u-1",
-          endpoint: "https://push.example.com/sub/1",
+          endpoint: FCM_ENDPOINT_1,
           p256dh: "key-1",
           auth: "auth-1",
         },
         {
           id: "sub-2",
           userId: "u-2",
-          endpoint: "https://push.example.com/sub/2",
+          endpoint: FCM_ENDPOINT_2,
           p256dh: "key-2",
           auth: "auth-2",
         },
@@ -113,31 +175,36 @@ describe("push.service", () => {
       expect(PushRepository.findByUserIds).toHaveBeenCalledWith(["u-1", "u-2"]);
       expect(mockSendNotification).toHaveBeenCalledTimes(2);
       expect(mockSendNotification).toHaveBeenCalledWith(
-        { endpoint: "https://push.example.com/sub/1", keys: { p256dh: "key-1", auth: "auth-1" } },
+        { endpoint: FCM_ENDPOINT_1, keys: { p256dh: "key-1", auth: "auth-1" } },
         JSON.stringify(payload),
       );
       expect(mockSendNotification).toHaveBeenCalledWith(
-        { endpoint: "https://push.example.com/sub/2", keys: { p256dh: "key-2", auth: "auth-2" } },
+        { endpoint: FCM_ENDPOINT_2, keys: { p256dh: "key-2", auth: "auth-2" } },
         JSON.stringify(payload),
       );
     });
 
+    it("no envía a filas con endpoint no permitido y las borra", async () => {
+      vi.mocked(PushRepository.findByUserIds).mockResolvedValue([
+        { id: "sub-viejo", userId: "u-1", endpoint: "https://10.0.0.5:8443/internal", p256dh: "k", auth: "a" },
+        { id: "sub-ok", userId: "u-2", endpoint: FCM_ENDPOINT_2, p256dh: "k", auth: "a" },
+      ] as any);
+      vi.mocked(PushRepository.deleteByEndpoint).mockResolvedValue({ count: 1 } as any);
+      mockSendNotification.mockResolvedValue({});
+
+      await notifyUsers(["u-1", "u-2"], payload);
+
+      expect(mockSendNotification).toHaveBeenCalledTimes(1);
+      expect(mockSendNotification).toHaveBeenCalledWith(expect.objectContaining({ endpoint: FCM_ENDPOINT_2 }), expect.any(String));
+      expect(PushRepository.deleteByEndpoint).toHaveBeenCalledWith("https://10.0.0.5:8443/internal");
+    });
+
     it("cleans up expired subscription (410 Gone / 404 Not Found) from database", async () => {
+      const expired = "https://fcm.googleapis.com/fcm/send/expired";
+      const notFound = "https://fcm.googleapis.com/fcm/send/not-found";
       const mockSubscriptions = [
-        {
-          id: "sub-1",
-          userId: "u-1",
-          endpoint: "https://push.example.com/sub/expired",
-          p256dh: "key-1",
-          auth: "auth-1",
-        },
-        {
-          id: "sub-2",
-          userId: "u-2",
-          endpoint: "https://push.example.com/sub/not-found",
-          p256dh: "key-2",
-          auth: "auth-2",
-        },
+        { id: "sub-1", userId: "u-1", endpoint: expired, p256dh: "key-1", auth: "auth-1" },
+        { id: "sub-2", userId: "u-2", endpoint: notFound, p256dh: "key-2", auth: "auth-2" },
       ];
 
       vi.mocked(PushRepository.findByUserIds).mockResolvedValue(mockSubscriptions as any);
@@ -149,8 +216,8 @@ describe("push.service", () => {
 
       await notifyUsers(["u-1", "u-2"], payload);
 
-      expect(PushRepository.deleteByEndpoint).toHaveBeenCalledWith("https://push.example.com/sub/expired");
-      expect(PushRepository.deleteByEndpoint).toHaveBeenCalledWith("https://push.example.com/sub/not-found");
+      expect(PushRepository.deleteByEndpoint).toHaveBeenCalledWith(expired);
+      expect(PushRepository.deleteByEndpoint).toHaveBeenCalledWith(notFound);
     });
 
     it("ignores non-expiration errors without deleting subscription and without throwing", async () => {
@@ -158,7 +225,7 @@ describe("push.service", () => {
         {
           id: "sub-1",
           userId: "u-1",
-          endpoint: "https://push.example.com/sub/temp-fail",
+          endpoint: "https://fcm.googleapis.com/fcm/send/temp-fail",
           p256dh: "key-1",
           auth: "auth-1",
         },

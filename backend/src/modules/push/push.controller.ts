@@ -1,5 +1,4 @@
 import { NextFunction, Request, Response } from "express";
-import { BadRequestError } from "../../utils/errors";
 import * as PushService from "./push.service";
 
 function currentUserId(req: Request): string {
@@ -12,10 +11,8 @@ export function getPublicKey(_req: Request, res: Response) {
 
 export async function subscribe(req: Request, res: Response, next: NextFunction) {
   try {
-    const { endpoint, keys } = req.body ?? {};
-    if (typeof endpoint !== "string" || typeof keys?.p256dh !== "string" || typeof keys?.auth !== "string") {
-      throw new BadRequestError("Missing endpoint or keys");
-    }
+    // El body ya pasó por `subscribeSchema` (push.route.ts).
+    const { endpoint, keys } = req.body;
     await PushService.subscribe(currentUserId(req), { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } });
     res.status(204).send();
   } catch (error) {
@@ -25,11 +22,8 @@ export async function subscribe(req: Request, res: Response, next: NextFunction)
 
 export async function unsubscribe(req: Request, res: Response, next: NextFunction) {
   try {
-    const { endpoint } = req.body ?? {};
-    if (typeof endpoint !== "string") {
-      throw new BadRequestError("Missing endpoint");
-    }
-    await PushService.unsubscribe(endpoint);
+    // El body ya pasó por `unsubscribeSchema` (push.route.ts).
+    await PushService.unsubscribe(currentUserId(req), req.body.endpoint);
     res.status(204).send();
   } catch (error) {
     next(error);

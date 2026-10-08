@@ -7,6 +7,7 @@ import type { LoginCredentials, Session } from "@/features/auth/types/auth.types
 import { disconnectSocket } from "@/lib/socket-client";
 import { SESSION_EXPIRED_EVENT, setUnauthorizedHandler } from "@/lib/api-client";
 import { SessionExpiredModal } from "@/features/auth/components/SessionExpiredModal";
+import { teardownPushSubscription } from "@/features/notifications/utils/push-teardown";
 import { ForcedPasswordChange } from "@/features/auth/components/ForcedPasswordChange";
 import { useTranslation } from "@/i18n";
 
@@ -64,6 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setLocale } = useTranslation();
 
   const [session, setSession] = useState<Session | null>(null);
+  // Espejo de `session` para que `logout` lea el token vigente sin cambiar de
+  // identidad cada vez que la sesión se actualiza.
+  const sessionRef = useRef<Session | null>(null);
+  sessionRef.current = session;
   const [status, setStatus] = useState<AuthStatus>("idle");
   const [isSessionExpiredModalOpen, setIsSessionExpiredModalOpen] = useState(false);
 
@@ -147,6 +152,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [setLocale]);
 
   const logout = useCallback(() => {
+    // Dar de baja el push de este navegador antes de olvidar el token: sin esto,
+    // en un equipo compartido las notificaciones (con el texto de los mensajes)
+    // de la cuenta que salió seguirían apareciendo. Con el token ya vencido no se
+    // llama al backend: un 401 ahí abriría el aviso de "sesión expirada" encima
+    // de un cierre de sesión voluntario.
+    const current = sessionRef.current;
+    const tokenIsValid = current && (!current.user.exp || current.user.exp * 1000 > Date.now());
+    void teardownPushSubscription(tokenIsValid ? current.token : null);
+
     disconnectSocket();
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     setSession(null);

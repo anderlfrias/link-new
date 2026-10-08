@@ -56,6 +56,9 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Un miembro quitado de un grupo, o que salía de él, seguía recibiendo en tiempo real los mensajes nuevos mientras su conexión siguiera abierta.
 - El servidor reenviaba señales de llamada (WebRTC) a cualquier usuario, sin comprobar que emisor y destinatario fueran los participantes de una llamada en curso. Ahora el destino lo decide el servidor, y las señales de más de 64 KiB se descartan.
 - Los errores inesperados de una llamada ya no devuelven al cliente el mensaje interno (por ejemplo, el de un error de la base de datos).
+- Las suscripciones de notificaciones push aceptaban cualquier URL, y el servidor le enviaba peticiones a esa URL al notificar. Ahora solo se aceptan los servicios push de los navegadores (Google, Mozilla, Microsoft y Apple).
+- Un usuario podía dar de baja la suscripción push de otro si conocía su endpoint.
+- Las notificaciones push, con el texto de los mensajes, seguían llegando a un navegador después de cerrar sesión, y a los dispositivos de una cuenta desactivada o con la contraseña restablecida.
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
 - Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.

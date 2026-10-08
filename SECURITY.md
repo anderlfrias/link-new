@@ -76,3 +76,14 @@ socket y el almacenamiento S3 cambian con cada instalación.
 
 El backend usa `helmet` con su configuración por defecto, y los archivos se sirven con
 `X-Content-Type-Options: nosniff` y una CSP `sandbox`.
+
+### Notificaciones push
+
+Cada notificación hace un POST desde el servidor al endpoint que registró el navegador. Para que
+nadie pueda apuntar ese POST a otra URL, el backend solo acepta endpoints `https` (puerto 443) de
+los servicios push de los navegadores: `fcm.googleapis.com`, `android.googleapis.com`,
+`push.services.mozilla.com`, `notify.windows.com` y `push.apple.com`. Un navegador con otro
+servicio no puede suscribirse hasta que se agregue su dominio en
+`backend/src/modules/push/push-endpoint.ts`. La notificación lleva el texto del mensaje: se borran
+las suscripciones de una cuenta al desactivarla o al restablecer su contraseña, y el frontend da de
+baja la del navegador al cerrar sesión.

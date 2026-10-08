@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { AuthProvider, useAuth } from "./auth-provider";
 import { login as loginRequest } from "@/features/auth/api/auth.api";
 import { disconnectSocket } from "@/lib/socket-client";
+import { teardownPushSubscription } from "@/features/notifications/utils/push-teardown";
 import { createMockSession } from "@/test/test-utils";
 
 const mockReplace = vi.fn();
@@ -23,6 +24,10 @@ vi.mock("@/features/auth/api/auth.api", () => ({
 
 vi.mock("@/lib/socket-client", () => ({
   disconnectSocket: vi.fn(),
+}));
+
+vi.mock("@/features/notifications/utils/push-teardown", () => ({
+  teardownPushSubscription: vi.fn(),
 }));
 
 function AuthConsumer() {
@@ -188,6 +193,60 @@ describe("AuthProvider and useAuth", () => {
     expect(window.localStorage.getItem("chat-interno:session")).toBeNull();
     expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
     expect(screen.getByTestId("username").textContent).toBe("none");
+  });
+
+  it("logout da de baja el push con el token de la sesión antes de borrarla", async () => {
+    const mockSession = createMockSession({
+      token: "token-de-la-sesion",
+      user: {
+        ...createMockSession().user,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Logout" }));
+
+    expect(teardownPushSubscription).toHaveBeenCalledTimes(1);
+    expect(teardownPushSubscription).toHaveBeenCalledWith("token-de-la-sesion");
+  });
+
+  it("logout con el token vencido solo se desuscribe del navegador, sin llamar al backend", async () => {
+    const mockSession = createMockSession({
+      token: "token-vencido",
+      user: {
+        ...createMockSession().user,
+        // Vence dentro de un instante: la sesión se restaura, pero el reloj la pasa de largo.
+        exp: Math.floor(Date.now() / 1000) + 1,
+      },
+    });
+    window.localStorage.setItem("chat-interno:session", JSON.stringify(mockSession));
+
+    const user = userEvent.setup();
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    });
+
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    await user.click(screen.getByRole("button", { name: "Logout" }));
+    vi.restoreAllMocks();
+
+    expect(teardownPushSubscription).toHaveBeenCalledWith(null);
   });
 
   it("updateSessionUser updates user fields in memory and in localStorage", async () => {

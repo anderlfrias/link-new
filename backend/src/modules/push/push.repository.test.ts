@@ -8,6 +8,7 @@ vi.mock("../../config/prisma", () => ({
       upsert: vi.fn(),
       deleteMany: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
     },
   },
 }));
@@ -33,6 +34,42 @@ describe("push.repository", () => {
     });
   });
 
+  describe("findByEndpoint", () => {
+    it("busca la suscripción por su endpoint", async () => {
+      const sub = { id: "sub-1", userId: "u-1" };
+      vi.mocked(prisma.pushSubscription.findUnique).mockResolvedValue(sub as any);
+
+      const result = await PushRepository.findByEndpoint("https://push.example.com/ep-1");
+
+      expect(prisma.pushSubscription.findUnique).toHaveBeenCalledWith({
+        where: { endpoint: "https://push.example.com/ep-1" },
+      });
+      expect(result).toBe(sub);
+    });
+  });
+
+  describe("deleteByEndpointForUser", () => {
+    it("filtra por endpoint y userId", async () => {
+      vi.mocked(prisma.pushSubscription.deleteMany).mockResolvedValue({ count: 1 });
+
+      await PushRepository.deleteByEndpointForUser("https://push.example.com/ep-1", "u-1");
+
+      expect(prisma.pushSubscription.deleteMany).toHaveBeenCalledWith({
+        where: { endpoint: "https://push.example.com/ep-1", userId: "u-1" },
+      });
+    });
+  });
+
+  describe("deleteByUserId", () => {
+    it("borra todas las suscripciones del usuario", async () => {
+      vi.mocked(prisma.pushSubscription.deleteMany).mockResolvedValue({ count: 3 });
+
+      await PushRepository.deleteByUserId("u-1");
+
+      expect(prisma.pushSubscription.deleteMany).toHaveBeenCalledWith({ where: { userId: "u-1" } });
+    });
+  });
+
   describe("deleteByEndpoint", () => {
     it("deletes push subscription matching endpoint", async () => {
       vi.mocked(prisma.pushSubscription.deleteMany).mockResolvedValue({ count: 1 });
@@ -53,9 +90,18 @@ describe("push.repository", () => {
       const result = await PushRepository.findByUserIds(["u-1", "u-2"]);
 
       expect(prisma.pushSubscription.findMany).toHaveBeenCalledWith({
-        where: { userId: { in: ["u-1", "u-2"] } },
+        where: { userId: { in: ["u-1", "u-2"] }, user: { status: "ACTIVE" } },
       });
       expect(result).toBe(mockSubs);
+    });
+
+    it("solo devuelve suscripciones de cuentas activas", async () => {
+      vi.mocked(prisma.pushSubscription.findMany).mockResolvedValue([]);
+
+      await PushRepository.findByUserIds(["u-desactivado"]);
+
+      const { where } = vi.mocked(prisma.pushSubscription.findMany).mock.calls[0][0] as any;
+      expect(where.user).toEqual({ status: "ACTIVE" });
     });
   });
 });
