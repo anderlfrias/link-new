@@ -1,7 +1,7 @@
 import { AuditAction, ConversationType, GroupPermissionLevel, MessageType } from "@prisma/client";
 import { ADMIN_ROLE } from "../../constants/roles.constant";
 import { getIO } from "../../socket";
-import { conversationRoomName, userRoomName } from "../../socket/rooms";
+import { conversationRoomName, removeUserFromConversationRoom, userRoomName } from "../../socket/rooms";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/errors";
 import * as AuditService from "../audit/audit.service";
 import * as FileRepository from "../files/file.repository";
@@ -528,6 +528,10 @@ export async function removeMember(
   conversation.members.forEach((member) => {
     io.to(userRoomName(member.userId)).emit(CONVERSATION_EVENTS.UPDATED, { conversationId });
   });
+  // Recién ahora: el removido tiene que recibir MEMBER_REMOVED, que va a la room
+  // de la conversación. Después deja de recibir cualquier evento de ella, también
+  // si sale él mismo: el chequeo de membresía solo corre al unirse a la room.
+  removeUserFromConversationRoom(io, targetUserId, conversationId);
 
   return { conversationId, userId: targetUserId };
 }

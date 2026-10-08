@@ -7,6 +7,7 @@ import {
   joinUser,
   leaveConversation,
   leaveUser,
+  removeUserFromConversationRoom,
   userRoomName,
 } from "./rooms";
 
@@ -46,6 +47,19 @@ describe("socket rooms", () => {
       const socket = { leave: vi.fn() } as any;
       leaveUser(socket, "u-1");
       expect(socket.leave).toHaveBeenCalledWith("user:u-1");
+    });
+  });
+
+  describe("removeUserFromConversationRoom", () => {
+    it("saca todos los sockets del usuario de la room de la conversación", () => {
+      const socketsLeave = vi.fn();
+      const io = { in: vi.fn().mockReturnValue({ socketsLeave }) } as any;
+
+      removeUserFromConversationRoom(io, "u-1", "conv-9");
+
+      // Se resuelve por la room personal: alcanza a todas las pestañas del usuario.
+      expect(io.in).toHaveBeenCalledWith("user:u-1");
+      expect(socketsLeave).toHaveBeenCalledWith("conversation:conv-9");
     });
   });
 

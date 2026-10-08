@@ -53,6 +53,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Un usuario podía adjuntar a un mensaje un archivo que no tenía permitido ver, si conocía su id, y así obtener acceso a su contenido.
 - Al crear un grupo o cambiar su imagen se aceptaba el id de cualquier archivo, lo que daba a los miembros acceso a un archivo ajeno.
 - Los adjuntos de un mensaje borrado, o de un grupo eliminado, seguían descargables para los miembros que conservaban el enlace.
+- Un miembro quitado de un grupo, o que salía de él, seguía recibiendo en tiempo real los mensajes nuevos mientras su conexión siguiera abierta.
 - Actualización de dependencias con vulnerabilidades conocidas (`next`, `multer`, `engine.io`, `express`, `qs`, `proxy-addr`, entre otras).
 - Un cliente podía saltarse el límite de intentos de inicio de sesión, y falsear su IP en logs y auditoría, mandando su propia cabecera `CF-Connecting-IP`.
 - Los errores de body-parser se logueaban con el body crudo del request, que podía incluir contraseñas.

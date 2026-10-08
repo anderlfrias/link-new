@@ -11,11 +11,14 @@ import { BadRequestError, ForbiddenError, NotFoundError } from "../../utils/erro
 
 const mockEmit = vi.fn();
 const mockTo = vi.fn(() => ({ to: mockTo, emit: mockEmit }));
+const mockSocketsLeave = vi.fn();
+const mockIn = vi.fn(() => ({ socketsLeave: mockSocketsLeave }));
 
 vi.mock("../../socket", () => ({
   getIO: vi.fn(() => ({
     to: mockTo,
     emit: mockEmit,
+    in: mockIn,
   })),
 }));
 
@@ -873,6 +876,65 @@ describe("conversation.service", () => {
 
       expect(result).toEqual({ conversationId: "c-1", userId: "u-1" });
       expect(ConversationRepository.removeMember).toHaveBeenCalledWith("c-1", "u-1");
+    });
+
+    it("saca de la room de la conversación a los sockets del miembro quitado, después de avisarle", async () => {
+      const group = buildMockConversation({
+        members: [
+          buildMockMember({ userId: "u-admin", isAdmin: true }),
+          buildMockMember({ userId: "u-target" }),
+        ],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanRemoveMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+      } as any);
+
+      await removeMember("u-admin", "c-1", "u-target", []);
+
+      expect(mockIn).toHaveBeenCalledWith("user:u-target");
+      expect(mockSocketsLeave).toHaveBeenCalledWith("conversation:c-1");
+      // El removido recibe MEMBER_REMOVED (que viaja por la room) antes de salir de ella.
+      const memberRemovedCall = mockEmit.mock.calls.findIndex(([event]) => event === CONVERSATION_EVENTS.MEMBER_REMOVED);
+      expect(memberRemovedCall).toBeGreaterThanOrEqual(0);
+      expect(mockEmit.mock.invocationCallOrder[memberRemovedCall]).toBeLessThan(
+        mockSocketsLeave.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("también saca de la room a quien sale del grupo", async () => {
+      const group = buildMockConversation({
+        members: [buildMockMember({ userId: "u-1" }), buildMockMember({ userId: "u-2" })],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanLeaveGroup: GroupPermissionLevel.ALL_MEMBERS,
+      } as any);
+
+      await removeMember("u-1", "c-1", "u-1", []);
+
+      expect(mockIn).toHaveBeenCalledWith("user:u-1");
+      expect(mockSocketsLeave).toHaveBeenCalledWith("conversation:c-1");
+    });
+
+    it("no toca las rooms si la remoción se rechaza", async () => {
+      const group = buildMockConversation({
+        members: [
+          buildMockMember({ userId: "u-regular", isAdmin: false }),
+          buildMockMember({ userId: "u-target" }),
+        ],
+      });
+      vi.mocked(ConversationRepository.findActiveById).mockResolvedValue(group);
+      vi.mocked(ConversationRepository.findGroupSettings).mockResolvedValue(null);
+      vi.mocked(SettingsService.resolveEffectiveGroupSettings).mockResolvedValue({
+        whoCanRemoveMembers: GroupPermissionLevel.GROUP_ADMINS_ONLY,
+      } as any);
+
+      await expect(removeMember("u-regular", "c-1", "u-target", [])).rejects.toThrow(ForbiddenError);
+
+      expect(mockSocketsLeave).not.toHaveBeenCalled();
     });
 
     it("rechaza salir del grupo cuando whoCanLeaveGroup es GROUP_ADMINS_ONLY y el usuario es miembro regular", async () => {

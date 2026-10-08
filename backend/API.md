@@ -384,11 +384,11 @@ Solo `GROUP`. Ids que ya son miembros se ignoran en silencio; si no queda ningú
 
 ### 4.6 `DELETE /:id/members/:userId` — Quitar miembro / salir
 
-- `:userId` = tu propio id → salir de la conversación, siempre permitido a cualquier miembro, sin importar la configuración.
+- `:userId` = tu propio id → salir de la conversación, sujeto a `AppSettings.whoCanLeaveGroup` (ver 4.8) — `403` si no tenés permiso.
 - `:userId` = otro usuario → sujeto a `AppSettings.whoCanRemoveMembers` (ver 4.8) — `403` si no tenés permiso.
 - No aplica a `PRIVATE` (`400` siempre).
 
-→ `200` `{ "conversationId": "...", "userId": "..." }`. Emite `conversation:member_removed` a la room de la conversación **y** `conversation:updated` a la room personal de cada miembro (incluido el removido) — la mayoría no tiene la conversación abierta, la room sola no les llega. Este es el endpoint que usa "Salir del grupo" en la UI.
+→ `200` `{ "conversationId": "...", "userId": "..." }`. Emite `conversation:member_removed` a la room de la conversación **y** `conversation:updated` a la room personal de cada miembro (incluido el removido) — la mayoría no tiene la conversación abierta, la room sola no les llega. Después de avisar, el servidor saca todos los sockets del removido (o de quien salió) de la room de la conversación: deja de recibir en vivo cualquier evento de ella, aunque tenga el chat abierto. Este es el endpoint que usa "Salir del grupo" en la UI.
 
 ### 4.7 `DELETE /:id` — Borrar conversación
 

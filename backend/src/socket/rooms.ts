@@ -40,6 +40,16 @@ export function disconnectUserSockets(io: AppServer, userId: string): void {
   io.in(userRoomName(userId)).disconnectSockets(true);
 }
 
+/// Saca de la room de una conversación a todos los sockets de un usuario
+/// (todas sus pestañas): al quitarlo de un grupo o cuando sale él. La
+/// membresía solo se comprueba al unirse (`conversation:join`), así que sin
+/// esto el usuario seguía recibiendo en vivo los mensajes nuevos del grupo del
+/// que ya no es parte. Se pasa por la room personal (`user:<id>`) porque todo
+/// socket autenticado está en ella, igual que en `disconnectUserSockets`.
+export function removeUserFromConversationRoom(io: AppServer, userId: string, conversationId: string): void {
+  io.in(userRoomName(userId)).socketsLeave(conversationRoomName(conversationId));
+}
+
 /// Ids de usuario (internos) actualmente conectados a la room de una
 /// conversación — quién está "en vivo" para recibir un mensaje ahora mismo
 /// (ver `markDelivered` en conversation.service.ts). Único punto autorizado a
