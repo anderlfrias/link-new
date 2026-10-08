@@ -292,6 +292,12 @@ Documentación técnica:
 
 ## Estado del proyecto
 
+Pendiente:
+
+- Los archivos de más de 32 MB solo se pueden subir con almacenamiento S3: la subida por partes no
+  existe para el almacenamiento en disco.
+- El repositorio no tiene linter ni formateador configurados.
+
 Limitaciones de seguridad conocidas (el detalle está en
 [SECURITY.md](SECURITY.md#limitaciones-conocidas)):
 
