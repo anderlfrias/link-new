@@ -34,7 +34,7 @@ jobs:
       matrix:
         image: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # El historial completo, para comprobar que el tag está en main.
           fetch-depth: 0
