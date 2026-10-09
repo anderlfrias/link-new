@@ -569,7 +569,7 @@ Forma de un mensaje:
 
 **A propósito nunca incluye nada de la conversación de origen** (ni su id, ni su tipo, ni su nombre): el destino de un reenvío puede tener miembros que no pertenecen a esa conversación de origen, así que devolver esos datos filtraría de qué chat o grupo salió el mensaje a gente que no tiene por qué saberlo — es información privada de quien reenvía, no del contenido en sí. Por el mismo motivo, el criterio para el cliente **no** es mostrar siempre `senderName`: solo tiene sentido atribuirlo cuando el destino es tu propia conversación `SELF` ("Mensajes guardados") — ahí el reenvío es privado tuyo, así que ver quién lo escribió originalmente es útil y no expone nada a nadie más. En cualquier otro destino, mostrar solo que el mensaje fue reenviado (sin nombre) — ver `frontend/src/features/messages/components/MessageBubble.tsx`. A diferencia de `replyTo`, un reenvío es una **copia independiente**: `content`/`files` de este mensaje son propios (se copiaron del original al reenviar), no dependen de que el original siga existiendo — solo `forwardedFrom.senderName` se resuelve en vivo, así que si el remitente original cambia su nombre después, este reenvío ya hecho lo refleja la próxima vez que se lea.
 
-Nota sobre `files[].file`: acá sí vienen `path`/`storedName` tal cual están en la base (a diferencia de la respuesta de `POST /api/v1/files`, que devuelve `url` ya armada) — para armar la URL de descarga desde acá, prefijá `path` con `/uploads/`, ej. `http://localhost:4000/uploads/chat/....jpg`. Si `deletedAt` no es `null`, el archivo fue eliminado (ver sección 13.2) — el contenido ya no existe, pero el resto de los campos (`originalName`, `size`, etc.) siguen siendo válidos para mostrar un placeholder tipo "archivo eliminado" en vez de intentar cargarlo.
+Nota sobre `files[].file`: cada archivo viene transformado a su forma pública segura (`StoredFileResponse`), incluyendo su URL firmada (`/api/v1/files/:id/content?t=...`) para descarga o visualización directa (con token HMAC de 1 hora de validez). Campos de infraestructura interna como `path`, `storedName`, `checksum` o `provider` no se exponen al cliente. Si `deletedAt` no es `null`, el archivo fue eliminado (ver sección 13.2) — el contenido ya no existe, pero el resto de los campos (`originalName`, `size`, etc.) siguen siendo válidos para mostrar un placeholder tipo "archivo eliminado" en vez de intentar cargarlo.
 
 ### 6.1 `POST /` — Enviar mensaje
 
@@ -1058,8 +1058,8 @@ Query params, todos opcionales: `before` (cursor por id), `limit` (default 50, m
   "files": [
     {
       "id": "file-uuid", "originalName": "foto.jpg", "mimeType": "image/jpeg", "extension": "jpg",
-      "size": 245678, "url": "/uploads/...", "createdAt": "...",
-      "createdBy": { "id": "user-uuid", "name": "Ana", "email": "ana@x.com" },
+      "size": 245678, "url": "/api/v1/files/file-uuid/content?t=...", "createdAt": "...",
+      "createdBy": { "id": "user-uuid", "name": "Ana", "email": "ana@example.com" },
       "usage": { "avatarOfUserCount": 0, "groupImageOfConversationCount": 0, "messageAttachmentCount": 3 }
     }
   ],

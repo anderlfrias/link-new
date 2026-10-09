@@ -291,33 +291,34 @@ diseño completo está en [`docs/design/LARGE_FILES_PLAN.md`](docs/design/LARGE_
 
 Documentación técnica:
 
-- [`backend/README.md`](backend/README.md): arquitectura y modelo de datos.
-- [`backend/API.md`](backend/API.md): referencia de la API y de los eventos de socket.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): arquitectura global del sistema, flujos de datos, seguridad y limitaciones operativas.
+- [`backend/README.md`](backend/README.md): arquitectura del backend y modelo de datos relacional.
+- [`backend/API.md`](backend/API.md): referencia de la API RESTful y de los eventos de Socket.IO.
 - Los `README.md` de cada módulo en `backend/src/modules/`.
-- [`docs/design/`](docs/design/): decisiones de diseño (logging y auditoría, archivos grandes,
-  testing, autenticación local).
+- [`docs/auth-providers.md`](docs/auth-providers.md): guía para crear e integrar proveedores de autenticación externos como plugins.
+- [`docs/design/`](docs/design/): documentos de diseño técnico (logging y auditoría, archivos grandes, testing, autenticación local).
 
-## Estado del proyecto
+## Estado del proyecto y Roadmap
 
-Pendiente:
+Líneas de trabajo planificadas:
 
-- Los archivos de más de 32 MB solo se pueden subir con almacenamiento S3: la subida por partes no
-  existe para el almacenamiento en disco.
-- El repositorio no tiene linter ni formateador configurados.
+- **Escalabilidad horizontal**: adaptador distribuido para Socket.IO (Redis Streams o Pub/Sub) y store compartido de rate limiting para permitir múltiples instancias del backend en clúster.
+- **Subida por partes en disco**: soporte para subida chunked multipart directamente sobre disco local sin depender de S3 para archivos superiores a 32 MB.
+- **Herramientas de calidad de código**: configuración e integración de linter y formateador homogéneos (ESLint/Prettier o Biome) en el monorepo y la CI.
+- **Proveedores de identidad estándar**: soporte directo para OpenID Connect (OIDC) y SAML 2.0 como plugins de autenticación.
+- **Llamadas grupales**: servidor de medios centralizado (SFU) para audio y video en conferencias multipersona.
 
-Limitaciones de seguridad conocidas (el detalle está en
+Limitaciones operativas y de seguridad conocidas (el detalle está en
 [SECURITY.md](SECURITY.md#limitaciones-conocidas)):
 
-- El directorio de usuarios muestra el correo de todas las cuentas activas, y los avatares se
-  descargan sin autenticación.
-- Los mensajes no tienen cifrado de extremo a extremo.
-- Las notificaciones push llevan el texto del mensaje, y siguen activas si la sesión vence sin
-  cerrar sesión.
-- Las URLs firmadas de archivos valen 1 hora y son portadoras.
-- La restricción de tipos de archivo mira el contenido real solo de los formatos con firma conocida;
-  los formatos de texto se validan por el tipo declarado.
-- El token de sesión vive en `localStorage` y la CSP no restringe scripts.
-- Los límites de frecuencia viven en memoria: el backend tiene que correr como una sola instancia.
+- El backend debe ejecutarse como **una sola instancia** (los límites de frecuencia y Socket.IO residen en memoria).
+- Los archivos mayores a 32 MB requieren almacenamiento S3 configurado.
+- El directorio de usuarios muestra el correo de todas las cuentas activas, y los avatares se descargan sin autenticación previa.
+- Los mensajes no cuentan con cifrado de extremo a extremo (E2EE): viajan cifrados en tránsito y se almacenan en claro en la base de datos para auditoría y moderación.
+- Las notificaciones push llevan el texto del mensaje y permanecen activas hasta el cierre de sesión o revocación.
+- Las URLs firmadas de descarga de archivos tienen una validez de 1 hora y son portadoras.
+- La validación por contenido binario real cubre los formatos más comunes; los formatos de texto se validan por el tipo declarado.
+- El token de sesión se almacena en `localStorage` del navegador.
 
 ## Contribuir y seguridad
 

@@ -115,16 +115,15 @@ BSD. Estas tienen licencias que conviene conocer (relevamiento del 2026-10-06 co
 
 ## Marca: nombre, logo e íconos
 
-El nombre LINK, el logo y los íconos son assets de marca y se tratan aparte del código. No quedan
-cubiertos por la licencia que se elija para el código, y este repositorio no define su titularidad
-ni sus condiciones de uso. Son estos archivos:
+El nombre **LINK**, el logotipo y los íconos asociados constituyen la identidad visual y los activos de marca del proyecto, y se tratan de forma independiente del código fuente:
 
-- `frontend/public/brand/` (logo, wordmark y lockups)
-- `frontend/public/link-logo.png`
-- `frontend/public/icons/` (íconos de la PWA)
-- `frontend/src/app/icon.png` y `frontend/src/app/apple-icon.png`
-- `frontend/public/chat-pattern-light.svg` y `frontend/public/chat-pattern-dark.svg` (fondo del chat,
-  dibujado con la marca)
+- **Licencia de código vs. Marca**: La licencia [AGPL-3.0-only](LICENSE) cubre exclusivamente el código fuente del software. No otorga derechos de marca comercial, nombres comerciales ni transfiere automáticamente licencias sobre los elementos gráficos de la identidad visual.
+- **Origen del Logotipo**: El isotipo/logo del proyecto (`frontend/public/link-logo.png` y sus variantes en `frontend/public/brand/`) fue generado utilizando la herramienta de inteligencia artificial **ChatGPT** (OpenAI). Esta mención describe el origen técnico de la imagen; no atribuye titularidad ni derechos propietarios a OpenAI, ni afirma exclusividad comercial no confirmada sobre los diseños resultantes.
+- **Archivos de marca e identidad visual**:
+  - `frontend/public/brand/` (logotipo, isotipo, wordmark y composiciones)
+  - `frontend/public/link-logo.png`
+  - `frontend/public/icons/` (íconos de aplicación y PWA)
+  - `frontend/src/app/icon.png` y `frontend/src/app/apple-icon.png`
+  - `frontend/public/chat-pattern-light.svg` y `frontend/public/chat-pattern-dark.svg` (patrón decorativo de fondo)
 
-Si hacés un fork para distribuirlo con otra identidad, reemplazá esos archivos y el componente
-`frontend/src/components/brand/Logo.tsx`.
+Cualquier bifurcación (*fork*) o redistribución de LINK con una denominación o identidad diferente debe reemplazar estos archivos y adaptar el componente `frontend/src/components/brand/Logo.tsx`.

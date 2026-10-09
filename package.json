@@ -1,6 +1,6 @@
 {
   "name": "link",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "engines": {
@@ -28,6 +28,17 @@
     "version:sync": "node scripts/sync-version.js"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "mysql2": "3.24.5",
+    "shell-quote": "^1.12.0",
+    "prisma": {
+      "mysql2": "3.24.5",
+      "@prisma/config": {
+        "deepmerge-ts": "8.0.2"
+      }
+    }
   }
 }

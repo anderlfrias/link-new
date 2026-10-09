@@ -13,8 +13,8 @@ describe("public-settings.api", () => {
 
   it("getPublicSettings llama a /v1/settings/public con el token", async () => {
     const mockSettings = {
-      appName: "Organización de ejemplo",
-      vapidPublicKey: "fake-vapid",
+      maxUploadSizeMb: 32,
+      chunkedUploads: false,
     };
     vi.mocked(apiRequest).mockResolvedValueOnce(mockSettings);
 

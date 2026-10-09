@@ -283,10 +283,10 @@ Indica en qué proveedor de almacenamiento vive físicamente ese archivo (`FileP
 
 Para optimizar el uso de recursos y no saturar el event loop ni la memoria de Node.js, el sistema implementa dos caminos de subida:
 
-1. **Subida Directa (≤ 16 MiB)**:
+1. **Subida Directa (≤ 32 MB en disco / ≤ 16 MiB en S3)**:
    * Endpoint: `POST /api/v1/files`.
-   * El archivo viaja como `multipart/form-data` al backend de Express (`multer`), con un techo duro de seguridad de 32 MB (`ABSOLUTE_MAX_UPLOAD_BYTES`).
-   * Se utiliza para avatares, fotos de grupo, notas de voz y adjuntos estándar pequeños.
+   * El archivo viaja como `multipart/form-data` al backend de Express (`multer`). Con almacenamiento en disco (`LOCAL`), la subida directa permite archivos de hasta **32 MB** (techo de seguridad `ABSOLUTE_MAX_UPLOAD_BYTES`), ya que la subida por partes solo está disponible con S3. Con almacenamiento `S3`, los archivos de hasta 16 MiB usan esta vía directa y los mayores a 16 MiB usan la subida chunked.
+   * Se utiliza para avatares, fotos de grupo, notas de voz y adjuntos estándar.
    * Se guarda en el proveedor configurado en `STORAGE_WRITE_PROVIDER` (`LOCAL` o `S3`).
 
 2. **Subida Chunked / Multipart (> 16 MiB hasta 2 GB)**:

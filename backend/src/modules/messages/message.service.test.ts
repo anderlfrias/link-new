@@ -276,7 +276,7 @@ describe("message.service", () => {
           id: "u-contact",
           name: "Directora de RR.HH.",
           email: "rrhh@example.org",
-          avatarUrl: "https://atacante.example/pixel.png",
+          avatarUrl: "https://atacante.example.com/pixel.png",
         });
 
         await sendMessage("u-1", "conv-1", { content: forged, type: "CONTACT" });
