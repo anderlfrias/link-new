@@ -38,7 +38,7 @@ jobs:
         with:
           # El historial completo, para comprobar que el tag está en main.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
       # Un tag que no coincide con la versión de los package.json publicaría una imagen con el
