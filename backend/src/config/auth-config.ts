@@ -4,7 +4,7 @@
 ///
 /// `sessionSecret` firma las sesiones de LINK (HS256) en **todos** los modos: LINK emite
 /// siempre su propio token, también cuando el login lo valida un proveedor externo
-/// (AUTH_PROVIDERS_PLAN, decisión 1). El token del proveedor no sale del login.
+/// (ver docs/auth-providers.md). El token del proveedor no sale del login.
 export interface AuthConfig {
   sessionSecret: string;
 }

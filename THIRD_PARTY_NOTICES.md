@@ -101,8 +101,8 @@ de GIPHY para desarrolladores. Ver
 ## Dependencias npm
 
 Casi todas las dependencias de producción del backend y del frontend usan MIT, Apache-2.0, ISC o
-BSD. Estas tienen licencias que conviene conocer (relevamiento del 2026-10-06 con
-`npm ls --omit=dev --all --parseable --workspace=<backend|frontend>`):
+BSD. Estas tienen licencias que conviene conocer (relevamiento del 2026-10-09 sobre las dependencias
+de producción del `package-lock.json`):
 
 | Paquete | Licencia | Por qué está |
 |---|---|---|
@@ -110,7 +110,6 @@ BSD. Estas tienen licencias que conviene conocer (relevamiento del 2026-10-06 co
 | `sharp` y su binario `@img/sharp-libvips-*` | Apache-2.0; el binario de libvips, LGPL-3.0-or-later | Dependencia opcional de Next.js para optimizar imágenes de `next/image`. Va dentro de la imagen Docker del frontend. |
 | `caniuse-lite` | CC BY 4.0 | Datos de compatibilidad de navegadores que usa Next.js. |
 | `elkjs` | EPL-2.0 | Lo trae Prisma Studio, incluido en el CLI `prisma`. |
-| `seq-queue` | sin campo `license` en su `package.json` | Lo trae `mysql2`, que viene con el CLI `prisma`. |
 | Estilos de `@dicebear/*` | MIT y CC BY 4.0, o licencia propia del autor | Ver [Avatares: DiceBear](#avatares-dicebear). |
 
 ## Marca: nombre, logo e íconos

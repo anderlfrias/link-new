@@ -22,8 +22,9 @@ Seguir [Desarrollo local](README.md#desarrollo-local-sin-docker) en el README: N
 
 3. Agregar una entrada en la sección `[Unreleased]` de [CHANGELOG.md](CHANGELOG.md) si el cambio
    es visible para quien usa o instala LINK (ver [VERSIONING.md](VERSIONING.md)).
-4. Abrir un pull request. La CI corre tests, builds, la verificación de migraciones y el build de
-   las imágenes Docker, y tiene que pasar entera.
+4. Abrir un pull request. La CI corre tests, builds, la verificación de migraciones, la auditoría de
+   las dependencias de producción (`npm audit --omit=dev --audit-level=high`) y el build de las
+   imágenes Docker, y tiene que pasar entera.
 
 Para cambios grandes, conviene abrir antes un issue para acordar el enfoque.
 

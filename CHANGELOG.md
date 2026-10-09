@@ -29,6 +29,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - El personalizador de avatar acredita título, autor, fuente y licencia de los estilos de DiceBear bajo CC BY 4.0.
 - Variables `TRUST_PROXY` y `TRUST_CF_CONNECTING_IP` para indicar qué proxies hay delante del backend (ver `SECURITY.md`).
 - Cabeceras de seguridad en todas las respuestas del frontend (`Content-Security-Policy` con `frame-ancestors`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`).
+- La CI audita las dependencias de producción (`npm audit --omit=dev --audit-level=high`) y comprueba que la versión de los `package.json`, el lockfile, la interfaz y el CHANGELOG coincidan, y que los `overrides` de `package.json` se reflejen en `package-lock.json`.
+- El workflow de publicación de imágenes se puede ejecutar a mano (Actions > Publicar imágenes > Run workflow): construye las dos imágenes con los mismos pasos, pero no publica nada. Sirve para probarlo sin crear un tag.
 
 ### Cambiado
 - Con un proveedor externo, el directorio de contactos se sincroniza al iniciar sesión (a lo sumo una vez cada 10 minutos, en segundo plano) y no al abrir la lista de usuarios: `GET /api/v1/users` y `GET /api/v1/admin/users` son lecturas de la base de LINK y no dependen de que el proveedor responda.
@@ -60,6 +62,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Los documentos de diseño se movieron a `docs/design/`.
 - Ejemplos, tests y nombres de colores de avatar usan datos genéricos.
 - Actualización de Next.js a 16.3.8 y de Prisma a 7.10.0.
+- Los workflows usan `ubuntu-24.04` en lugar de `ubuntu-latest`, y las imágenes Docker parten de una imagen base de Node.js fijada por digest (Dependabot actualiza el tag y el digest juntos), para que el mismo commit construya siempre lo mismo. El workflow de publicación exige además que el tag esté en `main`.
 
 ### Corregido
 - `ecosystem.config.js` levanta el frontend en el puerto 3000 (antes 3027), el que usan el README y `docker-compose.yml`.
@@ -94,6 +97,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - La subida de archivos aceptaba campos de texto sin límite de cantidad, guardados en memoria.
 - La importación de GIPHY seguía redirecciones sin revalidar el host y leía el archivo entero antes de comprobar el tamaño.
 - El frontend ya no envía la cabecera `X-Powered-By`.
+- El CLI de Prisma 7.10, que corre `migrate deploy` al arrancar el contenedor del backend, fija versiones con vulnerabilidades conocidas de `deepmerge-ts` (anteriores a 8.0.0) y de `mysql2` (hasta 3.23.0), y Prisma no tiene todavía una versión estable que las actualice. Se reemplazan con `overrides` en el `package.json` raíz (`deepmerge-ts` 8.0.2, `mysql2` 3.24.5), ya reflejados en `package-lock.json` y, por lo tanto, en las imágenes Docker: `npm audit` queda sin avisos. El riesgo para LINK era bajo (el CLI solo se conecta a PostgreSQL y lee `prisma.config.ts`, que es del administrador). Retirar los `overrides` cuando Prisma las actualice.
 
 ### Eliminado
 - `graphify-out/` (salida generada localmente) del repositorio, archivos sin uso de la plantilla de Next.js y `TODO.md`.

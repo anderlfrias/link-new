@@ -94,7 +94,7 @@ function assertValidIdentity(provider: AuthProvider, identity: AuthenticateResul
 /// Inicio de sesión con un proveedor externo. El proveedor solo valida las credenciales
 /// y dice quién es la persona; el resto es de LINK, igual para cualquiera: guarda la
 /// cuenta (con los roles que conoce), rechaza las desactivadas y emite su propia
-/// sesión. El token del proveedor no sale de acá (AUTH_PROVIDERS_PLAN, decisión 1).
+/// sesión. El token del proveedor no sale de acá (ver docs/auth-providers.md).
 ///
 /// Devuelve lo mismo que el login local (`loginWithLocalAccount`) para que el
 /// controlador audite y responda sin distinguir. Los errores son los de `loginErrorFor`

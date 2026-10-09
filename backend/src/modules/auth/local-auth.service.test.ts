@@ -58,6 +58,10 @@ import {
 } from "./local-auth.service";
 import { hashPassword, verifyPassword } from "./password";
 
+// Estos tests ejecutan scrypt de verdad (N=2^14, r=8, p=5) y varios hacen más de un login: con la
+// cobertura activa y un runner lento, los 5 s por defecto no alcanzaban y el test fallaba al azar.
+vi.setConfig({ testTimeout: 30_000 });
+
 const DEFAULT_POLICY = {
   sessionTtlHours: 12,
   minLength: 12,

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test-and-build:
     name: Tests y build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +42,7 @@ jobs:
 
   migrations:
     name: Migraciones al día con el schema
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine
@@ -75,10 +75,23 @@ jobs:
 
   docker:
     name: Imágenes Docker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Build backend
         run: docker build -f backend/Dockerfile -t link-backend:ci .
       - name: Build frontend
         run: docker build -f frontend/Dockerfile -t link-frontend:ci .
+
+  audit:
+    name: Auditoría de dependencias
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      # Solo las dependencias de producción (las que van a las imágenes) y solo severidad alta o
+      # crítica. Lee el package-lock.json, así que no necesita `npm ci`. Si falla por un aviso nuevo
+      # que no tiene arreglo compatible, evaluar el impacto real antes de silenciarlo (SECURITY.md).
+      - run: npm audit --omit=dev --audit-level=high

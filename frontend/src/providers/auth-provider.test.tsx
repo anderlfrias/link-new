@@ -268,8 +268,10 @@ describe("AuthProvider and useAuth", () => {
       token: "token-vencido",
       user: {
         ...createMockSession().user,
-        // Vence dentro de un instante: la sesión se restaura, pero el reloj la pasa de largo.
-        exp: Math.floor(Date.now() / 1000) + 1,
+        // Vence dentro de poco: la sesión se restaura, pero el reloj (que se adelanta 60 s
+        // más abajo) la pasa de largo. Con un margen de 1 s, un runner lento la vencía antes
+        // de restaurarla y el test fallaba de forma intermitente.
+        exp: Math.floor(Date.now() / 1000) + 30,
       },
     });
     window.localStorage.setItem("link:session", JSON.stringify(mockSession));

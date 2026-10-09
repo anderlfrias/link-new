@@ -43,7 +43,7 @@ describe("auth.repository", () => {
     vi.resetAllMocks();
   });
 
-  describe("upsertExternalUser — cómo se reconoce a la persona (AUTH_PROVIDERS_PLAN §4.7)", () => {
+  describe("upsertExternalUser — cómo se reconoce a la persona", () => {
     const P = "mi-proveedor";
     const person = { externalId: "ext-1", email: "Ana@Example.com", username: "ana", fullName: "Ana del Proveedor" };
 

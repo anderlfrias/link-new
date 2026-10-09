@@ -86,7 +86,7 @@ export async function savePasswordChange(
 /// Crea o actualiza la cuenta de una persona del proveedor externo `providerId`
 /// (login o sincronización del directorio).
 ///
-/// Cómo se la reconoce (AUTH_PROVIDERS_PLAN, §4.7): primero por `externalId`
+/// Cómo se la reconoce (ver docs/auth-providers.md): primero por `externalId`
 /// (único en la instalación); si no, por correo exacto; si no, por correo sin
 /// distinguir mayúsculas. Así una cuenta creada en modo local conserva su
 /// `User.id` (y con él su historial) cuando la instalación pasa a un proveedor

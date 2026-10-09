@@ -163,8 +163,14 @@ git push origin main --follow-tags
 ```
 
 Al llegar el tag `v*`, el workflow [Publicar imágenes](.github/workflows/release-images.yml) verifica que el tag
-coincida con la versión de los `package.json` y publica en GHCR `link-backend` y `link-frontend` con ese número
-de versión (`X.Y.Z` y `X.Y`; `latest` solo en versiones finales).
+esté en `main` y coincida con la versión (`package.json` de la raíz, backend y frontend, `package-lock.json`,
+`APP_VERSION` y el `CHANGELOG.md`: `scripts/release-consistency.test.js`) y publica en GHCR `link-backend` y
+`link-frontend` con ese número de versión (`X.Y.Z` y `X.Y`; `latest` solo en versiones finales).
+
+Para probar el workflow sin publicar nada (por ejemplo, después de actualizar una acción), ejecutarlo a mano
+desde Actions > Publicar imágenes > Run workflow: hace los mismos pasos y construye las dos imágenes, pero no
+se loguea en GHCR ni las sube. La primera vez que se publica una imagen, GHCR la crea como **privada**: para
+que cualquiera pueda hacer `docker pull`, cambiar su visibilidad a pública en la configuración del paquete.
 
 ---
 

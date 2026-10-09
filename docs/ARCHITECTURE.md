@@ -45,7 +45,7 @@ graph TD
 - **Servidor Socket.IO**: Vinculado al mismo servidor HTTP del backend.
 - **Autenticación en el Handshake**: Se valida el `session_jwt` suministrado en `socket.handshake.auth.token`.
 - **Estructura de Rooms**:
-  - `user:<userId>`: Canal privado de cada usuario para presencia, notificaciones personales, recepción de llamadas y señalización.
+  - `user:<userId>`: Canal privado de cada usuario para las actualizaciones de su lista de conversaciones, las notificaciones personales, la recepción de llamadas y la señalización. LINK todavía no emite eventos de presencia (usuario en línea o desconectado).
   - `conversation:<conversationId>`: Canal por conversación para difusión de mensajes nuevos (`message:created`), ediciones, eliminaciones, reacciones y eventos efímeros ("escribiendo...").
 - **Señalización WebRTC (Llamadas 1 a 1)**:
   - Las llamadas de audio y video usan Socket.IO exclusivamente como canal de señalización (ofertas, respuestas y candidatos ICE).
@@ -143,7 +143,7 @@ El modelo de datos está definido en `backend/prisma/schema.prisma` y gestionado
 - **`ConversationMember`**: Pertenencia y permisos de un usuario en una conversación, con control de entrega (`lastDeliveredMessageId`) y lectura (`lastReadMessageId`).
 - **`Message`**: Mensaje persistido (`type: TEXT | SYSTEM | STICKER | CONTACT | POLL | CALL`). Almacena contenido, relaciones a hilos/respuestas (`replyToId`), reenvíos (`forwardedFromId`) y marcas de eliminación lógica.
 - **`StoredFile` y `MessageFile`**: Separación estricta entre metadatos del archivo físico y su asociación con uno o más mensajes.
-- **`ChatAuditLog`**: Registro inmutable de eventos normativos del sistema (acceso, cambios administrativos, moderación).
+- **`AuditLog`**: Registro de auditoría de eventos normativos del sistema (acceso, cambios administrativos, moderación). La aplicación solo agrega registros y nunca los modifica; únicamente la retención configurable (`AppSettings.auditLogRetentionDays`, desactivada por defecto) los borra.
 - **`AppSettings`**: Configuración dinámica de la plataforma editable en tiempo de ejecución por administradores sin necesidad de reiniciar el servicio.
 
 ---
@@ -161,7 +161,7 @@ El modelo de datos está definido en `backend/prisma/schema.prisma` y gestionado
    - Solo se aceptan suscripciones dirigidas a endpoints oficiales HTTPS de navegadores reconocidos (`fcm.googleapis.com`, `push.services.mozilla.com`, `notify.windows.com`, `push.apple.com`).
 4. **Políticas de Privacidad de Logs y Auditoría**:
    - **Regla estricta**: Nunca se registran contraseñas, tokens JWT, payloads HTTP crudos ni el contenido de los mensajes de chat.
-   - Separación categórica entre logs operacionales (Pino) y el audit trail normativo (`ChatAuditLog`).
+   - Separación categórica entre logs operacionales (Pino) y el audit trail normativo (`AuditLog`).
    - Identificación de actores mediante UUID interno en logs, resguardando datos personales.
 
 ---

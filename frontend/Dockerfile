@@ -11,7 +11,9 @@
 # Las NEXT_PUBLIC_* se embeben en el bundle durante el build: cambiarlas
 # requiere reconstruir la imagen, no alcanza con reiniciar el contenedor.
 
-FROM node:24-bookworm-slim AS base
+# La imagen base va fijada por digest para que el mismo commit construya siempre lo mismo.
+# Dependabot (docker) actualiza el tag y el digest juntos.
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
@@ -34,7 +36,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
   NEXT_TELEMETRY_DISABLED=1
 RUN npm run build --workspace=frontend && rm -rf frontend/.next/cache
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS runtime
 ENV NODE_ENV=production \
   NEXT_TELEMETRY_DISABLED=1 \
   PORT=3000

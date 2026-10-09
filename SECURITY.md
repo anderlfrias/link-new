@@ -23,8 +23,10 @@ Solo se corrigen vulnerabilidades sobre la última versión publicada (rama `mai
 
 - **HTTPS obligatorio en producción.** Las llamadas (cámara y micrófono) y las notificaciones
   push solo funcionan en un contexto seguro, y el token de sesión viaja en cada request.
-  Configurar HSTS (`Strict-Transport-Security`) en el proxy que termina TLS. La app no lo envía
-  porque también corre por HTTP en desarrollo o en una LAN.
+  Configurar HSTS (`Strict-Transport-Security`) en el proxy que termina TLS. El frontend no lo
+  envía, porque también corre por HTTP en desarrollo o en una LAN. El backend sí: `helmet` lo manda
+  con su valor por defecto (un año, con `includeSubDomains`), y el navegador solo lo respeta sobre
+  HTTPS. Si el proxy ya define el suyo, que sobrescriba ese valor.
 - **Definir `CORS_ORIGIN`** con el origen exacto del frontend. Con `NODE_ENV=production` (la
   imagen Docker y `ecosystem.config.js` lo fijan) el backend no arranca sin esa variable.
   `CORS_ORIGIN=*` abre la API y el socket a cualquier origen, y solo conviene a propósito.
