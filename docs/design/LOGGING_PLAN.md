@@ -1,4 +1,4 @@
-# Plan de Logging y Auditoría — chat-interno
+# Plan de Logging y Auditoría — LINK
 
 Este documento es el punto de entrada para dotar a este monorepo de **logging estructurado**
 y para **cerrar los huecos del audit trail** que ya existe a medias.

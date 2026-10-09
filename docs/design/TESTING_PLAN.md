@@ -1,4 +1,4 @@
-# Plan de Testing Unitario — chat-interno
+# Plan de Testing Unitario — LINK
 
 Este documento es el punto de entrada para agregar cobertura de tests unitarios a todo
 el código que ya existe en este monorepo (`backend/` + `frontend/`), y para dejar

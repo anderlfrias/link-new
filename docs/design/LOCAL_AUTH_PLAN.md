@@ -277,7 +277,7 @@ La duración de sesión y la política de contraseñas **no** van acá: son de u
 ```dotenv
 # Modo externo — el .env de hoy, no hay que tocar nada.
 la URL del proveedor="https://auth.example.com"
-el código de la aplicación="chat-interno"
+el código de la aplicación="link"
 el secreto del proveedor="..."
 
 # Modo local — sin ninguna variable del proveedor.
