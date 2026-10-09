@@ -28,7 +28,7 @@
     "version:sync": "node scripts/sync-version.js"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^10.0.5"
   },
   "overrides": {
     "deepmerge-ts": "8.0.2",
