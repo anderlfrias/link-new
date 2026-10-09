@@ -48,7 +48,7 @@ jobs:
       # El contexto es la raíz del repo (npm workspaces), como en `docker build -f <imagen>/Dockerfile .`.
       # El frontend embebe las URLs de la API en el build: esta imagen sale con las de localhost, y quien
       # la use detrás de un dominio tiene que reconstruirla con las suyas (ver README.md).
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.image }}/Dockerfile
