@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:17-alpine
+        image: public.ecr.aws/docker/library/postgres:17-alpine
         env:
           POSTGRES_USER: link
           POSTGRES_PASSWORD: link
