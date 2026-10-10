@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-#
 # Imagen del backend (Express + Socket.IO + Prisma).
 # El contexto de build es la RAÍZ del repo (npm workspaces: el package-lock.json
 # es uno solo, en la raíz):
@@ -11,7 +9,7 @@
 
 # La imagen base va fijada por digest para que el mismo commit construya siempre lo mismo.
 # Dependabot (docker) actualiza el tag y el digest juntos.
-FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
+FROM public.ecr.aws/docker/library/node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 # openssl: lo necesita el schema engine de Prisma para aplicar migraciones.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
