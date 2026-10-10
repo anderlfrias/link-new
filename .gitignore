@@ -41,3 +41,6 @@ frontend/coverage/
 # Salida local de graphify (grafo de conocimiento del código): se genera en
 # cada máquina y guarda rutas absolutas locales.
 graphify-out/
+
+# Scripts y datos auxiliares de demostración local (no versionados)
+demo-seed/
